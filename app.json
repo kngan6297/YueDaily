@@ -28,16 +28,6 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
         "android.permission.READ_MEDIA_VIDEO",
-        "android.permission.READ_MEDIA_AUDIO",
-        "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.RECEIVE_BOOT_COMPLETED",
-        "android.permission.VIBRATE",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
-        "android.permission.READ_MEDIA_VIDEO",
         "android.permission.READ_MEDIA_AUDIO"
       ],
       "package": "com.kngan6297.Yozakura"
@@ -82,6 +72,17 @@
           "backgroundColor": "#FDEDF4"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {
+        "headers": {
+          "Cross-Origin-Embedder-Policy": "credentialless",
+          "Cross-Origin-Opener-Policy": "same-origin"
+        }
+      },
+      "eas": {
+        "projectId": "f56f4bce-136b-4ae9-a356-1662f7c79a8a"
+      }
+    }
   }
 }
