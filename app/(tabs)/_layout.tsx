@@ -44,14 +44,15 @@ function TabIcon({ emoji, label, focused, badge }: {
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
 
-  const tabBarHeight = 56 + insets.bottom;
+  const bottomInset = Math.max(insets.bottom, 12);
+  const tabBarHeight = 56 + bottomInset;
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
-        tabBarStyle: [styles.tabBar, { height: tabBarHeight, paddingBottom: insets.bottom }],
+        tabBarStyle: [styles.tabBar, { height: tabBarHeight, paddingBottom: bottomInset }],
       }}
     >
       <Tabs.Screen
