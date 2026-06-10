@@ -29,22 +29,29 @@ class SkipProviderError extends Error {
 }
 
 // ── System instruction (dùng chung cho tất cả provider) ──────
-const SYSTEM_INSTRUCTION = `Bạn là trợ lý phân tích chi tiêu thông minh cho ứng dụng quản lý tài chính gia đình Việt Nam.
+const SYSTEM_INSTRUCTION = `Bạn là trợ lý phân tích ảnh chi tiêu cho ứng dụng quản lý tài chính gia đình Việt Nam.
 
-Nhiệm vụ: Phân tích ảnh và trả về thông tin giao dịch tài chính dưới dạng JSON.
+Nhiệm vụ: Phân tích MỌI ảnh liên quan chi tiêu (hoá đơn hoặc món ăn/sản phẩm). Trả về JSON.
 
-Nếu đây là hoá đơn/bill/receipt:
+Bước 1 — Xác định is_receipt:
+- is_receipt: true → ảnh là hoá đơn/bill/receipt (có dòng tiền, tổng cộng, tên quán in trên giấy/màn hình thanh toán)
+- is_receipt: false → ảnh là món ăn, sản phẩm, vật thể (KHÔNG phải hoá đơn)
+
+Nếu is_receipt = true:
 - amount: tổng tiền thanh toán cuối (sau thuế, sau giảm giá), đơn vị VNĐ
-- location: TÊN QUÁN / CỬA HÀNG ghi ở đầu bill (header). Ví dụ: "Cơm Tấm Bà Năm", "Circle K", "Trà Sữa Gong Cha". Nếu không rõ thì để rỗng.
-- note: tên món ăn chính / sản phẩm / dịch vụ trong bill. KHÔNG lặp lại tên quán.
+- location: TÊN QUÁN / CỬA HÀNG ở đầu bill. Ví dụ: "Cơm Tấm Bà Năm", "Circle K". Không rõ → ""
+- note: tên món/sản phẩm/dịch vụ trong bill. KHÔNG lặp tên quán.
 - category: danh mục phù hợp nhất
 - type: "chi"
 
-Nếu đây là ảnh món ăn / sản phẩm (không phải bill):
-- location: để rỗng
-- note: mô tả ngắn món ăn / sản phẩm
-- category: danh mục phù hợp nhất
+Nếu is_receipt = false:
+- amount: 0 (KHÔNG đoán giá từ ảnh món/sản phẩm)
+- location: tên quán/cửa hàng nếu nhìn thấy rõ trên bao bì/biển hiệu, không rõ → ""
+- note: MÔ TẢ NGẮN món ăn/sản phẩm trong ảnh bằng tiếng Việt có dấu. Ví dụ: "Cơm phủ trứng", "Ly trà sữa trân châu"
+- category: danh mục phù hợp nhất dựa trên nội dung ảnh
 - type: "chi"
+
+Đọc tiếng Việt có dấu CHÍNH XÁC (ví dụ "phủ" không phải "phú", "tấm" không phải "tâm", "trứng" không phải "trung"). Sao chép đúng từ ảnh hoặc mô tả chuẩn tiếng Việt.
 
 Danh mục hợp lệ (chỉ dùng đúng tên này):
 "Ăn uống", "Trà & Cà phê", "Mua sắm", "Di chuyển", "Làm đẹp", "Sức khoẻ", "Giải trí", "Giáo dục", "Gia đình", "Thú cưng", "Khác"
@@ -52,23 +59,23 @@ Danh mục hợp lệ (chỉ dùng đúng tên này):
 Quy tắc bắt buộc:
 - amount: số nguyên VNĐ (ví dụ 45000), 0 nếu không đọc được
 - type: chỉ "chi" hoặc "thu"
-- Nếu không chắc → dùng "Khác" và amount = 0
 - Chỉ trả về JSON thuần, KHÔNG có text hay markdown xung quanh`;
 
 // ── Gemini structured output schema ─────────────────────────
 const GEMINI_RESPONSE_SCHEMA = {
   type: 'object',
   properties: {
+    is_receipt: { type: 'boolean', description: 'true nếu ảnh là hoá đơn/bill, false nếu là món ăn/sản phẩm/vật' },
     amount:   { type: 'integer', description: 'Tổng tiền VNĐ, 0 nếu không đọc được' },
     location: { type: 'string',  description: 'Tên quán/cửa hàng ở đầu bill (header), rỗng nếu không có' },
     category: {
       type: 'string',
       enum: ['Ăn uống','Trà & Cà phê','Mua sắm','Di chuyển','Làm đẹp','Sức khoẻ','Giải trí','Giáo dục','Gia đình','Thú cưng','Khác'],
     },
-    note: { type: 'string', description: 'Ghi chú ngắn, rỗng nếu không có' },
+    note: { type: 'string', description: 'Món/sản phẩm trong bill hoặc mô tả ngắn từ ảnh món/sản phẩm' },
     type: { type: 'string', enum: ['chi', 'thu'] },
   },
-  required: ['amount', 'location', 'category', 'note', 'type'],
+  required: ['is_receipt', 'amount', 'location', 'category', 'note', 'type'],
 } as const;
 
 // ── Detect MIME type từ base64 header ────────────────────────
@@ -106,6 +113,7 @@ async function readErrorMsg(res: Response): Promise<string> {
 function sanitize(raw: unknown): GeminiAnalysisResult {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   return {
+    is_receipt: typeof r.is_receipt === 'boolean' ? r.is_receipt : true,
     amount:   typeof r.amount === 'number' && !isNaN(r.amount) ? Math.round(r.amount) : 0,
     location: typeof r.location === 'string' ? r.location : '',
     category: typeof r.category === 'string' ? r.category : 'Khác',

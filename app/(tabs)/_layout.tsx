@@ -10,7 +10,7 @@ function CameraTabButton() {
   return (
     <View style={styles.cameraFabSlot}>
       <TouchableOpacity
-        style={[styles.cameraFab, { marginBottom: insets.bottom > 0 ? insets.bottom - 4 : 8 }]}
+        style={[styles.cameraFab, { marginBottom: insets.bottom > 0 ? insets.bottom + 20 : 28 }]}
         onPress={() => router.push('/camera')}
         activeOpacity={0.85}
       >
@@ -44,7 +44,7 @@ function TabIcon({ emoji, label, focused, badge }: {
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
 
-  const bottomInset = Math.max(insets.bottom, 12);
+  const bottomInset = Math.max(insets.bottom + 24, 36);
   const tabBarHeight = 56 + bottomInset;
 
   return (

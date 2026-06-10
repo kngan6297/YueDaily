@@ -176,7 +176,7 @@ function NativeCameraScreen() {
         quality: 0.85,
         base64: false,
         skipProcessing: false,
-        mute: true,
+        shutterSound: false,
       });
       if (photo?.uri) {
         setLastThumb(photo.uri);
@@ -252,6 +252,8 @@ function NativeCameraScreen() {
           style={styles.camera}
           facing={cameraFacing}
           flash={flashMode}
+          mute
+          animateShutter={false}
         />
         {/* Guide frame — absolute, outside CameraView */}
         <View style={styles.guideWrap} pointerEvents="none">

@@ -131,6 +131,7 @@ export default function TransactionForm() {
   const [showKeyboard, setShowKeyboard] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const noteRef = useRef<TextInput>(null);
+  const hasAutoScanned = useRef(false);
 
   const { analyze, isLoading: isAiLoading } = useGemini();
 
@@ -175,50 +176,85 @@ export default function TransactionForm() {
     });
   }, []);
 
-  // ── AI scan ──
-  const handleAiScan = useCallback(async () => {
-    if (!imageUri) { Alert.alert('Chưa có ảnh', 'Hãy chụp hoặc chọn ảnh trước!'); return; }
-    try {
-      let base64: string;
+  const imageToBase64 = useCallback(async (uri: string): Promise<string> => {
+    if (Platform.OS === 'web') {
+      return blobUriToBase64(uri);
+    }
+    const compressed = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 1024 } }],
+      { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+    );
+    return compressed.base64 ?? '';
+  }, [blobUriToBase64]);
 
-      if (Platform.OS === 'web') {
-        // Trên web: dùng fetch + FileReader thay vì expo-file-system
-        base64 = await blobUriToBase64(imageUri);
-      } else {
-        // Trên native: resize về tối đa 1024px và compress xuống 0.7 trước khi gửi AI
-        const compressed = await ImageManipulator.manipulateAsync(
-          imageUri,
-          [{ resize: { width: 1024 } }],
-          { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true },
-        );
-        base64 = compressed.base64 ?? '';
-      }
+  const matchCategory = useCallback((categoryName: string) => {
+    return categories.find((c) =>
+      c.name.toLowerCase().includes(categoryName.toLowerCase()) ||
+      categoryName.toLowerCase().includes(c.name.toLowerCase())
+    );
+  }, [categories]);
 
-      const result = await analyze(base64);
+  const applyScanResult = useCallback((result: Awaited<ReturnType<typeof analyze>>) => {
+    if (result.is_receipt === false) {
       setFormData((prev) => ({
         ...prev,
-        amount: result.amount > 0 ? String(result.amount) : prev.amount,
         location: result.location || prev.location,
         note: result.note || prev.note,
         type: (result.type as TransactionType) || prev.type,
       }));
       if (result.category) {
-        const matched = categories.find((c) =>
-          c.name.toLowerCase().includes(result.category!.toLowerCase()) ||
-          result.category!.toLowerCase().includes(c.name.toLowerCase())
-        );
+        const matched = matchCategory(result.category);
         if (matched) setFormData((prev) => ({ ...prev, category_id: matched.id }));
       }
-      setShowKeyboard(false);
+      setShowKeyboard(true);
       const lines: string[] = [];
-      if (result.amount > 0) lines.push(`💰 ${result.amount.toLocaleString('vi-VN')}đ`);
+      if (result.note) lines.push(`🍽️ ${result.note}`);
       if (result.location) lines.push(`📍 ${result.location}`);
-      Alert.alert('AI quét xong! ✨', lines.join('\n') || 'Điền thủ công nhé!');
+      Alert.alert(
+        'Nhận diện món/sản phẩm ✨',
+        (lines.join('\n') || 'Đã phân tích ảnh.') + '\n\nNhập số tiền thủ công nhé!',
+      );
+      return;
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      amount: result.amount && result.amount > 0 ? String(result.amount) : prev.amount,
+      location: result.location || prev.location,
+      note: result.note || prev.note,
+      type: (result.type as TransactionType) || prev.type,
+    }));
+    if (result.category) {
+      const matched = matchCategory(result.category);
+      if (matched) setFormData((prev) => ({ ...prev, category_id: matched.id }));
+    }
+    setShowKeyboard(false);
+    const lines: string[] = [];
+    if (result.amount && result.amount > 0) lines.push(`💰 ${result.amount.toLocaleString('vi-VN')}đ`);
+    if (result.location) lines.push(`📍 ${result.location}`);
+    Alert.alert('Quét hoá đơn xong! ✨', lines.join('\n') || 'Kiểm tra lại và sửa nếu cần nhé!');
+  }, [matchCategory]);
+
+  // ── AI scan ──
+  const handleAiScan = useCallback(async () => {
+    if (!imageUri) { Alert.alert('Chưa có ảnh', 'Hãy chụp hoặc chọn ảnh trước!'); return; }
+    try {
+      const base64 = await imageToBase64(imageUri);
+      const result = await analyze(base64);
+      applyScanResult(result);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Không thể phân tích ảnh.';
       Alert.alert('Lỗi AI 🤖', msg);
     }
-  }, [imageUri, analyze, categories, blobUriToBase64]);
+  }, [imageUri, analyze, imageToBase64, applyScanResult]);
+
+  // Tự quét khi mở form với ảnh mới (không phải chỉnh sửa)
+  useEffect(() => {
+    if (!imageUri || isEdit || hasAutoScanned.current) return;
+    hasAutoScanned.current = true;
+    handleAiScan();
+  }, [imageUri, isEdit, handleAiScan]);
 
   // ── Save ──
   const handleSave = useCallback(async () => {
@@ -302,7 +338,7 @@ export default function TransactionForm() {
               </TouchableOpacity>
             </View>
 
-            {/* AI scan button (only if has image) */}
+            {/* Quét lại */}
             {imageUri ? (
               <TouchableOpacity
                 style={[styles.aiBtn, isAiLoading && styles.aiBtnLoading]}
@@ -311,7 +347,7 @@ export default function TransactionForm() {
               >
                 {isAiLoading
                   ? <ActivityIndicator size="small" color="#fff" />
-                  : <Text style={styles.aiBtnText}>✨ AI</Text>}
+                  : <Text style={styles.aiBtnText}>✨ Quét</Text>}
               </TouchableOpacity>
             ) : <View style={{ width: 60 }} />}
           </View>

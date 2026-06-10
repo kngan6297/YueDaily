@@ -50,6 +50,7 @@ export interface Streak {
 
 /** Kết quả phân tích AI từ Gemini */
 export interface GeminiAnalysisResult {
+  is_receipt?: boolean;
   amount?: number;
   location?: string;
   category?: string;

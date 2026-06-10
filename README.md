@@ -6,8 +6,9 @@
 
 ## Tính năng
 
-- **Chụp ảnh hoá đơn** — camera tích hợp sẵn, nhận diện bill tự động
+- **Chụp ảnh & quét AI** — hoá đơn tự điền số tiền + quán; ảnh món/sản phẩm tự nhận diện tên món & danh mục (nhập số tiền thủ công)
 - **AI phân tích thông minh** — hỗ trợ Groq (Llama 4 Scout) và Google Gemini 2.5; thứ tự ưu tiên: Groq → Gemini Lite → Gemini Flash
+- **Camera im lặng** — tắt tiếng chụp (`shutterSound: false`) phù hợp chụp bill ở quán
 - **Nhập tay nhanh** — bàn phím số tuỳ chỉnh, chọn danh mục bằng lưới icon
 - **11 danh mục chi tiêu** — Ăn uống, Trà & Cà phê, Mua sắm, Di chuyển, Làm đẹp, Sức khoẻ, Giải trí, Giáo dục, Gia đình, Thú cưng, Khác
 - **Streak** — theo dõi chuỗi ngày nhập liệu liên tục
@@ -26,7 +27,7 @@
 | Database | expo-sqlite ~16 |
 | Camera | expo-camera ~17 · expo-image-picker ~17 |
 | AI | Groq API (`llama-4-scout-17b`) · Google Gemini 2.5 Flash/Lite |
-| Animations | react-native-reanimated ~3.17 |
+| Animations | react-native-reanimated ~4.1 |
 | State | React hooks thuần (useState / useCallback) |
 
 ---
@@ -34,8 +35,8 @@
 ## Yêu cầu
 
 - Node.js ≥ 18
-- [Expo CLI](https://docs.expo.dev/more/expo-cli/) (`npm install -g expo-cli`)
-- Tài khoản [Expo](https://expo.dev) (để build APK qua EAS)
+- [Expo CLI](https://docs.expo.dev/more/expo-cli/) (`npx expo`)
+- Tài khoản [Expo](https://expo.dev) + [EAS CLI](https://docs.expo.dev/build/setup/) (`npm install -g eas-cli`)
 - API Key của [Groq](https://console.groq.com) hoặc [Google AI Studio](https://aistudio.google.com) (ít nhất một trong hai)
 
 ---
@@ -44,7 +45,7 @@
 
 ```bash
 # 1. Clone repo
-git clone https://github.com/<your-username>/Yozakura.git
+git clone https://github.com/kngan6297/Yozakura.git
 cd Yozakura
 
 # 2. Cài dependencies
@@ -68,9 +69,42 @@ EXPO_PUBLIC_GEMINI_API_KEY=AIzaSyxxxxxxxxxxxxxxxx
 
 ---
 
-## Build APK (Android)
+## Build APK (Android) qua EAS
 
-Xem hướng dẫn chi tiết bên dưới trong phần **"Lấy file APK"**.
+### 1. Đăng nhập Expo
+
+```bash
+npx eas-cli login
+```
+
+### 2. Cấu hình biến môi trường trên EAS (khuyến nghị)
+
+Vào [expo.dev](https://expo.dev) → project **Yozakura** → **Environment variables** → môi trường `preview`, thêm:
+
+- `EXPO_PUBLIC_GROQ_API_KEY`
+- `EXPO_PUBLIC_GEMINI_API_KEY`
+
+> Có thể bỏ qua bước này nếu nhập API Key trực tiếp trong app ở màn hình Cài đặt.
+
+### 3. Build APK
+
+```bash
+# Build APK nội bộ (cài trực tiếp lên điện thoại)
+npx eas-cli build --platform android --profile preview
+
+# Hoặc build production (tự tăng version, dùng cho Play Store)
+npx eas-cli build --platform android --profile production
+```
+
+Sau khi build xong, tải file `.apk` từ link Expo gửi về hoặc tại [expo.dev/accounts/kngan6297/projects/Yozakura/builds](https://expo.dev/accounts/kngan6297/projects/Yozakura/builds).
+
+### 4. Cài APK lên điện thoại
+
+1. Tải file APK về điện thoại Android
+2. Bật **Cài đặt từ nguồn không xác định** (nếu được hỏi)
+3. Mở file APK và cài đặt
+
+> **Lưu ý:** Cần build bản native mới (EAS) để các tính năng như tắt tiếng camera có hiệu lực — Expo Go không phản ánh đủ thay đổi native.
 
 ---
 
