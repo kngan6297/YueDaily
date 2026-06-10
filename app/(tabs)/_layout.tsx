@@ -2,15 +2,17 @@ import { Tabs, useRouter } from 'expo-router';
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors } from '../../constants/theme';
+import { BorderRadius, Colors, Spacing } from '../../constants/theme';
+
+const TAB_BAR_HEIGHT = 60;
+const TAB_BAR_FLOAT_GAP = 12;
 
 function CameraTabButton() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   return (
     <View style={styles.cameraFabSlot}>
       <TouchableOpacity
-        style={[styles.cameraFab, { marginBottom: insets.bottom > 0 ? insets.bottom + 20 : 28 }]}
+        style={styles.cameraFab}
         onPress={() => router.push('/camera')}
         activeOpacity={0.85}
       >
@@ -44,15 +46,26 @@ function TabIcon({ emoji, label, focused, badge }: {
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
 
-  const bottomInset = Math.max(insets.bottom + 24, 36);
-  const tabBarHeight = 56 + bottomInset;
-
   return (
     <Tabs
+      safeAreaInsets={{ bottom: 0 }}
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
-        tabBarStyle: [styles.tabBar, { height: tabBarHeight, paddingBottom: bottomInset }],
+        sceneStyle: {
+          paddingBottom: TAB_BAR_HEIGHT + insets.bottom + TAB_BAR_FLOAT_GAP,
+        },
+        tabBarItemStyle: styles.tabBarItem,
+        tabBarStyle: [
+          styles.tabBar,
+          {
+            position: 'absolute',
+            bottom: insets.bottom + TAB_BAR_FLOAT_GAP,
+            left: Spacing.base,
+            right: Spacing.base,
+            height: TAB_BAR_HEIGHT,
+          },
+        ],
       }}
     >
       <Tabs.Screen
@@ -99,20 +112,22 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: Colors.neutral[200],
-    paddingTop: 6,
+    backgroundColor: Colors.pink[50],
+    borderTopWidth: 0,
+    borderRadius: BorderRadius['2xl'],
     shadowColor: Colors.neutral[700],
     shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+  tabBarItem: {
+    height: TAB_BAR_HEIGHT,
+    justifyContent: 'center',
   },
   tabItem: {
     alignItems: 'center',
     gap: 3,
-    paddingTop: 2,
     width: 64,
   },
   tabEmoji: {
@@ -151,6 +166,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    height: TAB_BAR_HEIGHT,
   },
   cameraFab: {
     width: 56,
