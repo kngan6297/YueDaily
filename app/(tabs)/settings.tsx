@@ -1,12 +1,12 @@
 import React from 'react';
 import {
+  Image,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { YozakuraLogo } from '../../components/YozakuraLogo';
 import { BorderRadius, Colors, Shadows, Spacing, Typography } from '../../constants/theme';
 import { useStreak } from '../../hooks/useStreak';
 
@@ -23,7 +23,10 @@ export default function SettingsScreen() {
         <View style={styles.profileSection}>
           <View style={styles.avatarWrap}>
             <View style={styles.avatar}>
-              <YozakuraLogo size={72} bgColor={Colors.background.primary} />
+              <Image
+                source={require('../../assets/icon.png')}
+                style={styles.avatarImage}
+              />
             </View>
             {streakCount > 0 && (
               <View style={styles.streakRing}>
@@ -108,7 +111,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.pink[200],
     ...Shadows.medium,
   },
-  avatarEmoji: { fontSize: 44 },
+  avatarImage: { width: 82, height: 82, borderRadius: 41 },
   streakRing: {
     position: 'absolute',
     bottom: -2,

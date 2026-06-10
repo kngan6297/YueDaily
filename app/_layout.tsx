@@ -5,7 +5,7 @@
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Colors, Typography } from '../constants/theme';
 import { useDatabase } from '../hooks/useDatabase';
@@ -27,7 +27,7 @@ export default function RootLayout() {
   if (!isReady && !error) {
     return (
       <View style={styles.loadingContainer}>
-        <Text style={styles.loadingEmoji}>🍓</Text>
+        <Image source={require('../assets/icon.png')} style={styles.loadingIcon} />
         <ActivityIndicator size="large" color={Colors.pink[400]} />
         <Text style={styles.loadingText}>Đang khởi động Yozakura...</Text>
       </View>
@@ -81,8 +81,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.pink[50],
     gap: 16,
   },
-  loadingEmoji: {
-    fontSize: 56,
+  loadingIcon: {
+    width: 96,
+    height: 96,
+    borderRadius: 24,
   },
   loadingText: {
     fontSize: Typography.fontSize.base,
