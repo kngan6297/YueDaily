@@ -2,14 +2,18 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "module": "ESNext",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"],
-      "@constants/*": ["./constants/*"],
-      "@components/*": ["./components/*"],
-      "@database/*": ["./database/*"],
-      "@hooks/*": ["./hooks/*"],
-      "@types/*": ["./types/*"]
+      "@/*": ["./src/*"],
+      "@constants/*": ["./src/constants/*"],
+      "@components/*": ["./src/components/*"],
+      "@database/*": ["./src/database/*"],
+      "@hooks/*": ["./src/hooks/*"],
+      "@types/*": ["./src/types/*"],
+      "@utils/*": ["./src/utils/*"]
     }
-  }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "index.ts"]
 }

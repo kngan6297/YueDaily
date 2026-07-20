@@ -1,22 +1,23 @@
 {
   "expo": {
-    "name": "Yozakura",
+    "name": "YueDaily",
     "slug": "Yozakura",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "scheme": "yozakura",
+    "scheme": "yuedaily",
     "ios": {
       "supportsTablet": false
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#1a1040",
+        "backgroundColor": "#FDEDF4",
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false,
       "edgeToEdgeEnabled": true,
+      "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -49,20 +50,20 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Yozakura cần truy cập camera để chụp ảnh hoá đơn."
+          "cameraPermission": "YueDaily cần truy cập camera để chụp ảnh hoá đơn."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Yozakura cần truy cập thư viện ảnh của bạn."
+          "photosPermission": "YueDaily cần truy cập thư viện ảnh của bạn."
         }
       ],
       [
         "expo-media-library",
         {
-          "photosPermission": "Yozakura cần truy cập thư viện ảnh.",
-          "savePhotosPermission": "Yozakura cần quyền lưu ảnh."
+          "photosPermission": "YueDaily cần truy cập thư viện ảnh.",
+          "savePhotosPermission": "YueDaily cần quyền lưu ảnh."
         }
       ],
       [
@@ -73,7 +74,8 @@
           "imageWidth": 200,
           "resizeMode": "contain"
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "extra": {
       "router": {
@@ -83,8 +85,9 @@
         }
       },
       "eas": {
-        "projectId": "f56f4bce-136b-4ae9-a356-1662f7c79a8a"
+        "projectId": "ab0bb11f-354f-4cac-a8e2-617d5f98a3b9"
       }
-    }
+    },
+    "owner": "kn.yue97"
   }
 }

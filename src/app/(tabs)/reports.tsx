@@ -16,11 +16,12 @@ import {
   getTransactionsByMonth,
   getTransactionsByYear,
 } from '../../database/transactions';
+import { getAllPayers } from '../../database/categories';
 import type { Transaction } from '../../types';
 
 // ─── Types ───────────────────────────────────────────────────
 type Period  = 'month' | 'year' | 'all';
-type Person  = 'all' | 'Vợ' | 'Chồng';
+type Person  = 'all' | string;
 type ViewTab = 'danh-muc' | 'giao-dich';
 
 // ─── Donut chart ─────────────────────────────────────────────
@@ -58,8 +59,8 @@ function DonutChart({
           fill="none"
           stroke={seg.color}
           strokeWidth={DONUT_STROKE}
-          strokeDasharray={`${seg.pct * CIRC / 100} ${CIRC}`}
-          strokeDashoffset={CIRC * (1 - seg.offset / 100) + CIRC / 4}
+          strokeDasharray={`${seg.pct * CIRC / 100} ${CIRC - seg.pct * CIRC / 100}`}
+          strokeDashoffset={((CIRC / 4 - seg.offset * CIRC / 100) % CIRC + CIRC) % CIRC}
           strokeLinecap="butt"
         />
       ))}
@@ -112,6 +113,7 @@ export default function ReportsScreen() {
   const [viewTab,      setViewTab]      = useState<ViewTab>('danh-muc');
   const [isLoading,    setIsLoading]    = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [payers, setPayers] = useState<Array<{ name: string; icon: string }>>([]);
 
   // Load data based on period
   const loadData = useCallback(async () => {
@@ -126,7 +128,12 @@ export default function ReportsScreen() {
     finally { setIsLoading(false); }
   }, [period, navYear, navMonth]);
 
-  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
+  useFocusEffect(useCallback(() => {
+    loadData();
+    getAllPayers().then((p) =>
+      setPayers(p.map(({ name, icon }) => ({ name, icon })))
+    ).catch(console.error);
+  }, [loadData]));
 
   // Navigation
   const prevPeriod = () => {
@@ -208,7 +215,7 @@ export default function ReportsScreen() {
   }, [categoryStats]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
         {/* === PERIOD TABS === */}
@@ -247,16 +254,16 @@ export default function ReportsScreen() {
         {/* === PERSON FILTER === */}
         <View style={styles.personRow}>
           {([
-            { id: 'all',    label: '🗂 Tất cả' },
-            { id: 'Vợ',    label: '🌸 Vợ'     },
-            { id: 'Chồng', label: '🌿 Chồng'  },
-          ] as { id: Person; label: string }[]).map((p) => (
+            { id: 'all', emoji: '🗂', label: 'Tất cả' },
+            ...payers.map((p) => ({ id: p.name, emoji: p.icon, label: p.name })),
+          ] as { id: Person; emoji: string; label: string }[]).map((p) => (
             <TouchableOpacity
               key={p.id}
               style={[styles.personChip, person === p.id && styles.personChipActive]}
               onPress={() => setPerson(p.id)}
               activeOpacity={0.8}
             >
+              <Text style={styles.personChipEmoji}>{p.emoji}</Text>
               <Text style={[styles.personChipText, person === p.id && styles.personChipTextActive]}>
                 {p.label}
               </Text>
@@ -477,6 +484,9 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   personChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     paddingHorizontal: Spacing.md,
     paddingVertical: 7,
     borderRadius: BorderRadius.full,
@@ -487,6 +497,9 @@ const styles = StyleSheet.create({
   personChipActive: {
     backgroundColor: Colors.pink[100],
     borderColor: Colors.pink[300],
+  },
+  personChipEmoji: {
+    fontSize: 14,
   },
   personChipText: {
     fontSize: Typography.fontSize.sm,

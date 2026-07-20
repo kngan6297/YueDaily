@@ -58,7 +58,7 @@ export default function AccountsScreen() {
   const periodLabel = PERIODS.find((p) => p.id === period)?.label ?? '';
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
         {/* === HEADER === */}

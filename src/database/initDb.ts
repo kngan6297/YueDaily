@@ -7,11 +7,18 @@ import * as SQLite from 'expo-sqlite';
 
 let db: SQLite.SQLiteDatabase | null = null;
 
-/** Lấy instance database (singleton) */
+/** Lấy instance database (singleton, tự phục hồi nếu native object bị giải phóng) */
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
-  if (!db) {
-    db = await SQLite.openDatabaseAsync('yozakura.db');
+  if (db) {
+    try {
+      await db.getFirstAsync('SELECT 1;');
+      return db;
+    } catch {
+      // Native object đã bị giải phóng (hot reload / process restart) — mở lại
+      db = null;
+    }
   }
+  db = await SQLite.openDatabaseAsync('yozakura.db');
   return db;
 }
 
@@ -38,7 +45,17 @@ export async function initializeDatabase(): Promise<void> {
   await database.execAsync(`
     CREATE TABLE IF NOT EXISTS sources (
       id   INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT    NOT NULL
+      name TEXT    NOT NULL UNIQUE
+    );
+  `);
+
+  // Tạo bảng payers (người trả)
+  await database.execAsync(`
+    CREATE TABLE IF NOT EXISTS payers (
+      id    INTEGER PRIMARY KEY AUTOINCREMENT,
+      name  TEXT    NOT NULL UNIQUE,
+      icon  TEXT    NOT NULL DEFAULT '👤',
+      color TEXT    NOT NULL DEFAULT '#FF8FAB'
     );
   `);
 
@@ -121,15 +138,6 @@ async function seedDefaultData(database: SQLite.SQLiteDatabase): Promise<void> {
     }
   }
 
-  // Migration: nếu còn nguồn tiền cũ (theo tên người) thì xoá và seed lại
-  const oldSource = await database.getFirstAsync<{ id: number }>(
-    "SELECT id FROM sources WHERE name = 'Ví của Vợ' LIMIT 1;"
-  );
-  if (oldSource) {
-    await database.runAsync('UPDATE transactions SET source_id = NULL;');
-    await database.runAsync('DELETE FROM sources;');
-  }
-
   // Seed nguồn tiền nếu chưa có
   const srcCount = await database.getFirstAsync<{ count: number }>(
     'SELECT COUNT(*) as count FROM sources;'
@@ -141,6 +149,23 @@ async function seedDefaultData(database: SQLite.SQLiteDatabase): Promise<void> {
       await database.runAsync(
         'INSERT INTO sources (name) VALUES (?);',
         [src]
+      );
+    }
+  }
+
+  const payerCount = await database.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM payers;'
+  );
+
+  if (!payerCount || payerCount.count === 0) {
+    const defaultPayers = [
+      { name: 'Vợ', icon: '👩‍🦰', color: '#FF8FAB' },
+      { name: 'Chồng', icon: '👨‍🦱', color: '#4BBFA0' },
+    ];
+    for (const p of defaultPayers) {
+      await database.runAsync(
+        'INSERT INTO payers (name, icon, color) VALUES (?, ?, ?);',
+        [p.name, p.icon, p.color]
       );
     }
   }

@@ -1,3 +1,4 @@
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -9,7 +10,6 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -19,11 +19,23 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AmountKeyboard, formatAmount } from '../components/form/AmountKeyboard';
+import { BottomSheetModal } from '../components/ui/BottomSheetModal';
 import { BorderRadius, Colors, Shadows, Spacing, Typography } from '../constants/theme';
-import { getAllSources, getCategoriesByType, updateStreak } from '../database/categories';
-import { completePendingTransaction, getTransactionById, insertTransaction, updateTransaction } from '../database/transactions';
+import { getAllPayers, getAllSources, getCategoriesByType, updateStreak } from '../database/categories';
+import {
+  getTransactionById,
+  insertTransaction,
+  updateTransaction,
+} from '../database/transactions';
 import { useGemini } from '../hooks/useGemini';
-import type { Category, Payer, Source, TransactionFormData, TransactionType } from '../types';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { Category, Payer, PayerRecord, Source, TransactionFormData, TransactionType } from '../types';
+import {
+  dateFromCreatedAt,
+  formatDateVi,
+  formatLocalDate,
+  parseLocalDate,
+} from '../utils/date';
 
 // ─── Dropdown Picker ──────────────────────────────────────────────────────────
 
@@ -60,14 +72,7 @@ function DropdownPicker({ value, placeholder, options, onSelect, accentColor }: 
         <Text style={styles.pillChevron}>▾</Text>
       </TouchableOpacity>
 
-      <Modal
-        visible={open}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setOpen(false)}
-      >
-        <TouchableOpacity style={styles.backdrop} onPress={() => setOpen(false)} activeOpacity={1} />
-        <View style={styles.sheet}>
+      <BottomSheetModal visible={open} onClose={() => setOpen(false)}>
           <View style={styles.sheetHandle} />
           <Text style={styles.sheetTitle}>{placeholder}</Text>
           <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
@@ -91,10 +96,8 @@ function DropdownPicker({ value, placeholder, options, onSelect, accentColor }: 
                 </TouchableOpacity>
               );
             })}
-            <View style={{ height: 20 }} />
           </ScrollView>
-        </View>
-      </Modal>
+      </BottomSheetModal>
     </>
   );
 }
@@ -106,14 +109,18 @@ export default function TransactionForm() {
   const params = useLocalSearchParams<{
     imageUri?: string;
     transactionId?: string;
-    isFromPending?: string;
     isEdit?: string;
+    transactionDate?: string;
   }>();
 
   const imageUri = params.imageUri ?? null;
   const transactionId = params.transactionId ? parseInt(params.transactionId, 10) : null;
-  const isFromPending = params.isFromPending === 'true';
   const isEdit = params.isEdit === 'true';
+  const initialDate = params.transactionDate?.slice(0, 10) ?? formatLocalDate(new Date());
+
+  type FormMode = 'create-complete' | 'edit-complete';
+  const formMode: FormMode =
+    isEdit && transactionId ? 'edit-complete' : 'create-complete';
 
   const [formData, setFormData] = useState<TransactionFormData>({
     amount: '',
@@ -124,25 +131,60 @@ export default function TransactionForm() {
     image_uri: imageUri,
     location: '',
     note: '',
+    transaction_date: initialDate,
   });
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
-  const [showKeyboard, setShowKeyboard] = useState(true);
+  const [payers, setPayers] = useState<PayerRecord[]>([]);
+  const [systemKeyboardVisible, setSystemKeyboardVisible] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const noteRef = useRef<TextInput>(null);
   const hasAutoScanned = useRef(false);
+  // Ref luôn giữ bản categories mới nhất — tránh stale closure khi AI scan async
+  const categoriesRef = useRef<Category[]>([]);
 
   const { analyze, isLoading: isAiLoading } = useGemini();
 
+  // Tải danh mục theo loại, auto-chọn danh mục đầu tiên nếu chưa có
   useEffect(() => {
-    getCategoriesByType(formData.type).then(setCategories).catch(console.error);
-    getAllSources().then(setSources).catch(console.error);
-  }, [formData.type]);
+    getCategoriesByType(formData.type).then((cats) => {
+      categoriesRef.current = cats;
+      setCategories(cats);
+      if (formMode === 'create-complete') {
+        setFormData((p) => ({
+          ...p,
+          category_id: p.category_id ?? (cats[0]?.id ?? null),
+        }));
+      }
+    }).catch(console.error);
+  }, [formData.type, formMode]);
+
+  // Tải nguồn tiền và người trả
+  useEffect(() => {
+    getAllSources().then((srcs) => {
+      setSources(srcs);
+      if (formMode === 'create-complete') {
+        setFormData((p) => {
+          if (p.source_id !== null) return p;
+          const defaultSrc = srcs.find((s) => s.name === 'Chuyển khoản') ?? srcs[0];
+          return defaultSrc ? { ...p, source_id: defaultSrc.id } : p;
+        });
+      }
+    }).catch(console.error);
+
+    getAllPayers().then((pays) => {
+      setPayers(pays);
+      if (formMode === 'create-complete' && pays.length > 0) {
+        setFormData((p) => (p.payer ? p : { ...p, payer: pays[0].name }));
+      }
+    }).catch(console.error);
+  }, [formMode]);
 
   // Load existing transaction when editing
   useEffect(() => {
-    if (!isEdit || !transactionId) return;
+    if (formMode === 'create-complete' || !transactionId) return;
     getTransactionById(transactionId).then((txn) => {
       if (!txn) return;
       setFormData({
@@ -152,13 +194,24 @@ export default function TransactionForm() {
         source_id: txn.source_id,
         payer: txn.payer,
         image_uri: txn.image_uri,
-        location: txn.location ?? '',
-        note: txn.note ?? '',
+        note: txn.note?.trim() || txn.location?.trim() || '',
+        location: '',
+        transaction_date: dateFromCreatedAt(txn.created_at),
       });
-      setShowKeyboard(false);
     }).catch(console.error);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEdit, transactionId]);
+  }, [formMode, transactionId]);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, () => setSystemKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setSystemKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // ── Web helper: blob URL → base64 ──
   const blobUriToBase64 = useCallback(async (uri: string): Promise<string> => {
@@ -188,32 +241,38 @@ export default function TransactionForm() {
     return compressed.base64 ?? '';
   }, [blobUriToBase64]);
 
-  const matchCategory = useCallback((categoryName: string) => {
-    return categories.find((c) =>
+  const findCategoryByName = useCallback((cats: Category[], categoryName: string) => {
+    return cats.find((c) =>
       c.name.toLowerCase().includes(categoryName.toLowerCase()) ||
       categoryName.toLowerCase().includes(c.name.toLowerCase())
     );
-  }, [categories]);
+  }, []);
 
-  const applyScanResult = useCallback((result: Awaited<ReturnType<typeof analyze>>) => {
+  const applyScanResult = useCallback(async (result: Awaited<ReturnType<typeof analyze>>) => {
+    const summary = result.description || result.note || '';
+    const resultType: TransactionType = result.type === 'thu' ? 'thu' : 'chi';
+
+    const cats = await getCategoriesByType(resultType);
+    categoriesRef.current = cats;
+    setCategories(cats);
+
+    let categoryId: number | null = cats[0]?.id ?? null;
+    if (result.category) {
+      const matched = findCategoryByName(cats, result.category);
+      if (matched) categoryId = matched.id;
+    }
+
     if (result.is_receipt === false) {
       setFormData((prev) => ({
         ...prev,
-        location: result.location || prev.location,
-        note: result.note || prev.note,
-        type: (result.type as TransactionType) || prev.type,
+        note: summary || prev.note,
+        location: '',
+        type: resultType,
+        category_id: categoryId,
       }));
-      if (result.category) {
-        const matched = matchCategory(result.category);
-        if (matched) setFormData((prev) => ({ ...prev, category_id: matched.id }));
-      }
-      setShowKeyboard(true);
-      const lines: string[] = [];
-      if (result.note) lines.push(`🍽️ ${result.note}`);
-      if (result.location) lines.push(`📍 ${result.location}`);
       Alert.alert(
         'Nhận diện món/sản phẩm ✨',
-        (lines.join('\n') || 'Đã phân tích ảnh.') + '\n\nNhập số tiền thủ công nhé!',
+        (summary ? `🍽️ ${summary}` : 'Đã phân tích ảnh.') + '\n\nNhập số tiền thủ công nhé!',
       );
       return;
     }
@@ -221,20 +280,16 @@ export default function TransactionForm() {
     setFormData((prev) => ({
       ...prev,
       amount: result.amount && result.amount > 0 ? String(result.amount) : prev.amount,
-      location: result.location || prev.location,
-      note: result.note || prev.note,
-      type: (result.type as TransactionType) || prev.type,
+      note: summary || prev.note,
+      location: '',
+      type: resultType,
+      category_id: categoryId,
     }));
-    if (result.category) {
-      const matched = matchCategory(result.category);
-      if (matched) setFormData((prev) => ({ ...prev, category_id: matched.id }));
-    }
-    setShowKeyboard(false);
     const lines: string[] = [];
     if (result.amount && result.amount > 0) lines.push(`💰 ${result.amount.toLocaleString('vi-VN')}đ`);
-    if (result.location) lines.push(`📍 ${result.location}`);
+    if (summary) lines.push(`📝 ${summary}`);
     Alert.alert('Quét hoá đơn xong! ✨', lines.join('\n') || 'Kiểm tra lại và sửa nếu cần nhé!');
-  }, [matchCategory]);
+  }, [findCategoryByName]);
 
   // ── AI scan ──
   const handleAiScan = useCallback(async () => {
@@ -242,59 +297,105 @@ export default function TransactionForm() {
     try {
       const base64 = await imageToBase64(imageUri);
       const result = await analyze(base64);
-      applyScanResult(result);
+      await applyScanResult(result);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Không thể phân tích ảnh.';
-      Alert.alert('Lỗi AI 🤖', msg);
+      Alert.alert(
+        'Lỗi AI 🤖',
+        `${msg}\n\nBạn vẫn có thể nhập tay.`
+      );
     }
   }, [imageUri, analyze, imageToBase64, applyScanResult]);
 
   // Tự quét khi mở form với ảnh mới (không phải chỉnh sửa)
   useEffect(() => {
-    if (!imageUri || isEdit || hasAutoScanned.current) return;
+    if (!imageUri || formMode !== 'create-complete' || hasAutoScanned.current) return;
     hasAutoScanned.current = true;
     handleAiScan();
-  }, [imageUri, isEdit, handleAiScan]);
+  }, [imageUri, formMode, handleAiScan]);
 
-  // ── Save ──
-  const handleSave = useCallback(async () => {
-    if (!formData.amount || formData.amount === '0') {
-      Alert.alert('Thiếu số tiền', 'Nhập số tiền trước nhé! 💰'); return;
+  // ── Validation + Save (3 modes) ─────────────────────────────────────────
+  const validateCompleteTransaction = (): boolean => {
+    const amountNum = parseInt(formData.amount.replace(/\D/g, ''), 10) || 0;
+    if (amountNum <= 0) {
+      Alert.alert('Thiếu số tiền', 'Nhập số tiền trước nhé! 💰');
+      return false;
     }
+    if (formData.category_id === null) {
+      Alert.alert('Thiếu danh mục', 'Chọn danh mục trước nhé! 🏷️');
+      return false;
+    }
+    if (formData.source_id === null) {
+      Alert.alert('Thiếu nguồn tiền', 'Chọn nguồn tiền trước nhé! 💳');
+      return false;
+    }
+    if (!formData.payer || !formData.payer.trim()) {
+      Alert.alert('Thiếu người trả', 'Chọn người trả trước nhé! 👤');
+      return false;
+    }
+    if (!formData.transaction_date) {
+      Alert.alert('Thiếu ngày', 'Chọn ngày giao dịch trước nhé! 📅');
+      return false;
+    }
+    const today = formatLocalDate(new Date());
+    if (formData.transaction_date > today) {
+      Alert.alert('Ngày giao dịch không được ở tương lai.');
+      return false;
+    }
+    return true;
+  };
+
+  const handlePrimarySave = useCallback(async () => {
+    if (isSaving) return;
     setIsSaving(true);
     try {
-      if (isEdit && transactionId) {
-        await updateTransaction(transactionId, formData);
-      } else if (isFromPending && transactionId) {
-        await completePendingTransaction(transactionId, formData);
-      } else {
+      if (formMode === 'create-complete') {
+        if (!validateCompleteTransaction()) return;
         await insertTransaction(formData);
+        await updateStreak();
+        router.dismissAll();
+        return;
       }
+
+      if (!transactionId) return;
+      if (!validateCompleteTransaction()) return;
+      await updateTransaction(transactionId, formData);
       await updateStreak();
       router.dismissAll();
-    } catch (err) {
+    } catch {
       Alert.alert('Lỗi', 'Không thể lưu. Thử lại nhé!');
     } finally {
       setIsSaving(false);
     }
-  }, [formData, isFromPending, transactionId, router]);
+  }, [formMode, transactionId, formData, router, isSaving]);
+
+  const primaryButtonLabel = formMode === 'create-complete'
+    ? 'Lưu giao dịch 🍓'
+    : 'Cập nhật giao dịch ✏️';
 
   const displayAmount = formatAmount(formData.amount);
   const isChi = formData.type === 'chi';
   const accentColor = isChi ? Colors.pink[400] : Colors.mint[400];
+  const maxDate = new Date();
+  const isBackdated = formData.transaction_date !== formatLocalDate(new Date());
+  const { bottom: screenBottomInset } = useSafeAreaInsets();
 
-  const todayLabel = new Date().toLocaleDateString('vi-VN', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-  });
+  const handleDateChange = useCallback((event: DateTimePickerEvent, date?: Date) => {
+    if (Platform.OS === 'android') setShowDatePicker(false);
+    if (event.type === 'dismissed' || !date) return;
+    setFormData((p) => ({ ...p, transaction_date: formatLocalDate(date) }));
+  }, []);
 
   const categoryOptions: PickerOption[] = categories.map((c) => ({
     id: c.id, label: c.name, icon: c.icon, color: c.color,
   }));
 
-  const payerOptions: PickerOption[] = [
-    { id: 'Vợ', label: 'Vợ', icon: '👩‍🦰', color: Colors.pink[400] },
-    { id: 'Chồng', label: 'Chồng', icon: '👨‍🦱', color: Colors.mint[400] },
-  ];
+  const payerOptions: PickerOption[] = payers.map((p) => ({
+    id: p.name,
+    label: p.name,
+    icon: p.icon,
+    color: p.color,
+  }));
 
   const sourceOptions: PickerOption[] = sources.map((s) => ({
     id: s.id,
@@ -306,7 +407,8 @@ export default function TransactionForm() {
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 4 : 0}
       >
 
         {/* ═══ TOP: IMAGE BG + AMOUNT OVERLAY ═══ */}
@@ -353,24 +455,32 @@ export default function TransactionForm() {
           </View>
 
           {/* Amount */}
-          <Pressable style={styles.amountWrap} onPress={() => setShowKeyboard(true)}>
+          <View style={styles.amountWrap}>
             <Text style={styles.amountSign}>{isChi ? '-' : '+'}</Text>
             <Text style={[styles.amountValue, !formData.amount && styles.amountEmpty]}>
               {displayAmount || '0'}
             </Text>
             <Text style={styles.amountUnit}>đ</Text>
-          </Pressable>
+          </View>
 
-          {/* Note hint */}
-          <TouchableOpacity
-            style={styles.noteHint}
-            onPress={() => { setShowKeyboard(false); setTimeout(() => noteRef.current?.focus(), 100); }}
-          >
-            <Text style={styles.noteHintIcon}>✏️</Text>
-            <Text style={styles.noteHintText} numberOfLines={1}>
-              {formData.note || formData.location || 'Thêm chi tiết...'}
-            </Text>
-          </TouchableOpacity>
+          {/* Mô tả — nằm cao trên màn hình để không bị bàn phím che */}
+          <View style={styles.noteInputWrap}>
+            <Text style={styles.noteInputIcon}>✏️</Text>
+            <TextInput
+              ref={noteRef}
+              style={styles.noteInput}
+              value={formData.note}
+              onChangeText={(t) => setFormData((p) => ({ ...p, note: t, location: '' }))}
+              placeholder="Thêm mô tả..."
+              placeholderTextColor="rgba(255,255,255,0.55)"
+              multiline
+              numberOfLines={2}
+              maxLength={200}
+              returnKeyType="done"
+              blurOnSubmit
+              onSubmitEditing={Keyboard.dismiss}
+            />
+          </View>
         </View>
 
         {/* ═══ FORM BODY ═══ */}
@@ -413,78 +523,98 @@ export default function TransactionForm() {
                 accentColor={accentColor}
               />
             </View>
-            <View style={[styles.pill, styles.datePill]}>
+            <TouchableOpacity
+              style={[styles.pill, styles.datePill, isBackdated && styles.datePillBackdated]}
+              onPress={() => setShowDatePicker(true)}
+              activeOpacity={0.8}
+            >
               <Text style={styles.pillIcon}>📅</Text>
-              <Text style={styles.pillText} numberOfLines={1}>{todayLabel}</Text>
-            </View>
+              <Text style={[styles.pillText, isBackdated && styles.datePillTextBackdated]} numberOfLines={1}>
+                {formatDateVi(formData.transaction_date)}
+              </Text>
+              <Text style={styles.pillChevron}>▾</Text>
+            </TouchableOpacity>
           </View>
-
-          {/* Note + Location inputs */}
-          <View style={styles.inputsCard}>
-            <View style={styles.inputRow}>
-              <Text style={styles.inputRowIcon}>📍</Text>
-              <TextInput
-                style={styles.inputField}
-                value={formData.location}
-                onChangeText={(t) => setFormData((p) => ({ ...p, location: t }))}
-                placeholder="Địa điểm..."
-                placeholderTextColor={Colors.neutral[400]}
-                returnKeyType="next"
-              />
-            </View>
-            <View style={styles.inputSep} />
-            <View style={styles.inputRow}>
-              <Text style={styles.inputRowIcon}>📝</Text>
-              <TextInput
-                ref={noteRef}
-                style={[styles.inputField, styles.inputFieldNote]}
-                value={formData.note}
-                onChangeText={(t) => setFormData((p) => ({ ...p, note: t }))}
-                placeholder="Ghi chú..."
-                placeholderTextColor={Colors.neutral[400]}
-                multiline
-                numberOfLines={2}
-                returnKeyType="done"
-                onSubmitEditing={Keyboard.dismiss}
-              />
-            </View>
-          </View>
-
-          {/* Numpad */}
-          {showKeyboard && (
-            <View style={styles.keypadSection}>
-              <AmountKeyboard
-                value={formData.amount}
-                onChange={(val) => setFormData((p) => ({ ...p, amount: val }))}
-              />
-              <TouchableOpacity
-                style={[styles.doneBtn, { backgroundColor: accentColor }]}
-                onPress={() => setShowKeyboard(false)}
-              >
-                <Text style={styles.doneBtnText}>Xong ✓</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <View style={{ height: 24 }} />
         </ScrollView>
 
+        {/* Bàn phím số luôn hiển thị; tạm ẩn khi gõ mô tả để nhường chỗ bàn phím hệ thống */}
+        {!systemKeyboardVisible && (
+          <View style={styles.keypadSection}>
+            <AmountKeyboard
+              value={formData.amount}
+              onChange={(val) => setFormData((p) => ({ ...p, amount: val }))}
+            />
+          </View>
+        )}
+
         {/* ═══ SAVE BUTTON ═══ */}
-        <View style={styles.bottomBar}>
+        <View style={[styles.bottomBar, { paddingBottom: Spacing.base + screenBottomInset }]}>
           <TouchableOpacity
             style={[styles.saveBtn, { backgroundColor: accentColor }, isSaving && { opacity: 0.6 }]}
-            onPress={handleSave}
+            onPress={handlePrimarySave}
             disabled={isSaving}
             activeOpacity={0.85}
           >
             {isSaving
               ? <ActivityIndicator size="small" color="#fff" />
-              : <Text style={styles.saveBtnText}>
-                  {isEdit ? 'Cập nhật giao dịch ✏️' : isFromPending ? 'Hoàn thành giao dịch ✓' : 'Lưu giao dịch 🍓'}
-                </Text>
+              : <Text style={styles.saveBtnText}>{primaryButtonLabel}</Text>
             }
           </TouchableOpacity>
         </View>
+
+        {/* Chọn ngày giao dịch */}
+        {showDatePicker && Platform.OS === 'android' && (
+          <DateTimePicker
+            value={parseLocalDate(formData.transaction_date)}
+            mode="date"
+            maximumDate={maxDate}
+            onChange={handleDateChange}
+          />
+        )}
+
+        {Platform.OS === 'ios' && (
+          <BottomSheetModal visible={showDatePicker} onClose={() => setShowDatePicker(false)}>
+              <View style={styles.sheetHandle} />
+              <Text style={styles.sheetTitle}>Chọn ngày giao dịch</Text>
+              <DateTimePicker
+                value={parseLocalDate(formData.transaction_date)}
+                mode="date"
+                display="spinner"
+                maximumDate={maxDate}
+                locale="vi-VN"
+                onChange={handleDateChange}
+              />
+              <TouchableOpacity
+                style={[styles.doneBtn, { backgroundColor: accentColor, marginHorizontal: Spacing.base }]}
+                onPress={() => setShowDatePicker(false)}
+              >
+                <Text style={styles.doneBtnText}>Xong ✓</Text>
+              </TouchableOpacity>
+          </BottomSheetModal>
+        )}
+
+        {showDatePicker && Platform.OS === 'web' && (
+          <Modal visible transparent animationType="fade" onRequestClose={() => setShowDatePicker(false)}>
+            <TouchableOpacity style={styles.backdrop} onPress={() => setShowDatePicker(false)} activeOpacity={1} />
+            <View style={[styles.dateSheetWeb, { marginBottom: screenBottomInset }]}>
+              <Text style={styles.sheetTitle}>Chọn ngày giao dịch</Text>
+              {/* @ts-ignore — input web */}
+              <input
+                type="date"
+                title="Chọn ngày giao dịch"
+                aria-label="Chọn ngày giao dịch"
+                value={formData.transaction_date}
+                max={formatLocalDate(maxDate)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  if (e.target.value) {
+                    setFormData((p) => ({ ...p, transaction_date: e.target.value }));
+                  }
+                  setShowDatePicker(false);
+                }}
+              />
+            </View>
+          </Modal>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -493,10 +623,18 @@ export default function TransactionForm() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: Colors.background.primary },
   container: { flex: 1 },
+  webDateInput: {
+    fontSize: 16,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#E5E5E5',
+    width: '100%',
+  },
 
   // ── Top image section ──
   topSection: {
-    height: 200,
+    minHeight: 200,
     overflow: 'hidden',
     backgroundColor: Colors.pink[400],
     justifyContent: 'space-between',
@@ -585,19 +723,24 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.8)',
   },
 
-  noteHint: {
+  noteInputWrap: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'center',
     gap: 6,
-    paddingBottom: Spacing.md,
     paddingHorizontal: Spacing.base,
+    paddingBottom: Spacing.md,
   },
-  noteHintIcon: { fontSize: 14 },
-  noteHintText: {
+  noteInputIcon: { fontSize: 14, marginTop: 4 },
+  noteInput: {
+    flex: 1,
     fontSize: Typography.fontSize.sm,
-    color: 'rgba(255,255,255,0.7)',
+    color: '#FFFFFF',
     fontWeight: '500',
+    paddingVertical: 4,
+    minHeight: 36,
+    maxHeight: 56,
+    textAlignVertical: 'top',
   },
 
   // ── Body ──
@@ -630,6 +773,23 @@ const styles = StyleSheet.create({
     flex: 1,
     borderColor: Colors.neutral[200],
   },
+  datePillBackdated: {
+    borderColor: Colors.pink[300],
+    backgroundColor: Colors.pink[50],
+  },
+  datePillTextBackdated: {
+    color: Colors.pink[500],
+    fontWeight: '700',
+  },
+  dateSheetWeb: {
+    backgroundColor: Colors.background.surface,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.base,
+    marginHorizontal: Spacing['2xl'],
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 320,
+  },
   pillIcon: { fontSize: 16 },
   pillText: {
     flex: 1,
@@ -644,37 +804,15 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
 
-  // Inputs card
-  inputsCard: {
-    backgroundColor: Colors.background.surface,
-    borderRadius: BorderRadius.xl,
-    borderWidth: 1.5,
-    borderColor: Colors.neutral[200],
-    overflow: 'hidden',
-    ...Shadows.soft,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.base,
-    paddingVertical: 2,
+  // Keypad — luôn hiển thị (trừ khi bàn phím hệ thống mở)
+  keypadSection: {
     gap: Spacing.sm,
+    paddingHorizontal: Spacing.base,
+    paddingTop: Spacing.sm,
+    backgroundColor: Colors.background.primary,
+    borderTopWidth: 1,
+    borderTopColor: Colors.neutral[200],
   },
-  inputSep: { height: 1, backgroundColor: Colors.neutral[100], marginLeft: 44 },
-  inputRowIcon: { fontSize: 17, width: 24, textAlign: 'center' },
-  inputField: {
-    flex: 1,
-    fontSize: Typography.fontSize.base,
-    color: Colors.neutral[700],
-    paddingVertical: Spacing.md,
-  },
-  inputFieldNote: {
-    minHeight: 44,
-    textAlignVertical: 'top',
-  },
-
-  // Keypad
-  keypadSection: { gap: Spacing.sm },
   doneBtn: {
     paddingVertical: Spacing.md,
     borderRadius: BorderRadius.lg,
@@ -692,6 +830,8 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.neutral[200],
   },
   saveBtn: {
+    alignSelf: 'stretch',
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -706,17 +846,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  // Bottom sheet
+  // Bottom sheet (nội dung bên trong BottomSheetModal)
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  sheet: {
-    backgroundColor: Colors.background.surface,
-    borderTopLeftRadius: BorderRadius['2xl'],
-    borderTopRightRadius: BorderRadius['2xl'],
-    paddingTop: Spacing.md,
-    maxHeight: '70%',
   },
   sheetHandle: {
     width: 40,

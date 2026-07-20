@@ -1,6 +1,6 @@
 import { CameraType, CameraView, FlashMode, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useRef, useState } from 'react';
 import {
   Dimensions,
@@ -23,13 +23,19 @@ const PREVIEW_H = PREVIEW_W * 1.15;
 // ─── Web: chọn file từ máy ────────────────────────────────────────────────────
 function WebImagePicker() {
   const router = useRouter();
+  const { transactionDate } = useLocalSearchParams<{ transactionDate?: string }>();
   const [preview, setPreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  const formParams = {
+    isFromPending: 'false',
+    ...(transactionDate ? { transactionDate } : {}),
+  };
+
   const navigateToForm = useCallback((uri: string) => {
-    router.push({ pathname: '/form', params: { imageUri: uri, isFromPending: 'false' } });
-  }, [router]);
+    router.push({ pathname: '/form', params: { imageUri: uri, ...formParams } });
+  }, [router, formParams]);
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -50,8 +56,8 @@ function WebImagePicker() {
   }, [navigateToForm]);
 
   const handleSkip = useCallback(() => {
-    router.push({ pathname: '/form', params: { isFromPending: 'false' } });
-  }, [router]);
+    router.push({ pathname: '/form', params: formParams });
+  }, [router, formParams]);
 
   return (
     <View style={webStyles.container}>
@@ -160,7 +166,13 @@ export default function CameraScreen() {
 
 function NativeCameraScreen() {
   const router = useRouter();
+  const { transactionDate } = useLocalSearchParams<{ transactionDate?: string }>();
   const cameraRef = useRef<CameraView>(null);
+
+  const formParams = {
+    isFromPending: 'false' as const,
+    ...(transactionDate ? { transactionDate } : {}),
+  };
 
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraFacing, setCameraFacing] = useState<CameraType>('back');
@@ -180,14 +192,14 @@ function NativeCameraScreen() {
       });
       if (photo?.uri) {
         setLastThumb(photo.uri);
-        router.push({ pathname: '/form', params: { imageUri: photo.uri, isFromPending: 'false' } });
+        router.push({ pathname: '/form', params: { imageUri: photo.uri, ...formParams } });
       }
     } catch (err) {
       console.error('Lỗi chụp ảnh:', err);
     } finally {
       setIsTakingPhoto(false);
     }
-  }, [isTakingPhoto, router]);
+  }, [isTakingPhoto, router, formParams]);
 
   const handleGallery = useCallback(async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -200,13 +212,13 @@ function NativeCameraScreen() {
     if (!result.canceled && result.assets[0]) {
       const uri = result.assets[0].uri;
       setLastThumb(uri);
-      router.push({ pathname: '/form', params: { imageUri: uri, isFromPending: 'false' } });
+      router.push({ pathname: '/form', params: { imageUri: uri, ...formParams } });
     }
-  }, [router]);
+  }, [router, formParams]);
 
   const handleSkip = useCallback(() => {
-    router.push({ pathname: '/form', params: { isFromPending: 'false' } });
-  }, [router]);
+    router.push({ pathname: '/form', params: formParams });
+  }, [router, formParams]);
 
   const flashLabel = flashMode === 'on' ? '⚡' : flashMode === 'auto' ? '🌟' : '💡';
 

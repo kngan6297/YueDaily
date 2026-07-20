@@ -5,7 +5,6 @@ import {
   Alert,
   Dimensions,
   Image,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +13,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BorderRadius, Colors, Shadows, Spacing, Typography } from '../../constants/theme';
+import { BottomSheetModal } from '../../components/ui/BottomSheetModal';
+import { getAllPayers, updateStreak } from '../../database/categories';
 import {
   deleteTransaction,
   getMonthSummary,
@@ -28,7 +29,7 @@ const CELL_SIZE = Math.floor((SCREEN_W - Spacing.base * 2 - Spacing.xs * 6) / 7)
 const fmt = (n: number) => n.toLocaleString('vi-VN');
 const DAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 
-type FilterTab = 'all' | 'Vợ' | 'Chồng';
+type FilterTab = 'all' | string;
 type TxnWithMeta = Transaction & {
   category_name?: string;
   category_icon?: string;
@@ -54,13 +55,14 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [monthTxns, setMonthTxns] = useState<TxnWithMeta[]>([]);
   const [monthSummary, setMonthSummary] = useState({ chi: 0, thu: 0 });
+  const [payers, setPayers] = useState<Array<{ name: string; icon: string; color: string }>>([]);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
       const [txns, summary] = await Promise.all([
         getTransactionsByMonth(calYear, calMonth),
-        getMonthSummary(),
+        getMonthSummary(calYear, calMonth),
       ]);
       setMonthTxns(txns as TxnWithMeta[]);
       setMonthSummary(summary);
@@ -74,39 +76,48 @@ export default function HomeScreen() {
   const { streak, refreshStreak } = useStreak();
 
   useFocusEffect(
-    useCallback(() => { loadData(); refreshStreak(); }, [loadData, refreshStreak])
+    useCallback(() => {
+      loadData();
+      refreshStreak();
+      getAllPayers().then((p) =>
+        setPayers(p.map(({ name, icon, color }) => ({ name, icon, color })))
+      ).catch(console.error);
+    }, [loadData, refreshStreak])
   );
+
+  const payerColor = useCallback((name: string) => {
+    return payers.find((p) => p.name === name)?.color ?? Colors.pink[300];
+  }, [payers]);
 
   // --- Calendar helpers ---
   const daysInMonth = new Date(calYear, calMonth, 0).getDate();
   const firstDow = new Date(calYear, calMonth - 1, 1).getDay(); // 0=Sun
   const offsetMon = firstDow === 0 ? 6 : firstDow - 1; // 0=Mon
 
-  // Group txns by calendar day number
+  // Group txns by calendar day number — đã lọc theo activeFilter
+  // Dùng string slice thay vì new Date() để tránh Hermes parse sai timezone
+  // với format "YYYY-MM-DD HH:MM:SS" của SQLite localtime
   const txnsByDay = useMemo(() => {
+    const source = activeFilter === 'all'
+      ? monthTxns
+      : monthTxns.filter((t) => t.payer === activeFilter);
     const map: Record<number, TxnWithMeta[]> = {};
-    for (const t of monthTxns) {
-      const d = new Date(t.created_at);
-      if (
-        d.getFullYear() === calYear &&
-        d.getMonth() + 1 === calMonth
-      ) {
-        const day = d.getDate();
-        if (!map[day]) map[day] = [];
-        map[day].push(t);
+    for (const t of source) {
+      const dateStr = t.created_at.slice(0, 10); // "YYYY-MM-DD"
+      const [yr, mo, dy] = dateStr.split('-').map(Number);
+      if (yr === calYear && mo === calMonth) {
+        if (!map[dy]) map[dy] = [];
+        map[dy].push(t);
       }
     }
     return map;
-  }, [monthTxns, calYear, calMonth]);
+  }, [monthTxns, calYear, calMonth, activeFilter]);
 
-  // --- Filtered transactions for selected day ---
+  // Giao dịch của ngày được chọn (đã được lọc sẵn trong txnsByDay)
   const selectedTxns = useMemo(() => {
     if (!selectedDay) return [];
-    const list = txnsByDay[selectedDay] ?? [];
-    return activeFilter === 'all'
-      ? list
-      : list.filter((t) => t.payer === activeFilter);
-  }, [txnsByDay, selectedDay, activeFilter]);
+    return txnsByDay[selectedDay] ?? [];
+  }, [txnsByDay, selectedDay]);
 
   // Month nav
   const prevMonth = () => {
@@ -148,12 +159,14 @@ export default function HomeScreen() {
           style: 'destructive',
           onPress: async () => {
             await deleteTransaction(id);
+            await updateStreak();
             await loadData();
+            refreshStreak();
           },
         },
       ]
     );
-  }, [loadData]);
+  }, [loadData, refreshStreak]);
 
   // Build calendar cells array
   const calCells: (number | null)[] = [
@@ -248,7 +261,7 @@ export default function HomeScreen() {
             <Text style={[styles.txnAmount, isIncome ? styles.incomeText : styles.expenseText]}>
               {isIncome ? '+' : '-'}{fmt(item.amount)}đ
             </Text>
-            <View style={[styles.payerChip, item.payer === 'Vợ' ? styles.payerWife : styles.payerHusband]}>
+            <View style={[styles.payerChip, { backgroundColor: payerColor(item.payer) + '33' }]}>
               <Text style={styles.payerChipText}>{item.payer}</Text>
             </View>
           </View>
@@ -277,7 +290,7 @@ export default function HomeScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* === HEADER === */}
       <View style={styles.header}>
         <View>
@@ -305,9 +318,8 @@ export default function HomeScreen() {
         {/* === FILTER TABS === */}
         <View style={styles.filterRow}>
           {([
-            { id: 'all',   emoji: '🗂', label: 'Tất cả' },
-            { id: 'Vợ',   emoji: '🌸', label: 'Vợ'     },
-            { id: 'Chồng', emoji: '🌿', label: 'Chồng'  },
+            { id: 'all', emoji: '🗂', label: 'Tất cả' },
+            ...payers.map((p) => ({ id: p.name, emoji: p.icon, label: p.name })),
           ] as { id: FilterTab; emoji: string; label: string }[]).map((tab) => (
             <TouchableOpacity
               key={tab.id}
@@ -364,18 +376,10 @@ export default function HomeScreen() {
       </ScrollView>
 
       {/* === DAY DETAIL MODAL === */}
-      <Modal
+      <BottomSheetModal
         visible={showDayModal && selectedDay !== null}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowDayModal(false)}
+        onClose={() => setShowDayModal(false)}
       >
-        <TouchableOpacity
-          style={styles.modalBackdrop}
-          onPress={() => setShowDayModal(false)}
-          activeOpacity={1}
-        />
-        <View style={styles.modalSheet}>
           <View style={styles.modalHandle} />
 
           {/* Modal header */}
@@ -416,21 +420,28 @@ export default function HomeScreen() {
                 ))}
               </View>
             )}
-            <View style={{ height: 16 }} />
           </ScrollView>
 
           {/* Add transaction CTA */}
           <View style={styles.modalFooter}>
             <TouchableOpacity
               style={styles.modalAddBtn}
-              onPress={() => { setShowDayModal(false); router.push('/camera'); }}
+              onPress={() => {
+                if (!selectedDay) return;
+                setShowDayModal(false);
+                const m = String(calMonth).padStart(2, '0');
+                const d = String(selectedDay).padStart(2, '0');
+                router.push({
+                  pathname: '/camera',
+                  params: { transactionDate: `${calYear}-${m}-${d}` },
+                });
+              }}
               activeOpacity={0.85}
             >
               <Text style={styles.modalAddBtnText}>+ Thêm giao dịch</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </Modal>
+      </BottomSheetModal>
     </SafeAreaView>
   );
 }
@@ -663,18 +674,7 @@ const styles = StyleSheet.create({
     bottom: 2,
   },
 
-  // Day modal
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  modalSheet: {
-    backgroundColor: Colors.background.surface,
-    borderTopLeftRadius: BorderRadius['2xl'],
-    borderTopRightRadius: BorderRadius['2xl'],
-    maxHeight: '70%',
-    paddingTop: Spacing.sm,
-  },
+  // Day modal (sheet styles — container do BottomSheetModal)
   modalHandle: {
     width: 40,
     height: 4,

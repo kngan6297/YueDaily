@@ -1,142 +1,300 @@
-# Yozakura 🌙🌸
+# YueDaily 🌸
 
-Ứng dụng quản lý tài chính cá nhân / gia đình dành cho người Việt — chụp hoá đơn, AI tự điền thông tin, theo dõi chi tiêu theo danh mục.
+> Local-first app quản lý thu chi gia đình · Expo SDK 54 · SQLite · AI quét hoá đơn
 
----
-
-## Tính năng
-
-- **Chụp ảnh & quét AI** — hoá đơn tự điền số tiền + quán; ảnh món/sản phẩm tự nhận diện tên món & danh mục (nhập số tiền thủ công)
-- **AI phân tích thông minh** — hỗ trợ Groq (Llama 4 Scout) và Google Gemini 2.5; thứ tự ưu tiên: Groq → Gemini Lite → Gemini Flash
-- **Camera im lặng** — tắt tiếng chụp (`shutterSound: false`) phù hợp chụp bill ở quán
-- **Nhập tay nhanh** — bàn phím số tuỳ chỉnh, chọn danh mục bằng lưới icon
-- **11 danh mục chi tiêu** — Ăn uống, Trà & Cà phê, Mua sắm, Di chuyển, Làm đẹp, Sức khoẻ, Giải trí, Giáo dục, Gia đình, Thú cưng, Khác
-- **Streak** — theo dõi chuỗi ngày nhập liệu liên tục
-- **Báo cáo** — thống kê chi tiêu theo tuần / tháng / danh mục
-- **Lưu cục bộ** — toàn bộ dữ liệu lưu trên thiết bị bằng SQLite (không cần tài khoản)
-- **Hỗ trợ nhiều người** — phân chia chi tiêu theo người dùng
+**Đặc tả sản phẩm (PRD):** [`APP_SPECIFICATION.md`](./APP_SPECIFICATION.md) — *app làm gì, cho ai, phạm vi tính năng*
+**Tài liệu này** — *cách clone, chạy, build và hiểu codebase*
 
 ---
 
-## Tech Stack
-
-| Layer | Thư viện |
-|---|---|
-| Framework | [Expo](https://expo.dev) ~54 · React Native 0.81 |
-| Navigation | Expo Router ~6 (file-based) |
-| Database | expo-sqlite ~16 |
-| Camera | expo-camera ~17 · expo-image-picker ~17 |
-| AI | Groq API (`llama-4-scout-17b`) · Google Gemini 2.5 Flash/Lite |
-| Animations | react-native-reanimated ~4.1 |
-| State | React hooks thuần (useState / useCallback) |
-
----
-
-## Yêu cầu
-
-- Node.js ≥ 18
-- [Expo CLI](https://docs.expo.dev/more/expo-cli/) (`npx expo`)
-- Tài khoản [Expo](https://expo.dev) + [EAS CLI](https://docs.expo.dev/build/setup/) (`npm install -g eas-cli`)
-- API Key của [Groq](https://console.groq.com) hoặc [Google AI Studio](https://aistudio.google.com) (ít nhất một trong hai)
-
----
-
-## Cài đặt & chạy local
+## Quick start
 
 ```bash
-# 1. Clone repo
 git clone https://github.com/kngan6297/Yozakura.git
 cd Yozakura
-
-# 2. Cài dependencies
 npm install
 
-# 3. Tạo file .env (copy từ mẫu bên dưới)
-# 4. Khởi động dev server
+# .env — cần ít nhất một key
+echo "EXPO_PUBLIC_GROQ_API_KEY=gsk_xxxxxxxx" > .env
+echo "EXPO_PUBLIC_GEMINI_API_KEY=AIzaSyxxxxxxxx" >> .env
+
 npm start
 ```
 
-### Biến môi trường (`.env`)
+| Yêu cầu | Ghi chú |
+|---------|---------|
+| Node.js ≥ 18 | |
+| API key | [Groq](https://console.groq.com) hoặc [Gemini](https://aistudio.google.com) |
+| EAS CLI | Chỉ khi build APK: `npm i -g eas-cli` |
 
-Tạo file `.env` ở thư mục gốc:
-
-```env
-EXPO_PUBLIC_GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxx
-EXPO_PUBLIC_GEMINI_API_KEY=AIzaSyxxxxxxxxxxxxxxxx
-```
-
-> API Key cũng có thể nhập trực tiếp trong ứng dụng ở màn hình **Cài đặt** mà không cần restart.
+> Camera im lặng (tắt shutter) cần **EAS native build** — Expo Go không đủ.
 
 ---
 
-## Build APK (Android) qua EAS
-
-### 1. Đăng nhập Expo
+## Build Android
 
 ```bash
 npx eas-cli login
+npx eas-cli build --platform android --profile preview    # APK nội bộ
+npx eas-cli build --platform android --profile production # Play Store
 ```
 
-### 2. Cấu hình biến môi trường trên EAS (khuyến nghị)
+Đặt env trên [expo.dev](https://expo.dev) → project Yozakura → **Environment variables** (profile `preview`).
 
-Vào [expo.dev](https://expo.dev) → project **Yozakura** → **Environment variables** → môi trường `preview`, thêm:
+---
 
-- `EXPO_PUBLIC_GROQ_API_KEY`
-- `EXPO_PUBLIC_GEMINI_API_KEY`
+## Tech stack
 
-> Có thể bỏ qua bước này nếu nhập API Key trực tiếp trong app ở màn hình Cài đặt.
-
-### 3. Build APK
-
-```bash
-# Build APK nội bộ (cài trực tiếp lên điện thoại)
-npx eas-cli build --platform android --profile preview
-
-# Hoặc build production (tự tăng version, dùng cho Play Store)
-npx eas-cli build --platform android --profile production
-```
-
-Sau khi build xong, tải file `.apk` từ link Expo gửi về hoặc tại [expo.dev/accounts/kngan6297/projects/Yozakura/builds](https://expo.dev/accounts/kngan6297/projects/Yozakura/builds).
-
-### 4. Cài APK lên điện thoại
-
-1. Tải file APK về điện thoại Android
-2. Bật **Cài đặt từ nguồn không xác định** (nếu được hỏi)
-3. Mở file APK và cài đặt
-
-> **Lưu ý:** Cần build bản native mới (EAS) để các tính năng như tắt tiếng camera có hiệu lực — Expo Go không phản ánh đủ thay đổi native.
+| Layer | Thư viện |
+|-------|-----------|
+| Framework | Expo 54 · RN 0.81 · React 19 |
+| Routing | Expo Router 6 (`src/app`) |
+| DB | expo-sqlite 16 · WAL · FK ON |
+| Camera | expo-camera 17 · image-picker · image-manipulator |
+| AI | Groq API → Gemini 2.5 Flash-Lite → Gemini 2.5 Flash |
+| Charts | react-native-svg 15 |
+| Backup | expo-file-system · sharing · document-picker |
+| State | Hooks thuần (`useState`, `useFocusEffect`) |
+| Language | TypeScript strict |
 
 ---
 
 ## Cấu trúc thư mục
 
 ```
-Yozakura/
-├── app/
-│   ├── _layout.tsx          # Root layout
-│   ├── (tabs)/
-│   │   ├── index.tsx        # Trang chủ (danh sách giao dịch)
-│   │   ├── camera-tab.tsx   # Tab chụp ảnh
-│   │   ├── reports.tsx      # Báo cáo
-│   │   ├── accounts.tsx     # Tài khoản / người dùng
-│   │   └── settings.tsx     # Cài đặt API Key
-│   ├── camera.tsx           # Màn hình camera full-screen
-│   └── form.tsx             # Form nhập giao dịch
-├── components/
-│   ├── camera/              # CaptureButton
-│   ├── form/                # AmountKeyboard, CategoryGrid, PayerToggle
-│   └── ui/                  # PastelBadge, StreakBanner
-├── database/
-│   ├── initDb.ts            # Khởi tạo schema SQLite
-│   ├── transactions.ts      # CRUD giao dịch
-│   └── categories.ts        # Danh mục mặc định
-├── hooks/
-│   ├── useDatabase.ts       # Hook truy vấn DB
-│   ├── useGemini.ts         # Hook gọi AI (Groq + Gemini)
-│   └── useStreak.ts         # Hook tính streak
-├── constants/theme.ts       # Màu sắc, font, spacing
-└── types/index.ts           # TypeScript types
+YueDaily/
+├── src/
+│   ├── app/                      # Expo Router
+│   │   ├── _layout.tsx           # DB init, BottomSheetPortal, Stack
+│   │   ├── form.tsx              # Form thu/chi + AI scan
+│   │   ├── camera.tsx            # Camera native / file picker web
+│   │   └── (tabs)/
+│   │       ├── _layout.tsx       # Tab bar + FAB camera
+│   │       ├── index.tsx         # Lịch tháng
+│   │       ├── reports.tsx       # Thống kê
+│   │       ├── accounts.tsx      # Số dư theo nguồn
+│   │       ├── settings.tsx      # CRUD + backup
+│   │       └── camera-tab.tsx    # Redirect → /camera
+│   ├── components/
+│   │   ├── camera/CaptureButton.tsx
+│   │   ├── form/AmountKeyboard.tsx
+│   │   └── ui/
+│   │       ├── BottomSheetModal.tsx   # Portal + safe area đáy
+│   │       └── BottomSheetPortal.tsx
+│   ├── constants/
+│   │   ├── layout.ts             # TAB_BAR_CONTENT_HEIGHT, SYSTEM_NAV_BAR_FALLBACK
+│   │   └── theme.ts
+│   ├── database/
+│   │   ├── initDb.ts             # Schema + seed
+│   │   ├── transactions.ts       # CRUD + aggregations
+│   │   ├── categories.ts         # categories, sources, payers, streak
+│   │   └── backup.ts
+│   ├── hooks/
+│   │   ├── useDatabase.ts
+│   │   ├── useGemini.ts          # Multi-provider AI
+│   │   ├── useStreak.ts
+│   │   └── useModalBottomInset.ts
+│   ├── types/index.ts
+│   └── utils/date.ts
+├── assets/                       # Icon, splash (root — Expo convention)
+├── APP_SPECIFICATION.md          # PRD
+├── app.json
+├── index.ts                      # expo-router/entry
+├── metro.config.js               # + .wasm cho SQLite web
+└── tsconfig.json                 # Path aliases → src/*
 ```
+
+### Path aliases
+
+```json
+"@/*"           → "src/*"
+"@components/*" → "src/components/*"
+"@database/*"   → "src/database/*"
+"@hooks/*"      → "src/hooks/*"
+"@constants/*"  → "src/constants/*"
+"@types/*"      → "src/types/*"
+"@utils/*"      → "src/utils/*"
+```
+
+---
+
+## Luồng điều hướng
+
+```
+src/app/_layout.tsx (init DB)
+└── (tabs)/
+    ├── index        → FAB / modal ngày → /camera → /form
+    ├── reports
+    ├── camera-tab   → /camera
+    ├── accounts     → [+ Thêm] → /camera
+    └── settings
+
+/camera  → /form?imageUri=...&transactionDate=...
+/form    → save → router.dismissAll()
+         → /form?transactionId=&isEdit=true  (sửa)
+```
+
+---
+
+## Data Model (SQLite)
+
+Database: `yozakura.db`
+
+### `transactions`
+
+| Cột | Kiểu | Ghi chú |
+|-----|------|---------|
+| `id` | INTEGER PK | |
+| `amount` | INTEGER | VNĐ |
+| `type` | TEXT | `chi` \| `thu` |
+| `category_id` | INTEGER FK | nullable khi xoá danh mục |
+| `source_id` | INTEGER FK | nullable khi xoá nguồn |
+| `payer` | TEXT | Tên người trả (text, sync khi rename payer) |
+| `image_uri` | TEXT | |
+| `location` | TEXT | legacy |
+| `note` | TEXT | Mô tả |
+| `status` | TEXT | `complete` \| `pending` |
+| `created_at` | TEXT | `datetime('now','localtime')` |
+
+Index: `created_at`, `status`.
+
+### `categories`
+
+| Cột | Kiểu |
+|-----|------|
+| `id`, `name`, `type` (`chi`\|`thu`\|`both`), `icon`, `color` | |
+
+Seed: 12 Chi + 5 Thu (xem `src/database/initDb.ts`).
+
+### `sources`
+
+| Cột | Kiểu |
+|-----|------|
+| `id`, `name` UNIQUE | |
+
+Seed: Tiền mặt, Chuyển khoản.
+
+### `payers`
+
+| Cột | Kiểu |
+|-----|------|
+| `id`, `name` UNIQUE, `icon`, `color` | |
+
+Seed: Vợ 👩‍🦰, Chồng 👨‍🦱.
+
+### `streaks`
+
+Single row `id=1`: `current_streak`, `last_logged_date`.
+
+`updateStreak()` tính lại từ tập ngày có giao dịch `complete` (hỗ trợ backdate).
+
+---
+
+## AI Integration
+
+Implementation: `src/hooks/useGemini.ts`
+
+### Provider chain
+
+```
+Groq (llama-4-scout-17b-16e-instruct)
+  → Gemini 2.5 Flash-Lite
+  → Gemini 2.5 Flash
+```
+
+### API keys
+
+```env
+EXPO_PUBLIC_GROQ_API_KEY=gsk_...
+EXPO_PUBLIC_GEMINI_API_KEY=AIzaSy...
+```
+
+Fallback AsyncStorage: `yozakura_groq_api_key`, `yozakura_gemini_api_key`.
+
+### Output type
+
+```typescript
+interface GeminiAnalysisResult {
+  is_receipt?: boolean;  // false → amount = 0, nhập tay
+  amount?: number;
+  description?: string;
+  category?: string;
+  type?: 'chi' | 'thu';
+}
+```
+
+### Error handling
+
+| Tình huống | Hành động |
+|------------|-----------|
+| Mất mạng | Dừng chain |
+| Timeout 20s | Skip provider |
+| 413 (Groq) | Skip → Gemini |
+| 401/403 | Dừng, báo key sai |
+| 429/503 | Retry 1× sau 3.5s, rồi skip |
+| base64 > 4MB | Reject trước khi gọi |
+
+### Nén ảnh (form.tsx)
+
+```typescript
+await ImageManipulator.manipulateAsync(uri,
+  [{ resize: { width: 1024 } }],
+  { compress: 0.7, format: SaveFormat.JPEG, base64: true }
+);
+```
+
+---
+
+## Design System
+
+File: `src/constants/theme.ts` · Pastel sakura — **không dùng đỏ/xanh thô**.
+
+| Token | Hex | Dùng cho |
+|-------|-----|----------|
+| pink[400] | `#FFB7C5` | Nút chính, chi |
+| pink[500] | `#FF8FA8` | Chi tiêu |
+| mint[400] | `#4BBFA0` | Thu nhập |
+| lavender[300] | `#C5B0E8` | Accent |
+| background.primary | `#FFFBFB` | Nền app |
+
+---
+
+## Quy tắc kiến trúc
+
+1. **Local-first** — SQLite on-device; backup JSON do user quản lý.
+2. **Không global state** — `useState` + `useFocusEffect` reload màn hình.
+3. **DB singleton + WAL** — Tự reopen khi native object bị giải phóng (hot reload).
+4. **Parse date an toàn** — `created_at.slice(0,10).split('-')`; tránh `new Date()` với SQLite localtime trên Hermes.
+5. **Join metadata** — Query giao dịch JOIN categories/sources cho `category_name`, `category_icon`, `source_name`.
+6. **Bottom sheet root-level** — `BottomSheetPortalProvider` ở `_layout.tsx`; inset đáy = navbar hệ thống only (`useModalBottomInset`).
+7. **Tab bar custom** — `TAB_BAR_CONTENT_HEIGHT` (62) + safe area; FAB giữa → `/camera`.
+8. **Master data** — CRUD payers/sources/categories trong Settings; form chỉ chọn, không thêm danh mục.
+9. **Dynamic payers** — Filter Trang chủ / Thống kê / dropdown form load từ bảng `payers`.
+10. **Pending pattern** — DB + `completePendingTransaction()` sẵn sàng; UI inbox chưa có.
+
+---
+
+## Scripts
+
+```bash
+npm start          # Expo dev server
+npm run android    # expo run:android
+npm run ios        # expo run:ios
+npm run web        # expo start --web
+npm run build:web  # expo export --platform web
+npx tsc --noEmit   # Typecheck
+```
+
+---
+
+## Environment & config
+
+| File | Vai trò |
+|------|---------|
+| `.env` | API keys (gitignored) |
+| `app.json` | Expo config; `softwareKeyboardLayoutMode: resize` (Android) |
+| `eas.json` | Build profiles |
+| `metro.config.js` | WASM support cho SQLite web |
 
 ---
 

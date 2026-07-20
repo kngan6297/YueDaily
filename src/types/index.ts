@@ -5,11 +5,22 @@
 /** Trạng thái giao dịch */
 export type TransactionStatus = 'complete' | 'pending';
 
+export const TRANSACTION_STATUS_COMPLETE: TransactionStatus = 'complete';
+export const TRANSACTION_STATUS_PENDING: TransactionStatus = 'pending';
+
 /** Loại giao dịch */
 export type TransactionType = 'thu' | 'chi';
 
-/** Người chi tiêu */
-export type Payer = 'Vợ' | 'Chồng';
+/** Người chi tiêu — tên lưu trong giao dịch, danh sách quản lý ở bảng payers */
+export type Payer = string;
+
+/** Bản ghi người trả trong cài đặt */
+export interface PayerRecord {
+  id: number;
+  name: string;
+  icon: string;
+  color: string;
+}
 
 /** Cấu trúc bảng giao dịch */
 export interface Transaction {
@@ -52,6 +63,8 @@ export interface Streak {
 export interface GeminiAnalysisResult {
   is_receipt?: boolean;
   amount?: number;
+  /** Một câu ngắn dạng "[Hành động] tại [Tên quán]" */
+  description?: string;
   location?: string;
   category?: string;
   note?: string;
@@ -68,6 +81,8 @@ export interface TransactionFormData {
   image_uri: string | null;
   location: string;
   note: string;
+  /** Ngày ghi sổ — YYYY-MM-DD (mặc định hôm nay) */
+  transaction_date: string;
 }
 
 /** Ảnh chờ xử lý trong Hộp Thư Chờ */

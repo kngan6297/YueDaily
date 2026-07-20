@@ -2,17 +2,20 @@
 // CÁC HÀM THAO TÁC VỚI BẢNG TRANSACTIONS
 // ============================================================
 
+import { buildCreatedAt } from '../utils/date';
 import { getDatabase } from './initDb';
-import type { Transaction, TransactionFormData, TransactionStatus } from '../types';
+import type { Transaction, TransactionFormData } from '../types';
+import { TRANSACTION_STATUS_COMPLETE, TRANSACTION_STATUS_PENDING } from '../types';
 
 /** Thêm giao dịch mới vào database */
 export async function insertTransaction(data: TransactionFormData): Promise<number> {
   const db = await getDatabase();
+  const createdAt = buildCreatedAt(data.transaction_date);
 
   const result = await db.runAsync(
     `INSERT INTO transactions
-      (amount, type, category_id, source_id, payer, image_uri, location, note, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'complete');`,
+      (amount, type, category_id, source_id, payer, image_uri, location, note, status, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, '${TRANSACTION_STATUS_COMPLETE}', ?);`,
     [
       parseInt(data.amount.replace(/\D/g, ''), 10) || 0,
       data.type,
@@ -22,6 +25,7 @@ export async function insertTransaction(data: TransactionFormData): Promise<numb
       data.image_uri,
       data.location,
       data.note,
+      createdAt,
     ]
   );
 
@@ -35,53 +39,11 @@ export async function insertPendingTransaction(imageUri: string): Promise<number
   const result = await db.runAsync(
     `INSERT INTO transactions
       (amount, type, payer, image_uri, status)
-     VALUES (0, 'chi', 'Vợ', ?, 'pending');`,
+     VALUES (0, 'chi', 'Vợ', ?, '${TRANSACTION_STATUS_PENDING}');`,
     [imageUri]
   );
 
   return result.lastInsertRowId;
-}
-
-/** Hoàn thành giao dịch đang chờ (cập nhật từ pending -> complete) */
-export async function completePendingTransaction(
-  id: number,
-  data: TransactionFormData
-): Promise<void> {
-  const db = await getDatabase();
-
-  await db.runAsync(
-    `UPDATE transactions
-     SET amount = ?, type = ?, category_id = ?, source_id = ?,
-         payer = ?, location = ?, note = ?, status = 'complete'
-     WHERE id = ?;`,
-    [
-      parseInt(data.amount.replace(/\D/g, ''), 10) || 0,
-      data.type,
-      data.category_id,
-      data.source_id,
-      data.payer,
-      data.location,
-      data.note,
-      id,
-    ]
-  );
-}
-
-/** Lấy danh sách giao dịch đang chờ xử lý */
-export async function getPendingTransactions(): Promise<Transaction[]> {
-  const db = await getDatabase();
-  return await db.getAllAsync<Transaction>(
-    `SELECT * FROM transactions WHERE status = 'pending' ORDER BY created_at DESC;`
-  );
-}
-
-/** Đếm số giao dịch đang chờ */
-export async function countPendingTransactions(): Promise<number> {
-  const db = await getDatabase();
-  const result = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM transactions WHERE status = 'pending';`
-  );
-  return result?.count ?? 0;
 }
 
 /** Lấy giao dịch theo tháng */
@@ -98,7 +60,7 @@ export async function getTransactionsByMonth(
      FROM transactions t
      LEFT JOIN categories c ON t.category_id = c.id
      LEFT JOIN sources s    ON t.source_id   = s.id
-     WHERE t.status = 'complete'
+     WHERE t.status = '${TRANSACTION_STATUS_COMPLETE}'
        AND strftime('%Y-%m', t.created_at) = ?
      ORDER BY t.created_at DESC;`,
     [monthStr]
@@ -122,10 +84,12 @@ export async function getTransactionById(id: number): Promise<Transaction | null
 /** Cập nhật giao dịch đã hoàn thành */
 export async function updateTransaction(id: number, data: TransactionFormData): Promise<void> {
   const db = await getDatabase();
+  const createdAt = buildCreatedAt(data.transaction_date);
+
   await db.runAsync(
     `UPDATE transactions
      SET amount = ?, type = ?, category_id = ?, source_id = ?,
-         payer = ?, location = ?, note = ?
+         payer = ?, location = ?, note = ?, created_at = ?
      WHERE id = ?;`,
     [
       parseInt(data.amount.replace(/\D/g, ''), 10) || 0,
@@ -135,6 +99,7 @@ export async function updateTransaction(id: number, data: TransactionFormData): 
       data.payer,
       data.location,
       data.note,
+      createdAt,
       id,
     ]
   );
@@ -152,7 +117,7 @@ export async function getTodaySummary(): Promise<{ chi: number; thu: number; cou
   const rows = await db.getAllAsync<{ type: string; total: number; cnt: number }>(
     `SELECT type, SUM(amount) as total, COUNT(*) as cnt
      FROM transactions
-     WHERE status = 'complete' AND date(created_at) = date('now', 'localtime')
+     WHERE status = '${TRANSACTION_STATUS_COMPLETE}' AND date(created_at) = date('now', 'localtime')
      GROUP BY type;`
   );
   let chi = 0, thu = 0, count = 0;
@@ -164,14 +129,20 @@ export async function getTodaySummary(): Promise<{ chi: number; thu: number; cou
   return { chi, thu, count };
 }
 
-/** Tổng thu/chi tháng hiện tại */
-export async function getMonthSummary(): Promise<{ chi: number; thu: number }> {
+/** Tổng thu/chi theo tháng (month 1-based: 1=Jan … 12=Dec). Mặc định: tháng hiện tại theo local time. */
+export async function getMonthSummary(
+  year?: number,
+  month?: number
+): Promise<{ chi: number; thu: number }> {
   const db = await getDatabase();
-  const monthStr = new Date().toISOString().slice(0, 7); // YYYY-MM
+  const now = new Date();
+  const y = year ?? now.getFullYear();
+  const m = month ?? now.getMonth() + 1; // 1-based, khớp getTransactionsByMonth
+  const monthStr = `${y}-${String(m).padStart(2, '0')}`;
   const rows = await db.getAllAsync<{ type: string; total: number }>(
     `SELECT type, SUM(amount) as total
      FROM transactions
-     WHERE status = 'complete' AND strftime('%Y-%m', created_at) = ?
+     WHERE status = '${TRANSACTION_STATUS_COMPLETE}' AND strftime('%Y-%m', created_at) = ?
      GROUP BY type;`,
     [monthStr]
   );
@@ -207,7 +178,7 @@ export async function getAccountSummary(
   const rows = await db.getAllAsync<{ type: string; total: number }>(
     `SELECT type, SUM(amount) as total
      FROM transactions
-     WHERE status = 'complete' ${clause}
+     WHERE status = '${TRANSACTION_STATUS_COMPLETE}' ${clause}
      GROUP BY type;`,
     params
   );
@@ -237,7 +208,7 @@ export async function getSourceBalances(period: Period = 'month'): Promise<
             SUM(t.amount) as total
      FROM transactions t
      LEFT JOIN sources s ON t.source_id = s.id
-     WHERE t.status = 'complete' ${clause}
+     WHERE t.status = '${TRANSACTION_STATUS_COMPLETE}' ${clause}
      GROUP BY t.source_id, t.type;`,
     params
   );
@@ -268,7 +239,7 @@ export async function getTransactionsByYear(year: number): Promise<Transaction[]
      FROM transactions t
      LEFT JOIN categories c ON t.category_id = c.id
      LEFT JOIN sources s    ON t.source_id   = s.id
-     WHERE t.status = 'complete'
+     WHERE t.status = '${TRANSACTION_STATUS_COMPLETE}'
        AND strftime('%Y', t.created_at) = ?
      ORDER BY t.created_at DESC;`,
     [String(year)]
@@ -284,7 +255,7 @@ export async function getAllTransactionsComplete(): Promise<Transaction[]> {
      FROM transactions t
      LEFT JOIN categories c ON t.category_id = c.id
      LEFT JOIN sources s    ON t.source_id   = s.id
-     WHERE t.status = 'complete'
+     WHERE t.status = '${TRANSACTION_STATUS_COMPLETE}'
      ORDER BY t.created_at DESC;`
   );
 }
@@ -296,7 +267,7 @@ export async function getRecentTransactions(limit = 20): Promise<Transaction[]> 
     `SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color
      FROM transactions t
      LEFT JOIN categories c ON t.category_id = c.id
-     WHERE t.status = 'complete'
+     WHERE t.status = '${TRANSACTION_STATUS_COMPLETE}'
      ORDER BY t.created_at DESC
      LIMIT ?;`,
     [limit]
