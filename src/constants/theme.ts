@@ -1,54 +1,69 @@
 // ============================================================
-// HỆ MÀU YOZAKURA — Sakura · Moonlight · Lavender · Cream
+// HỆ MÀU YOZAKURA — Moonlit Sakura
+// Cute magical girl × dreamy thanh lịch
+// Baby blue · Sakura pink · Celestial lavender · Soft cream · Platinum
+// Light / Dark token sets — cùng semantic keys
 // ============================================================
-//
-//  Bộ tứ màu gốc của thiết kế:
-//  🌸 Sakura Pink      #FFD1DC / #FFB7C5  — nút bấm chính, viền ảnh
-//  🌙 Moonlight Yellow #FFF4D0 / #FEF1B7  — streak, icon nổi bật, thu nhập
-//  💜 Dreamy Lavender  #E8DFF5            — nền thẻ (cards)
-//  🤍 Soft Cream       #FFFBFB            — nền app chính
 
-export const Colors = {
+export type AppearanceMode = 'system' | 'light' | 'dark';
+export type ResolvedColorScheme = 'light' | 'dark';
 
+const lightColors = {
   // ── 🌸 Sakura Pink ──────────────────────────────────────────
-  // Nút bấm chính, viền ảnh Locket, chip chi tiêu
   pink: {
-    50:  '#FFF5F7',  // Sakura trắng — nền hover rất nhạt
-    100: '#FFE8EE',  // Sakura phấn — nền chip nhạt
-    200: '#FFD1DC',  // Sakura nhạt ✨ (spec)
-    300: '#FFC4D0',  // Sakura vừa — viền, icon
-    400: '#FFB7C5',  // Sakura chủ đạo ✨ (spec) — nút bấm chính
-    500: '#FF8FA8',  // Sakura đậm — pressed state
-    600: '#E0607A',  // Sakura sâu — text trên nền trắng
+    50:  '#FFF6F9',
+    100: '#FFEAF1',
+    200: '#FFD5E2',
+    300: '#FFC0D2',
+    400: '#FFA6C1',
+    500: '#F484A8',
+    600: '#D9638B',
   },
 
   // ── 🌙 Moonlight Yellow ─────────────────────────────────────
-  // Streak badge, thu nhập highlight, icon nổi bật
   yellow: {
-    50:  '#FEFFF5',  // Trăng trắng — nền hover rất nhạt
-    100: '#FFF4D0',  // Moonlight nhạt ✨ (spec) — nền badge streak
-    200: '#FEF1B7',  // Moonlight vừa ✨ (spec) — highlight thu nhập
-    300: '#F9DC6A',  // Vàng vừa — icon streak, accent
-    400: '#F0C020',  // Vàng đậm — text trên nền sáng
+    50:  '#FEFFF5',
+    100: '#FFF4D0',
+    200: '#FEF1B7',
+    300: '#F9DC6A',
+    400: '#F0C020',
   },
 
-  // ── 💜 Dreamy Lavender ──────────────────────────────────────
-  // Nền thẻ (Cards), ví chồng, danh mục mua sắm
+  // ── 💜 Celestial Lavender ───────────────────────────────────
   lavender: {
-    50:  '#F7F4FF',  // Tím trắng — nền rất nhạt
-    100: '#EDE5F8',  // Tím siêu nhạt — hover chip
-    200: '#E8DFF5',  // Dreamy Lavender ✨ (spec) — nền thẻ
-    300: '#C5B0E8',  // Lavender vừa — viền, icon
-    400: '#9B7FD0',  // Lavender đậm — text accent, today marker
+    50:  '#F8F6FF',
+    100: '#EEE9FF',
+    200: '#E1DAFA',
+    300: '#C8BCF2',
+    400: '#AAA0E2',
+    500: '#8980CA',
   },
 
-  // ── 🌿 Mint (giữ lại cho trạng thái thu nhập / thành công) ──
+  // ── 🌙 Moonlight Blue ───────────────────────────────────────
+  blue: {
+    50:  '#F5FAFF',
+    100: '#EAF4FF',
+    200: '#D9ECFF',
+    300: '#BFDEFF',
+    400: '#9CCBFF',
+    500: '#78B5F2',
+    600: '#548ED1',
+  },
+
+  // ── ✨ Platinum / White Gold ────────────────────────────────
+  metallic: {
+    platinum:  '#E8ECF3',
+    whiteGold: '#D8DCE5',
+    roseGold:  '#DDA8AF',
+  },
+
+  // ── 🌿 Mint (thành công / accent) ───────────────────────────
   mint: {
     50:  '#F0FBF8',
     100: '#D4F4EC',
     200: '#A8E6D3',
     300: '#7DD4B8',
-    400: '#4BBFA0',  // Xanh mint chủ đạo — số tiền thu nhập
+    400: '#4BBFA0',
   },
 
   // ── 🍑 Peach (accent danh mục) ──────────────────────────────
@@ -58,57 +73,261 @@ export const Colors = {
     300: '#FFAA75',
   },
 
-  // ── ⚪ Neutral (trung tính — warm undertone rất nhẹ) ─────────
+  // ── ⚪ Neutral — soft blue-lavender grey ────────────────────
   neutral: {
-    0:   '#FFFFFF',  // Trắng tinh — surface input, modal sheet
-    50:  '#FFFBFB',  // Soft Cream ✨ (spec) — nền app chính
-    100: '#F4EFF6',  // Nền chip / tag / row separator bg
-    200: '#E6DEEC',  // Viền nhạt — border card
-    300: '#CCBFD8',  // Viền vừa — divider, disabled border
-    400: '#9E8EAE',  // Text phụ nhạt — placeholder, meta
-    500: '#7A6490',  // Text phụ — caption, subtitle
-    600: '#584470',  // Text vừa — label, secondary text
-    700: '#3A2855',  // Text đậm — heading, primary text
-    800: '#201540',  // Text rất đậm — title lớn
+    0:   '#FFFFFF',
+    50:  '#FAFBFD',
+    100: '#F0F1F6',
+    200: '#DFE2EB',
+    300: '#C5CAD8',
+    400: '#929BAF',
+    500: '#6E7890',
+    600: '#4F5870',
+    700: '#30384F',
+    800: '#192036',
   },
 
-  // ── Màu ngữ nghĩa ────────────────────────────────────────────
-  success: '#4BBFA0',   // Mint — thu nhập, hoàn thành
-  danger:  '#FF8FA8',   // Sakura đậm — chi tiêu (không dùng đỏ)
-  warning: '#F9DC6A',   // Moonlight vừa — cảnh báo, chú ý
-  info:    '#82C0FF',   // Xanh dương pastel — thông tin
+  success: '#4BBFA0',
+  danger:  '#F484A8',
+  warning: '#F9DC6A',
+  info:    '#78B5F2',
 
-  // ── Màu nền ──────────────────────────────────────────────────
   background: {
-    primary:  '#FFFBFB',  // Soft Cream — nền app ✨ (spec)
-    card:     '#E8DFF5',  // Dreamy Lavender — nền thẻ ✨ (spec)
-    surface:  '#FFFFFF',  // Trắng tinh — input, modal sheet, bottom sheet
-    modal:    '#FFFFFF',
-    overlay:  'rgba(58, 40, 85, 0.45)',
+    primary:  '#F4F5FA',
+    card:     '#F0F1F7',
+    surface:  '#FAFBFD',
+    modal:    '#FCFCFF',
+    overlay:  'rgba(25, 31, 52, 0.48)',
   },
 
-  // ── Camera ───────────────────────────────────────────────────
   camera: {
     overlay:            'rgba(0, 0, 0, 0.12)',
-    captureButton:      '#FFB7C5',
+    captureButton:      '#FFA6C1',
     captureButtonInner: '#FFFFFF',
-    captureRing:        'rgba(255, 183, 197, 0.45)',
+    captureRing:        'rgba(156, 203, 255, 0.45)',
   },
 
+  // ── Action — Moonlight Blue interaction ─────────────────────
+  action: {
+    primaryBackground: '#78B5F2',
+    primaryPressed:    '#548ED1',
+    primaryText:       '#FFFFFF',
+
+    secondaryBackground: '#EAF4FF',
+    secondaryPressed:    '#D9ECFF',
+    secondaryText:       '#4F6F9E',
+    secondaryBorder:     '#BFDEFF',
+
+    selectedBackground: '#D9ECFF',
+    selectedBorder:     '#9CCBFF',
+    selectedText:       '#426FAD',
+
+    destructiveBackground: '#FFF0F4',
+    destructivePressed:    '#FFD5E2',
+    destructiveText:       '#C85A7E',
+
+    fabBackground: '#78B5F2',
+    fabPressed:    '#548ED1',
+    fabIcon:       '#FFFFFF',
+  },
 } as const;
 
-// ── Màu danh mục mặc định (đồng bộ với palette mới) ─────────
+const darkColors = {
+  pink: {
+    50:  '#241922',
+    100: '#3D2633',
+    200: '#623548',
+    300: '#A85E7B',
+    400: '#EE93B4',
+    500: '#FFB3CB',
+    600: '#FFD0DD',
+  },
+
+  yellow: {
+    50:  '#1F1C12',
+    100: '#3A3418',
+    200: '#5C5220',
+    300: '#E8CF72',
+    400: '#F0C020',
+  },
+
+  lavender: {
+    50:  '#191724',
+    100: '#29253F',
+    200: '#3B345A',
+    300: '#71689C',
+    400: '#AAA0E2',
+    500: '#CAC2F2',
+  },
+
+  blue: {
+    50:  '#151F30',
+    100: '#1D304A',
+    200: '#29496E',
+    300: '#527EAE',
+    400: '#87B8EE',
+    500: '#A9CEFA',
+    600: '#C4DEFC',
+  },
+
+  metallic: {
+    platinum:  '#758096',
+    whiteGold: '#ADB6C8',
+    roseGold:  '#CE929D',
+  },
+
+  mint: {
+    50:  '#12201C',
+    100: '#1A332C',
+    200: '#2A5246',
+    300: '#4A9E88',
+    400: '#72D5BA',
+  },
+
+  peach: {
+    100: '#3A2820',
+    200: '#6B4A38',
+    300: '#E8A078',
+  },
+
+  neutral: {
+    0:   '#FFFFFF',
+    50:  '#151A28',
+    100: '#252D40',
+    200: '#303A50',
+    300: '#46516A',
+    400: '#8490AA',
+    500: '#AAB4CA',
+    600: '#CBD3E3',
+    700: '#E8ECF5',
+    800: '#F8FAFF',
+  },
+
+  success: '#72D5BA',
+  danger:  '#EE93B4',
+  warning: '#E8CF72',
+  info:    '#87B8EE',
+
+  background: {
+    primary:  '#101421',
+    card:     '#181E2D',
+    surface:  '#1E2536',
+    modal:    '#20283A',
+    overlay:  'rgba(3, 6, 16, 0.72)',
+  },
+
+  camera: {
+    overlay:            'rgba(0, 0, 0, 0.28)',
+    captureButton:      '#D77F9D',
+    captureButtonInner: '#FFFFFF',
+    captureRing:        'rgba(135, 184, 238, 0.38)',
+  },
+
+  // ── Action — Moonlight Blue interaction (muted, no neon) ────
+  action: {
+    primaryBackground: '#527EAE',
+    primaryPressed:    '#3E668F',
+    primaryText:       '#F8FAFF',
+
+    secondaryBackground: '#1D304A',
+    secondaryPressed:    '#29496E',
+    secondaryText:       '#A9CEFA',
+    secondaryBorder:     '#3F6288',
+
+    selectedBackground: '#29496E',
+    selectedBorder:     '#527EAE',
+    selectedText:       '#C4DEFC',
+
+    destructiveBackground: '#4A2937',
+    destructivePressed:    '#623548',
+    destructiveText:       '#FFB3CB',
+
+    fabBackground: '#527EAE',
+    fabPressed:    '#3E668F',
+    fabIcon:       '#F8FAFF',
+  },
+} as const;
+
+export type ThemeColors = typeof lightColors | typeof darkColors;
+
+export const lightShadows = {
+  soft: {
+    shadowColor: '#BFDEFF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  medium: {
+    shadowColor: '#C8BCF2',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  strong: {
+    shadowColor: '#32284A',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+    elevation: 8,
+  },
+} as const;
+
+export const darkShadows = {
+  soft: {
+    shadowColor: '#0A0E18',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.28,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  medium: {
+    shadowColor: '#080B14',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.32,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  strong: {
+    shadowColor: '#05070E',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.36,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+} as const;
+
+export type ThemeShadows = typeof lightShadows | typeof darkShadows;
+
+export const palettes = {
+  light: lightColors,
+  dark: darkColors,
+} as const;
+
+export const shadowPalettes = {
+  light: lightShadows,
+  dark: darkShadows,
+} as const;
+
+/** @deprecated Dùng useAppTheme().colors — giữ alias light cho bootstrap sớm */
+export const Colors = lightColors;
+
+/** @deprecated Dùng useAppTheme().shadows */
+export const Shadows = lightShadows;
+
+// ── Màu danh mục (cân bằng blue · pink · lavender · mint · peach · yellow) ─
 export const CategoryColors = [
-  '#FFB7C5',  // Sakura — Ăn uống
-  '#82C0FF',  // Sky    — Di chuyển
-  '#C5B0E8',  // Lavender — Mua sắm
-  '#4BBFA0',  // Mint   — Sức khoẻ
-  '#FEF1B7',  // Moonlight — Giải trí  (nên dùng icon đậm màu)
-  '#FFAA75',  // Peach  — Giáo dục
-  '#A8E6D3',  // Mint nhạt — Gia đình
-  '#FFD1DC',  // Sakura nhạt — Làm đẹp
-  '#EDE5F8',  // Lavender nhạt — Thú cưng
-  '#E6DEEC',  // Neutral — Khác
+  '#FFA6C1',  // Sakura — Ăn uống
+  '#9CCBFF',  // Moonlight Blue — Di chuyển
+  '#C8BCF2',  // Celestial Lavender — Mua sắm
+  '#4BBFA0',  // Mint — Sức khoẻ
+  '#F9DC6A',  // Moonlight Yellow — Giải trí
+  '#FFAA75',  // Peach — Giáo dục
+  '#78B5F2',  // Blue mid — Gia đình
+  '#FFC0D2',  // Sakura soft — Làm đẹp
+  '#AAA0E2',  // Lavender mid — Thú cưng
+  '#D8DCE5',  // Platinum — Khác
 ] as const;
 
 // ── Typography ───────────────────────────────────────────────
@@ -124,7 +343,7 @@ export const Typography = {
     base: 15,
     md:   17,
     lg:   20,
-    xl:   24,
+    xl:  24,
     '2xl': 28,
     '3xl': 34,
     '4xl': 42,
@@ -161,30 +380,4 @@ export const BorderRadius = {
   full: 9999,
 } as const;
 
-// ── Shadows (tông màu đồng bộ palette mới) ───────────────────
-export const Shadows = {
-  // Đổ bóng nhẹ — card thông thường
-  soft: {
-    shadowColor: '#C5B0E8',      // Lavender shadow
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.10,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  // Đổ bóng vừa — nút bấm, modal trigger
-  medium: {
-    shadowColor: '#FFB7C5',      // Sakura shadow
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.14,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  // Đổ bóng mạnh — floating button, bottom sheet
-  strong: {
-    shadowColor: '#3A2855',      // Deep purple shadow
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 10,
-  },
-} as const;
+export const APPEARANCE_STORAGE_KEY = 'yuedaily_appearance_mode';

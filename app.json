@@ -2,19 +2,16 @@
   "expo": {
     "name": "YueDaily",
     "slug": "Yozakura",
-    "version": "1.0.0",
+    "platforms": ["android"],
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "scheme": "yuedaily",
-    "ios": {
-      "supportsTablet": false
-    },
+
     "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#FDEDF4",
-        "foregroundImage": "./assets/android-icon-foreground.png"
-      },
+      "icon": "./assets/icon.png",
+      "versionCode": 2,
       "predictiveBackGestureEnabled": false,
       "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "resize",
@@ -32,10 +29,7 @@
       ],
       "package": "com.kngan6297.Yozakura"
     },
-    "web": {
-      "favicon": "./assets/favicon.png",
-      "bundler": "metro"
-    },
+
     "plugins": [
       [
         "expo-router",
@@ -69,14 +63,15 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#FDEDF4",
-          "image": "./assets/splash-icon.png",
+          "backgroundColor": "#0B1F68",
+          "image": "./assets/icon.png",
           "imageWidth": 200,
           "resizeMode": "contain"
         }
       ],
       "@react-native-community/datetimepicker"
     ],
+
     "extra": {
       "router": {
         "headers": {
@@ -88,6 +83,7 @@
         "projectId": "ab0bb11f-354f-4cac-a8e2-617d5f98a3b9"
       }
     },
+
     "owner": "kn.yue97"
   }
 }

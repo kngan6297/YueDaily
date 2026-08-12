@@ -1,4 +1,4 @@
-import React, { useEffect, useId } from 'react';
+import React, { useEffect, useId, useMemo } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -9,7 +9,8 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { BorderRadius, Colors } from '../../constants/theme';
+import { BorderRadius, ThemeColors } from '../../constants/theme';
+import { useAppTheme } from '../../context/ThemeContext';
 import { useModalBottomInset } from '../../hooks/useModalBottomInset';
 import { useBottomSheetPortal } from './BottomSheetPortal';
 
@@ -31,6 +32,8 @@ function BottomSheetModalContent({
   keyboardAvoiding = false,
 }: Omit<BottomSheetModalProps, 'visible'>) {
   const bottomInset = useModalBottomInset();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const sheet = (
     <View style={[styles.sheet, { paddingBottom: bottomInset }, sheetStyle]}>
@@ -111,20 +114,22 @@ export function BottomSheetModal({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  sheet: {
-    backgroundColor: Colors.background.surface,
-    borderTopLeftRadius: BorderRadius['2xl'],
-    borderTopRightRadius: BorderRadius['2xl'],
-    paddingTop: 12,
-    maxHeight: '70%',
-  },
-});
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      justifyContent: 'flex-end',
+    },
+    backdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: colors.background.overlay,
+    },
+    sheet: {
+      backgroundColor: colors.background.modal,
+      borderTopLeftRadius: BorderRadius['2xl'],
+      borderTopRightRadius: BorderRadius['2xl'],
+      paddingTop: 12,
+      maxHeight: '70%',
+    },
+  });
+}

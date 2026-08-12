@@ -2,9 +2,10 @@
 // BÀN PHÍM SỐ CUSTOM PASTEL ĐỂ NHẬP SỐ TIỀN
 // ============================================================
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { BorderRadius, Colors, Spacing, Typography } from '../../constants/theme';
+import { BorderRadius, Spacing, ThemeColors, Typography } from '../../constants/theme';
+import { useAppTheme } from '../../context/ThemeContext';
 
 interface AmountKeyboardProps {
   value: string;
@@ -27,20 +28,20 @@ export function formatAmount(raw: string): string {
 }
 
 export function AmountKeyboard({ value, onChange }: AmountKeyboardProps) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const handleKey = (key: string) => {
     const raw = value.replace(/\D/g, '');
 
     if (key === '⌫') {
-      // Xoá 1 ký tự cuối
       onChange(raw.slice(0, -1));
       return;
     }
 
-    // Giới hạn tối đa 12 chữ số (999 tỷ VNĐ)
     const next = raw + key;
     if (next.length > 12) return;
 
-    // Bỏ số 0 đứng đầu
     const cleaned = next.replace(/^0+/, '') || '0';
     onChange(cleaned === '0' ? '' : cleaned);
   };
@@ -56,7 +57,7 @@ export function AmountKeyboard({ value, onChange }: AmountKeyboardProps) {
               style={({ pressed }) => [
                 styles.key,
                 key === '⌫' && styles.keyDelete,
-                pressed && styles.keyPressed,
+                pressed && (key === '⌫' ? styles.keyDeletePressed : styles.keyPressed),
               ]}
             >
               <Text style={[styles.keyText, key === '⌫' && styles.keyDeleteText]}>
@@ -70,39 +71,45 @@ export function AmountKeyboard({ value, onChange }: AmountKeyboardProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    gap: Spacing.xs,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: Spacing.xs,
-  },
-  key: {
-    flex: 1,
-    height: 52,
-    backgroundColor: Colors.pink[50],
-    borderRadius: BorderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: Colors.pink[100],
-  },
-  keyDelete: {
-    backgroundColor: Colors.lavender[50],
-    borderColor: Colors.lavender[100],
-  },
-  keyPressed: {
-    backgroundColor: Colors.pink[200],
-    transform: [{ scale: 0.95 }],
-  },
-  keyText: {
-    fontSize: Typography.fontSize.lg,
-    fontWeight: '600',
-    color: Colors.neutral[700],
-  },
-  keyDeleteText: {
-    color: Colors.lavender[400],
-    fontSize: Typography.fontSize.xl,
-  },
-});
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    container: {
+      gap: Spacing.xs,
+    },
+    row: {
+      flexDirection: 'row',
+      gap: Spacing.xs,
+    },
+    key: {
+      flex: 1,
+      height: 52,
+      backgroundColor: colors.action.secondaryBackground,
+      borderRadius: BorderRadius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1.5,
+      borderColor: colors.action.secondaryBorder,
+    },
+    keyDelete: {
+      backgroundColor: colors.action.secondaryBackground,
+      borderColor: colors.action.secondaryBorder,
+    },
+    keyPressed: {
+      backgroundColor: colors.action.secondaryPressed,
+      transform: [{ scale: 0.95 }],
+    },
+    keyDeletePressed: {
+      backgroundColor: colors.action.secondaryPressed,
+      transform: [{ scale: 0.95 }],
+    },
+    keyText: {
+      fontSize: Typography.fontSize.lg,
+      fontWeight: '600',
+      color: colors.action.secondaryText,
+    },
+    keyDeleteText: {
+      color: colors.action.secondaryText,
+      fontSize: Typography.fontSize.xl,
+    },
+  });
+}

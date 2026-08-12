@@ -1,7 +1,7 @@
 # YueDaily — Đặc tả sản phẩm (PRD)
 
 > **Loại tài liệu:** Product Requirements Document  
-> **Phiên bản:** 1.2.0 · **Cập nhật:** 2026-07-08  
+> **Phiên bản:** 1.4.1 · **Cập nhật:** 2026-08-12  
 > **Trạng thái:** Đang phát triển (Expo SDK 54, React Native 0.81, React 19)
 
 **Đọc tài liệu này khi cần biết app *là gì*, *cho ai*, *làm gì* và *làm như thế nào ở mức sản phẩm*.**  
@@ -11,12 +11,12 @@ Chi tiết kỹ thuật (cài đặt, build, schema DB, kiến trúc code) → [
 
 ## 1. Tóm tắt
 
-**YueDaily** (tên repo / DB: **Yozakura**) là app quản lý thu chi gia đình cho người Việt, ưu tiên:
+**YueDaily** (tên repo / DB: **Yozakura**) là app theo dõi chi tiêu gia đình cho người Việt, ưu tiên:
 
 - **Local-first:** dữ liệu lưu 100% trên thiết bị bằng SQLite, không cần tài khoản, không server app.
 - **Nhập nhanh:** chụp hoá đơn → AI quét → gợi ý số tiền, danh mục, mô tả → chỉnh lại nhanh rồi lưu.
-- **Theo người trả:** mọi giao dịch gắn với *người trả* (Vợ, Chồng, …) để xem chi tiêu theo người.
-- **Minh bạch:** lịch tháng, báo cáo danh mục, số dư theo nguồn tiền, dễ kiểm tra lại.
+- **Theo người trả & chi cho ai:** mọi giao dịch gắn *người trả* và *đối tượng hưởng* (`expense_audience`: Vợ, Chồng, 2 vợ chồng, …) để xem chi tiêu theo cả hai chiều.
+- **Minh bạch:** lịch tháng, báo cáo danh mục, chi theo nguồn tiền, dễ kiểm tra lại.
 
 Tag: cá nhân/ gia đình · offline‑friendly · privacy‑first.
 
@@ -28,9 +28,9 @@ Tag: cá nhân/ gia đình · offline‑friendly · privacy‑first.
 |-------------------|------------------------------------------------------------|
 | Ghi nhanh         | ≤ 30 giây từ chụp ảnh đến lưu (khi AI hoạt động bình thường) |
 | Duy trì thói quen | Streak ngày liên tiếp hiển thị rõ ràng, dễ “giữ streak”   |
-| Phân bổ gia đình  | Lọc theo *người trả* trên Trang chủ + Thống kê            |
+| Phân bổ gia đình  | Lọc theo *người trả* và *chi cho ai* trên Trang chủ / Thống kê |
 | Riêng tư          | 100% dữ liệu on-device; AI chỉ dùng khi quét ảnh          |
-| An toàn dữ liệu   | Backup/restore JSON đầy đủ, không mất dữ liệu nghiệp vụ   |
+| An toàn dữ liệu   | Backup/restore JSON đầy đủ, không mất dữ liệu nghiệp vụ (kể cả `expense_audience`) |
 
 ---
 
@@ -38,7 +38,7 @@ Tag: cá nhân/ gia đình · offline‑friendly · privacy‑first.
 
 ### 3.1 Vợ chồng / hộ gia đình nhỏ (chính)
 
-- Cùng chi tiêu, muốn biết *tháng này ai trả nhiều hơn*, chi cho những nhóm gì.
+- Cùng chi tiêu, muốn biết *tháng này ai trả nhiều hơn*, *chi cho ai* (vợ, chồng, cả nhà, …), chi cho những nhóm gì.
 - Ít thời gian, không muốn học app phức tạp.
 - UI tiếng Việt, emoji và màu pastel dễ chịu.
 
@@ -66,11 +66,11 @@ Tag: cá nhân/ gia đình · offline‑friendly · privacy‑first.
 
 | Module        | Hành vi người dùng                                                                 |
 |---------------|-------------------------------------------------------------------------------------|
-| **Trang chủ** | Lịch tháng, lọc *người trả*, xem tổng Thu/Chi tháng, xem/sửa/xoá/thêm giao dịch    |
+| **Trang chủ** | Lịch tháng, lọc *người trả*, xem tổng chi tháng, xem/sửa/xoá/thêm giao dịch; bottom sheet ngày có summary tổng chi + số giao dịch; giao dịch hiện nhãn *Chi cho: …* |
 | **Camera**    | Chụp ảnh hoá đơn (native) hoặc chọn file (web); có thể bỏ qua để nhập tay          |
-| **Form thu/chi** | Nhập số tiền, loại Thu/Chi, danh mục, người trả, nguồn tiền, ngày, mô tả; quét AI |
-| **Thống kê**  | Donut theo danh mục, danh sách giao dịch; lọc theo khoảng thời gian & người trả   |
-| **Tài khoản** | Xem số dư tổng và theo từng nguồn tiền (Tiền mặt, Chuyển khoản, …)                 |
+| **Form giao dịch** | Nhập số tiền, danh mục, người trả, *chi cho ai*, nguồn tiền, ngày, mô tả; quét AI |
+| **Thống kê**  | Donut theo danh mục, biểu đồ chi theo ngày (kỳ tháng), danh sách giao dịch; kỳ: ngày / tháng / khoảng tùy chỉnh; lọc người trả & *chi cho*; tìm kiếm giao dịch; tổng chi theo đối tượng |
+| **Tài khoản** | Báo cáo chi theo từng nguồn tiền (Tiền mặt, Chuyển khoản, …); không hiển thị số dư |
 | **Cài đặt**   | CRUD người trả, nguồn tiền, danh mục; xem thông tin app; backup/restore JSON       |
 | **Streak**    | Tính chuỗi ngày có ≥1 giao dịch *complete* (kể cả giao dịch nhập bù ngày cũ)       |
 
@@ -80,7 +80,13 @@ Tag: cá nhân/ gia đình · offline‑friendly · privacy‑first.
 - Ngân sách / cảnh báo vượt hạn mức.
 - Đa tiền tệ.
 - OCR offline (không cần mạng).
-- UI hộp thư giao dịch `pending` (DB đã hỗ trợ, chưa có màn hình riêng).
+- UI / flow hộp thư giao dịch `pending` (cột `status` giữ cho backup cũ; không có producer UI).
+- UI nhập / quản lý API key AI trong Cài đặt (key cấu hình qua `.env` / build env).
+- Ghi lại giao dịch tương tự (repeat transaction).
+- Export CSV.
+- Thu nhập / income, cash-flow, opening balance, chuyển khoản nội bộ giữa tài khoản.
+- Chia một giao dịch cho nhiều người / chia tiền theo đầu người.
+- Bảng beneficiary riêng, quản lý shop / lương / vốn.
 
 ---
 
@@ -93,7 +99,7 @@ Tab bar:  Trang chủ · Thống kê · [+] Camera · Tài khoản · Cài đặ
 
 Stack:
   /camera        — chụp / chọn ảnh
-  /form          — form thu/chi (tạo mới hoặc chỉnh sửa)
+  /form          — form giao dịch chi tiêu (tạo mới hoặc chỉnh sửa)
   /(tabs)/*      — các màn hình trong tab bar
 ```
 
@@ -105,28 +111,45 @@ Stack:
 
 ### 5.2 Trang chủ
 
-- Lời chào theo giờ + badge streak + card tổng Thu/Chi tháng hiện tại.
+- Lời chào theo giờ + badge streak + card tổng chi tháng hiện tại.
 - Filter người trả:
   - `Tất cả` + danh sách người trả từ bảng `payers`.
 - Lịch tháng:
   - Ô ngày hiển thị: emoji danh mục chính, thumbnail ảnh (nếu có), badge số giao dịch.
 - Chạm vào một ngày:
   - Mở bottom sheet:
+    - **Summary ngày** (phía trên danh sách, tuân theo filter *người trả* hiện tại):
+      - Ngày được chọn.
+      - Tổng chi trong ngày.
+      - Số giao dịch.
     - Danh sách giao dịch của ngày (scrollable).
+    - Giao dịch hiển thị nhãn ngắn `Chi cho: …` (không đổi layout lớn).
     - Hành động: Sửa, Xoá, Thêm giao dịch mới (ngày mặc định là ngày đang chọn).
 
-### 5.3 Form thu/chi
+### 5.3 Form giao dịch
 
 - Header:
   - Ảnh mờ nền (nếu form xuất phát từ ảnh).
-  - Toggle Thu/Chi (ảnh hưởng màu header).
   - Số tiền hiển thị lớn, dễ bấm.
+- Layout field (mỗi field có label nhỏ phía trên, không dùng placeholder làm label):
+
+  | Hàng | Layout | Trường |
+  |------|--------|--------|
+  | 1 | Hai cột | Danh mục · Ai trả |
+  | 2 | Full width | Chi cho ai |
+  | 3 | Hai cột | Nguồn tiền · Ngày giao dịch |
+
 - Các trường:
   - Số tiền (VNĐ, integer, định dạng `vi-VN`).
-  - Loại: `chi` \| `thu`.
-  - Danh mục (dropdown, lọc theo loại).
-  - Người trả.
-  - Nguồn tiền.
+  - Danh mục (dropdown, chỉ danh mục chi tiêu).
+  - Người trả (dropdown).
+  - **Chi cho ai** (dropdown, luôn hiển thị) — giá trị lưu `expense_audience`:
+    - `wife` — Vợ
+    - `husband` — Chồng
+    - `couple` — 2 vợ chồng *(mặc định khi tạo mới)*
+    - `couple_and_sister` — 2 vợ chồng + em gái
+    - `unspecified` — Chưa phân loại *(giao dịch cũ sau migration; hiện khi sửa, không hiện khi tạo mới)*
+  - Nguồn tiền (dropdown) — phương thức/nguồn dùng để thanh toán, không dùng để tính số dư thực tế.
   - Ngày giao dịch.
   - Mô tả (TextInput, có thể gõ dài).
 - Bàn phím số:
@@ -153,20 +176,32 @@ Stack:
 ### 5.5 Thống kê
 
 - Chọn kỳ:
-  - Theo tháng (mặc định tháng hiện tại).
-  - Có thể mở rộng: năm / tất cả (tuỳ lộ trình).
-- Bộ lọc:
+  - **Ngày** — xem báo cáo một ngày cụ thể.
+  - **Tháng** — mặc định tháng hiện tại.
+  - **Khoảng thời gian tùy chỉnh** — chọn `fromDate → toDate`; không cho chọn ngày tương lai.
+- Bộ lọc (kết hợp với kỳ đã chọn):
   - Người trả (Tất cả hoặc từng người).
-- Nội dung:
-  - Donut chart theo danh mục Chi (có thể hiển thị Thu sau).
-  - Danh sách top danh mục / top giao dịch (limit ~50).
-  - Tổng Thu, tổng Chi và chênh lệch.
+  - **Chi cho** (Tất cả, 4 nhóm + Chưa phân loại).
+- Tìm kiếm giao dịch (kết hợp với kỳ và filter hiện tại):
+  - Theo mô tả, số tiền, danh mục, người trả.
+- Nội dung chung (tuân theo kỳ và filter):
+  - Donut chart theo danh mục chi tiêu.
+  - Danh sách top danh mục / danh sách giao dịch (limit ~50); giao dịch kèm nhãn `Chi cho: …`.
+  - **Tổng chi theo từng `expense_audience`** (không chia tiền theo đầu người).
+- **Khi xem theo Ngày**, hiển thị thêm:
+  - Tổng chi, số giao dịch, trung bình / giao dịch.
+  - Chi theo danh mục, chi theo người trả, chi theo `expense_audience`.
+  - Danh sách giao dịch trong ngày.
+- **Khi xem theo Tháng**, hiển thị thêm:
+  - Biểu đồ chi tiêu theo ngày — mỗi ngày thể hiện tổng chi trong ngày.
+  - Insight: trung bình chi / ngày, ngày chi cao nhất trong kỳ.
+- **Khi xem theo Khoảng tùy chỉnh**: các summary, chart và filter áp dụng đúng range `fromDate → toDate`.
 
 ### 5.6 Tài khoản
 
-- Thông tin:
-  - Tổng số dư hiện tại (tính từ tất cả nguồn tiền).
-  - Bảng từng nguồn tiền: Tổng Thu, Tổng Chi, Số dư.
+- Màn hình báo cáo **chi theo nguồn tiền** (không hiển thị số dư tài khoản):
+  - Tổng chi (theo filter kỳ hiện tại, nếu có).
+  - Bảng từng nguồn tiền: tổng chi qua nguồn đó.
 - Hành vi:
   - Nút Thêm giao dịch từ đây cũng đi qua `/camera` hoặc `/form`.
 
@@ -178,8 +213,8 @@ Thứ tự section:
 2. **Thẻ tóm tắt** — Streak, Privacy, Phiên bản, Storage.
 3. **Người trả** — thêm/sửa/xoá (tên, emoji, màu).
 4. **Nguồn tiền** — thêm/sửa/xoá (ví, thẻ, chuyển khoản…).
-5. **Danh mục** — thêm/sửa/xoá, lọc theo Chi/Thu/Tất cả.
-6. **Sao lưu & Khôi phục** — export/import JSON.
+5. **Danh mục** — thêm/sửa/xoá danh mục chi tiêu.
+6. **Sao lưu & Khôi phục** — export/import JSON (giữ `expense_audience`).
 
 **Quy tắc xoá:**
 
@@ -203,8 +238,8 @@ Tab [+] hoặc Tài khoản [+ Thêm]
   → /camera
   → Chụp ảnh hoặc chọn từ thư viện
   → /form?imageUri=...&transactionDate=...
-  → AI quét: gợi ý amount + type + category + description
-  → Người dùng chỉnh lại (nếu cần), chọn người trả + nguồn tiền
+  → AI quét: gợi ý amount + category + description
+  → Người dùng chỉnh lại (nếu cần), chọn người trả + chi cho ai + nguồn tiền
   → Lưu → quay về Trang chủ (lịch)
 ```
 
@@ -213,7 +248,7 @@ Tab [+] hoặc Tài khoản [+ Thêm]
 ```text
 Trang chủ → chọn ngày → Thêm giao dịch
   → /form?transactionDate=YYYY-MM-DD (không imageUri)
-  → Nhập tay tất cả trường
+  → Nhập tay tất cả trường (chọn chi cho ai, mặc định 2 vợ chồng)
   → Lưu
 ```
 
@@ -222,6 +257,7 @@ Trang chủ → chọn ngày → Thêm giao dịch
 ```text
 Trang chủ → chọn ngày → bottom sheet danh sách
   → Sửa → /form?transactionId=...&isEdit=true
+     (giao dịch cũ chưa phân loại → hiện “Chưa phân loại”, cho chọn lại)
   → Xoá → hộp thoại xác nhận → cập nhật DB, reload list
 ```
 
@@ -239,11 +275,12 @@ Trang chủ → chọn một ngày trong quá khứ → Thêm giao dịch
 Cài đặt → Sao lưu & Khôi phục
 
 Backup:
-  → Xuất JSON đầy đủ (toàn bộ bảng liên quan)
+  → Xuất JSON đầy đủ (toàn bộ bảng liên quan, gồm expense_audience)
   → Share / lưu file tuỳ nền tảng (Files, Drive, v.v.)
 
 Restore:
   → Chọn JSON đã backup
+  → Backup cũ thiếu expense_audience → mặc định unspecified (không crash)
   → Xác nhận ghi đè toàn bộ DB hiện tại
   → Reload app / màn hình chính sau khi thành công
 ```
@@ -254,11 +291,25 @@ Restore:
 
 | Thực thể       | Vai trò                                                                 |
 |----------------|-------------------------------------------------------------------------|
-| **Giao dịch**  | Số tiền VNĐ, Thu/Chi, ngày, người trả (text), danh mục (FK), nguồn tiền (FK), mô tả, ảnh, trạng thái (`pending`/`complete`) |
-| **Danh mục**   | Phân loại Chi/Thu; emoji + màu; seed khoảng 17 danh mục mặc định       |
-| **Nguồn tiền** | Ví tiền mặt, tài khoản ngân hàng, ví điện tử…                          |
+| **Giao dịch**  | Số tiền VNĐ, ngày, người trả (text), **chi cho ai** (`expense_audience`), danh mục (FK), nguồn tiền (FK), mô tả, ảnh, trạng thái (`pending`/`complete`); app chỉ ghi nhận chi tiêu |
+| **Danh mục**   | Phân loại chi tiêu; emoji + màu; seed khoảng 17 danh mục mặc định       |
+| **Nguồn tiền** | Phương thức/nguồn thanh toán (tiền mặt, tài khoản ngân hàng, ví điện tử…); dùng để báo cáo chi, không tính số dư thực tế |
 | **Người trả**  | Vợ, Chồng, … (tùy chỉnh); lưu bằng text trong giao dịch                |
 | **Streak**     | Số ngày liên tiếp có giao dịch `complete`; tính từ bảng `transactions` |
+
+**`expense_audience`:**
+
+| Giá trị | Label UI |
+|---------|----------|
+| `wife` | Vợ |
+| `husband` | Chồng |
+| `couple` | 2 vợ chồng |
+| `couple_and_sister` | 2 vợ chồng + em gái |
+| `unspecified` | Chưa phân loại |
+
+- Giao dịch mới: mặc định `couple`.
+- Migration DB cũ: cột mới với mặc định `unspecified` cho bản ghi sẵn có (không tự gán `couple`).
+- Không chia một giao dịch cho nhiều đối tượng; không chia tiền theo đầu người.
 
 Chi tiết schema SQL xem ở `README.md` → *Data Model (SQLite)*.
 
@@ -270,13 +321,15 @@ Chi tiết schema SQL xem ở `README.md` → *Data Model (SQLite)*.
 |------------------|---------------------------------------------------------------------------------------|
 | Khi nào gọi      | Khi mở form với ảnh mới, hoặc khi người dùng nhấn “Quét lại”                         |
 | Đầu vào          | Ảnh hoá đơn hoặc ảnh món / sản phẩm (sau khi đã được nén resize + JPEG)              |
-| Hoá đơn          | AI cố gắng đọc số tiền, phân loại chi/thu, gợi ý danh mục và mô tả                   |
+| Hoá đơn          | AI cố gắng đọc số tiền, gợi ý danh mục và mô tả                   |
 | Ảnh món/SP       | AI không tự suy số tiền; amount mặc định 0, người dùng nhập tay                      |
 | Yêu cầu mạng     | Có; nếu mất mạng thì bỏ qua AI, người dùng nhập tay                                  |
-| API key          | Người dùng cấu hình Groq / Gemini qua .env hoặc màn Cài đặt (lưu vào AsyncStorage)   |
+| API key          | Cấu hình Groq / Gemini qua `.env` hoặc biến môi trường build (EAS); không có màn quản lý key cho người dùng |
 | Hành vi lỗi      | Nếu key sai / hết quota / timeout, hiển thị thông báo ngắn gọn, cho phép nhập tay    |
 
 Chain provider (chi tiết kỹ thuật ở `README.md`): Groq → Gemini Flash‑Lite → Gemini Flash, có cơ chế skip provider khi lỗi 4xx/5xx, timeout, payload quá lớn.
+
+> AI **không** gợi ý `expense_audience`; người dùng chọn trên form.
 
 ---
 
@@ -295,9 +348,9 @@ Chain provider (chi tiết kỹ thuật ở `README.md`): Groq → Gemini Flash�
 
 ## 10. Thiết kế & Brand
 
-- **Màu sắc:** pastel sakura (hồng) cho chi, mint cho thu, nền cream; hạn chế đỏ/xanh gắt.
+- **Màu sắc:** pastel sakura (hồng) cho chi tiêu, nền cream; hạn chế đỏ/xanh gắt.
 - **Tab bar:** icon emoji + nhãn text; nút `+` nổi giữa mở camera.
-- **Form:** header gradient đổi theo Thu/Chi; bàn phím số pastel 3×4.
+- **Form:** header gradient chi tiêu; bàn phím số pastel 3×4; label field màu lavender muted; dropdown đồng nhất chiều cao.
 - **Typography & layout:** thân thiện, dễ đọc, không overload thông tin.
 
 Token màu cụ thể được định nghĩa tại `src/constants/theme.ts`.
@@ -306,9 +359,12 @@ Token màu cụ thể được định nghĩa tại `src/constants/theme.ts`.
 
 ## 11. Ràng buộc & giả định
 
-- Một giao dịch = một số tiền nguyên (VNĐ).
+- Một giao dịch = một khoản chi tiêu, một số tiền nguyên (VNĐ).
+- Một giao dịch = đúng một giá trị `expense_audience` (không split).
 - Ngày giao dịch không được > ngày hiện tại (không ghi tương lai).
+- Kỳ báo cáo (ngày, tháng, khoảng tùy chỉnh) không cho chọn ngày tương lai.
 - Lịch / báo cáo tháng không vượt quá tháng hiện tại (ưu tiên tháng hiện tại trước).
+- Không có opening balance, chuyển khoản nội bộ, thu nhập hay cash-flow.
 - Thương hiệu:
   - UI hiển thị: **YueDaily**.
   - Tên DB / file backup: **yozakura** (ghép với tên repo Yozakura).
@@ -317,13 +373,24 @@ Token màu cụ thể được định nghĩa tại `src/constants/theme.ts`.
 
 ## 12. Lộ trình gợi ý
 
-| Ưu tiên | Hạng mục                                    |
-|---------|---------------------------------------------|
-| P1      | UI nhập API key trong Cài đặt (ẩn key, validate) |
-| P2      | Màn hình inbox cho giao dịch `pending`     |
-| P2      | Ngân sách theo danh mục / người trả        |
-| P3      | Widget / shortcut chụp nhanh               |
-| P3      | Export CSV bổ sung cho JSON backup         |
+### Đã hoàn thành (P1)
+
+| Hạng mục | Ghi chú |
+|----------|---------|
+| Daily summary | Bottom sheet ngày trên Trang chủ |
+| Daily report | Báo cáo theo ngày trong Thống kê |
+| Daily spending chart | Biểu đồ chi theo ngày, kỳ tháng |
+| Custom date range | `fromDate → toDate` |
+| Search transaction | Mô tả, số tiền, danh mục, người trả |
+
+### Cân nhắc tiếp (chưa cam kết)
+
+| Ưu tiên | Hạng mục | Ghi chú |
+|---------|----------|---------|
+| P2 | Ngân sách theo danh mục / người trả | Cảnh báo vượt hạn mức |
+| P3 | Widget / shortcut chụp nhanh | Phụ thuộc nền tảng |
+
+Các hạng mục **không** nằm trong lộ trình: UI API key Cài đặt, repeat transaction, export CSV, pending inbox, thu nhập / cash-flow / opening balance.
 
 ---
 
@@ -332,4 +399,3 @@ Token màu cụ thể được định nghĩa tại `src/constants/theme.ts`.
 | Tài liệu                | Nội dung                                                       |
 |-------------------------|----------------------------------------------------------------|
 | [`README.md`](./README.md) | Setup dev, build EAS, schema SQLite chi tiết, kiến trúc code, AI technical notes |
-

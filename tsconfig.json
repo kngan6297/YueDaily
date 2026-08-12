@@ -4,7 +4,6 @@
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
       "@constants/*": ["./src/constants/*"],
@@ -15,5 +14,6 @@
       "@utils/*": ["./src/utils/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "index.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "index.ts"],
+  "exclude": ["src/**/*.test.ts"]
 }

@@ -2,9 +2,10 @@
 // NÚT CHỤP ẢNH TO TRÒN DỄ THƯƠNG - TRUNG TÂM MÀN HÌNH CAMERA
 // ============================================================
 
-import React, { useRef } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
-import { Colors } from '../../constants/theme';
+import { ThemeColors } from '../../constants/theme';
+import { useAppTheme } from '../../context/ThemeContext';
 
 interface CaptureButtonProps {
   onPress: () => void;
@@ -12,7 +13,11 @@ interface CaptureButtonProps {
 }
 
 export function CaptureButton({ onPress, disabled = false }: CaptureButtonProps) {
-  // Animation nhấn nút - scale nhẹ khi bấm
+  const { colors, resolvedColorScheme } = useAppTheme();
+  const styles = useMemo(
+    () => createStyles(colors, resolvedColorScheme),
+    [colors, resolvedColorScheme],
+  );
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -33,9 +38,7 @@ export function CaptureButton({ onPress, disabled = false }: CaptureButtonProps)
 
   return (
     <Animated.View style={[styles.wrapper, { transform: [{ scale: scaleAnim }] }]}>
-      {/* Vòng ngoài - hiệu ứng glow */}
       <View style={styles.outerRing}>
-        {/* Thân nút chính */}
         <Pressable
           onPress={onPress}
           onPressIn={handlePressIn}
@@ -47,7 +50,6 @@ export function CaptureButton({ onPress, disabled = false }: CaptureButtonProps)
             disabled && styles.buttonDisabled,
           ]}
         >
-          {/* Vòng trắng bên trong */}
           <View style={styles.innerRing} />
         </Pressable>
       </View>
@@ -55,49 +57,51 @@ export function CaptureButton({ onPress, disabled = false }: CaptureButtonProps)
   );
 }
 
-const styles = StyleSheet.create({
-  wrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  outerRing: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: Colors.camera.captureRing,
-    alignItems: 'center',
-    justifyContent: 'center',
-    // Hiệu ứng viền pastel mờ
-    borderWidth: 3,
-    borderColor: 'rgba(255, 143, 171, 0.3)',
-  },
-  button: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: Colors.camera.captureButton,
-    alignItems: 'center',
-    justifyContent: 'center',
-    // Shadow nhẹ
-    shadowColor: '#FF8FAB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  buttonPressed: {
-    backgroundColor: Colors.pink[500],
-  },
-  buttonDisabled: {
-    backgroundColor: Colors.neutral[300],
-    shadowOpacity: 0,
-  },
-  innerRing: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 3,
-    borderColor: Colors.camera.captureButtonInner,
-    backgroundColor: 'transparent',
-  },
-});
+function createStyles(colors: ThemeColors, scheme: 'light' | 'dark') {
+  const isDark = scheme === 'dark';
+  return StyleSheet.create({
+    wrapper: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    outerRing: {
+      width: 88,
+      height: 88,
+      borderRadius: 44,
+      backgroundColor: colors.camera.captureRing,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 3,
+      borderColor: colors.blue[300] + '4D',
+    },
+    button: {
+      width: 72,
+      height: 72,
+      borderRadius: 36,
+      backgroundColor: colors.camera.captureButton,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: isDark ? '#0A0E18' : colors.blue[600],
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: isDark ? 0.28 : 0.14,
+      shadowRadius: isDark ? 6 : 8,
+      elevation: isDark ? 3 : 4,
+    },
+    buttonPressed: {
+      // Muted darker — không sáng hơn nền
+      backgroundColor: isDark ? colors.pink[200] : colors.pink[500],
+    },
+    buttonDisabled: {
+      backgroundColor: colors.neutral[300],
+      shadowOpacity: 0,
+    },
+    innerRing: {
+      width: 52,
+      height: 52,
+      borderRadius: 26,
+      borderWidth: 3,
+      borderColor: colors.camera.captureButtonInner,
+      backgroundColor: 'transparent',
+    },
+  });
+}

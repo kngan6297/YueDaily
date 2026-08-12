@@ -1,16 +1,21 @@
 import { Tabs, useRouter } from 'expo-router';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BorderRadius, Colors, Typography } from '../../constants/theme';
+import { BorderRadius, ThemeColors, Typography } from '../../constants/theme';
 import { TAB_BAR_CONTENT_HEIGHT } from '../../constants/layout';
+import { useAppTheme } from '../../context/ThemeContext';
 
 function TabBarBackground() {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return <View style={styles.tabBarBackground} />;
 }
 
 function CameraTabButton() {
   const router = useRouter();
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <TouchableOpacity
       style={styles.cameraFab}
@@ -28,6 +33,8 @@ function TabIcon({ emoji, label, focused, badge }: {
   focused: boolean;
   badge?: number;
 }) {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={styles.tabItem}>
       <View>
@@ -48,13 +55,15 @@ function TabIcon({ emoji, label, focused, badge }: {
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 8);
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
-        sceneStyle: { backgroundColor: Colors.background.primary },
+        sceneStyle: { backgroundColor: colors.background.primary },
         tabBarBackground: () => <TabBarBackground />,
         tabBarStyle: {
           ...styles.tabBar,
@@ -112,92 +121,94 @@ export default function TabLayout() {
   );
 }
 
-const styles = StyleSheet.create({
-  tabBar: {
-    backgroundColor: 'transparent',
-    borderTopWidth: 0,
-    paddingTop: 10,
-    elevation: 0,
-    shadowOpacity: 0,
-  },
-  tabBarBackground: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: Colors.background.surface,
-    shadowColor: Colors.pink[400],
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  tabBarItem: {
-    gap: 2,
-  },
-  tabBarLabel: {
-    fontSize: Typography.fontSize.xs,
-    fontWeight: '600',
-  },
-  tabItem: {
-    alignItems: 'center',
-    gap: 2,
-    width: 64,
-  },
-  tabEmoji: {
-    fontSize: 22,
-    opacity: 0.4,
-  },
-  tabEmojiActive: {
-    opacity: 1,
-  },
-  tabLabel: {
-    fontSize: Typography.fontSize.xs,
-    fontWeight: '600',
-    color: Colors.neutral[400],
-  },
-  tabLabelActive: {
-    color: Colors.pink[500],
-  },
-  badge: {
-    position: 'absolute',
-    top: -3,
-    right: -8,
-    backgroundColor: Colors.pink[400],
-    borderRadius: 999,
-    minWidth: 16,
-    height: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 9,
-    fontWeight: '800',
-  },
-  cameraFabSlot: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingBottom: 4,
-  },
-  cameraFab: {
-    width: 48,
-    height: 48,
-    marginTop: -20,
-    borderRadius: BorderRadius.full,
-    backgroundColor: Colors.pink[400],
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: Colors.pink[500],
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.28,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  cameraFabIcon: {
-    fontSize: 28,
-    color: '#FFFFFF',
-    fontWeight: '300',
-    lineHeight: 32,
-    marginTop: -1,
-  },
-});
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    tabBar: {
+      backgroundColor: 'transparent',
+      borderTopWidth: 0,
+      paddingTop: 10,
+      elevation: 0,
+      shadowOpacity: 0,
+    },
+    tabBarBackground: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: colors.background.surface,
+      shadowColor: colors.blue[400],
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: 0.10,
+      shadowRadius: 10,
+      elevation: 8,
+    },
+    tabBarItem: {
+      gap: 2,
+    },
+    tabBarLabel: {
+      fontSize: Typography.fontSize.xs,
+      fontWeight: '600',
+    },
+    tabItem: {
+      alignItems: 'center',
+      gap: 2,
+      width: 64,
+    },
+    tabEmoji: {
+      fontSize: 22,
+      opacity: 0.4,
+    },
+    tabEmojiActive: {
+      opacity: 1,
+    },
+    tabLabel: {
+      fontSize: Typography.fontSize.xs,
+      fontWeight: '600',
+      color: colors.neutral[400],
+    },
+    tabLabelActive: {
+      color: colors.action.selectedText,
+    },
+    badge: {
+      position: 'absolute',
+      top: -3,
+      right: -8,
+      backgroundColor: colors.action.primaryBackground,
+      borderRadius: 999,
+      minWidth: 16,
+      height: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 3,
+    },
+    badgeText: {
+      color: colors.action.primaryText,
+      fontSize: 9,
+      fontWeight: '800',
+    },
+    cameraFabSlot: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      paddingBottom: 4,
+    },
+    cameraFab: {
+      width: 48,
+      height: 48,
+      marginTop: -20,
+      borderRadius: BorderRadius.full,
+      backgroundColor: colors.action.fabBackground,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: colors.blue[600],
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.18,
+      shadowRadius: 8,
+      elevation: 5,
+    },
+    cameraFabIcon: {
+      fontSize: 28,
+      color: colors.action.fabIcon,
+      fontWeight: '300',
+      lineHeight: 32,
+      marginTop: -1,
+    },
+  });
+}

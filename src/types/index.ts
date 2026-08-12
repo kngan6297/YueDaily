@@ -8,8 +8,34 @@ export type TransactionStatus = 'complete' | 'pending';
 export const TRANSACTION_STATUS_COMPLETE: TransactionStatus = 'complete';
 export const TRANSACTION_STATUS_PENDING: TransactionStatus = 'pending';
 
-/** Loại giao dịch */
+/** Loại giao dịch — legacy DB column; app chỉ ghi `chi` */
 export type TransactionType = 'thu' | 'chi';
+
+/** Ai được hưởng khoản chi */
+export type ExpenseAudience =
+  | 'wife'
+  | 'husband'
+  | 'couple'
+  | 'couple_and_sister'
+  | 'unspecified';
+
+export const EXPENSE_AUDIENCE_LABELS: Record<ExpenseAudience, string> = {
+  wife: 'Vợ',
+  husband: 'Chồng',
+  couple: '2 vợ chồng',
+  couple_and_sister: '2 vợ chồng + em gái',
+  unspecified: 'Chưa phân loại',
+};
+
+/** 4 lựa chọn khi tạo/sửa (không gồm unspecified) */
+export const EXPENSE_AUDIENCE_CHOICES: Exclude<ExpenseAudience, 'unspecified'>[] = [
+  'wife',
+  'husband',
+  'couple',
+  'couple_and_sister',
+];
+
+export const DEFAULT_EXPENSE_AUDIENCE: ExpenseAudience = 'couple';
 
 /** Người chi tiêu — tên lưu trong giao dịch, danh sách quản lý ở bảng payers */
 export type Payer = string;
@@ -30,6 +56,7 @@ export interface Transaction {
   category_id: number | null;
   source_id: number | null;
   payer: Payer;
+  expense_audience: ExpenseAudience;
   image_uri: string | null;
   location: string | null;
   note: string | null;
@@ -68,7 +95,6 @@ export interface GeminiAnalysisResult {
   location?: string;
   category?: string;
   note?: string;
-  type?: TransactionType;
 }
 
 /** Dữ liệu form nhập liệu giao dịch */
@@ -78,6 +104,7 @@ export interface TransactionFormData {
   category_id: number | null;
   source_id: number | null;
   payer: Payer;
+  expense_audience: ExpenseAudience;
   image_uri: string | null;
   location: string;
   note: string;

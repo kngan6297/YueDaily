@@ -1,5 +1,5 @@
 import { useFocusEffect } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useMemo } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,7 +12,16 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BottomSheetModal } from '../../components/ui/BottomSheetModal';
-import { BorderRadius, CategoryColors, Colors, Shadows, Spacing, Typography } from '../../constants/theme';
+import {
+  AppearanceMode,
+  BorderRadius,
+  CategoryColors,
+  Spacing,
+  ThemeColors,
+  ThemeShadows,
+  Typography,
+} from '../../constants/theme';
+import { useAppTheme } from '../../context/ThemeContext';
 import { exportBackup, importBackup } from '../../database/backup';
 import {
   deleteCategory,
@@ -29,7 +38,7 @@ import {
   updateSource,
 } from '../../database/categories';
 import { useStreak } from '../../hooks/useStreak';
-import type { Category, PayerRecord, Source, TransactionType } from '../../types';
+import type { Category, PayerRecord, Source } from '../../types';
 
 const APP_INFO_ROWS = [
   { label: 'Tên ứng dụng', value: 'YueDaily' },
@@ -39,13 +48,12 @@ const APP_INFO_ROWS = [
 ];
 
 type EditKind = 'payer' | 'source' | 'category';
-type CategoryFilter = 'all' | 'chi' | 'thu';
 
-const TYPE_LABELS: Record<string, string> = {
-  chi: 'Chi',
-  thu: 'Thu',
-  both: 'Cả hai',
-};
+const APPEARANCE_OPTIONS: { id: AppearanceMode; label: string; hint: string }[] = [
+  { id: 'system', label: 'Theo hệ thống', hint: 'Tự theo chế độ máy' },
+  { id: 'light', label: 'Sáng', hint: 'Moonlit Sakura dịu' },
+  { id: 'dark', label: 'Tối', hint: 'Đêm xanh pha tím' },
+];
 
 interface EditState {
   kind: EditKind;
@@ -53,7 +61,6 @@ interface EditState {
   name: string;
   icon: string;
   color: string;
-  type: TransactionType | 'both';
 }
 
 function emptyEdit(kind: EditKind): EditState {
@@ -62,16 +69,16 @@ function emptyEdit(kind: EditKind): EditState {
     name: '',
     icon: kind === 'category' ? '✨' : kind === 'payer' ? '👤' : '💳',
     color: CategoryColors[0],
-    type: 'chi',
   };
 }
 
 export default function SettingsScreen() {
+  const { colors, shadows, appearanceMode, setAppearanceMode } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors, shadows), [colors, shadows]);
   const { streak } = useStreak();
   const [categories, setCategories] = useState<Category[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
   const [payers, setPayers] = useState<PayerRecord[]>([]);
-  const [catFilter, setCatFilter] = useState<CategoryFilter>('all');
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -100,17 +107,17 @@ export default function SettingsScreen() {
     loadData();
   }, [loadData]));
 
-  const filteredCategories = categories.filter((c) =>
-    catFilter === 'all' ? true : c.type === catFilter || c.type === 'both'
+  const expenseCategories = categories.filter(
+    (c) => c.type === 'chi' || c.type === 'both'
   );
 
   const openAdd = (kind: EditKind) => setEdit(emptyEdit(kind));
 
   const openEditPayer = (p: PayerRecord) =>
-    setEdit({ kind: 'payer', id: p.id, name: p.name, icon: p.icon, color: p.color, type: 'chi' });
+    setEdit({ kind: 'payer', id: p.id, name: p.name, icon: p.icon, color: p.color });
 
   const openEditSource = (s: Source) =>
-    setEdit({ kind: 'source', id: s.id, name: s.name, icon: '💳', color: CategoryColors[0], type: 'chi' });
+    setEdit({ kind: 'source', id: s.id, name: s.name, icon: '💳', color: CategoryColors[0] });
 
   const openEditCategory = (c: Category) =>
     setEdit({
@@ -119,7 +126,6 @@ export default function SettingsScreen() {
       name: c.name,
       icon: c.icon,
       color: c.color,
-      type: c.type === 'both' ? 'chi' : c.type,
     });
 
   const handleSaveEdit = async () => {
@@ -139,8 +145,8 @@ export default function SettingsScreen() {
         if (edit.id) await updateSource(edit.id, trimmed);
         else await insertSource(trimmed);
       } else {
-        if (edit.id) await updateCategory(edit.id, trimmed, edit.type, edit.icon, edit.color);
-        else await insertCategory(trimmed, edit.type, edit.icon, edit.color);
+        if (edit.id) await updateCategory(edit.id, trimmed, 'chi', edit.icon, edit.color);
+        else await insertCategory(trimmed, 'chi', edit.icon, edit.color);
       }
       setEdit(null);
       await loadData();
@@ -258,6 +264,36 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* ── Giao diện ── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>🎨 Giao diện</Text>
+          <View style={styles.card}>
+            {APPEARANCE_OPTIONS.map((opt, idx) => {
+              const active = appearanceMode === opt.id;
+              return (
+                <View key={opt.id}>
+                  <TouchableOpacity
+                    style={[styles.appearanceRow, active && styles.appearanceRowActive]}
+                    onPress={() => setAppearanceMode(opt.id)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={styles.appearanceInfo}>
+                      <Text style={[styles.appearanceLabel, active && styles.appearanceLabelActive]}>
+                        {opt.label}
+                      </Text>
+                      <Text style={styles.appearanceHint}>{opt.hint}</Text>
+                    </View>
+                    <View style={[styles.appearanceRadio, active && styles.appearanceRadioActive]}>
+                      {active ? <View style={styles.appearanceRadioDot} /> : null}
+                    </View>
+                  </TouchableOpacity>
+                  {idx < APPEARANCE_OPTIONS.length - 1 && <View style={styles.divider} />}
+                </View>
+              );
+            })}
+          </View>
+        </View>
+
         {/* ── Tóm tắt nhanh ── */}
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
@@ -278,7 +314,7 @@ export default function SettingsScreen() {
         </View>
 
         {loading ? (
-          <ActivityIndicator color={Colors.pink[400]} style={{ paddingVertical: 40 }} />
+          <ActivityIndicator color={colors.blue[400]} style={{ paddingVertical: 40 }} />
         ) : (
           <>
             {/* ── Người trả ── */}
@@ -322,7 +358,7 @@ export default function SettingsScreen() {
                 {sources.map((s, idx) => (
                   <View key={s.id}>
                     <View style={styles.itemRow}>
-                      <View style={[styles.itemIcon, { backgroundColor: Colors.lavender[100] }]}>
+                      <View style={[styles.itemIcon, { backgroundColor: colors.blue[100] }]}>
                         <Text style={styles.itemIconText}>
                           {s.name === 'Tiền mặt' ? '💵' : s.name === 'Chuyển khoản' ? '🏦' : '💳'}
                         </Text>
@@ -350,29 +386,11 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               </View>
 
-              <View style={styles.filterRow}>
-                {([
-                  { id: 'all', label: 'Tất cả' },
-                  { id: 'chi', label: 'Chi' },
-                  { id: 'thu', label: 'Thu' },
-                ] as { id: CategoryFilter; label: string }[]).map((f) => (
-                  <TouchableOpacity
-                    key={f.id}
-                    style={[styles.filterChip, catFilter === f.id && styles.filterChipActive]}
-                    onPress={() => setCatFilter(f.id)}
-                  >
-                    <Text style={[styles.filterChipText, catFilter === f.id && styles.filterChipTextActive]}>
-                      {f.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
               <View style={styles.card}>
-                {filteredCategories.length === 0 ? (
+                {expenseCategories.length === 0 ? (
                   <Text style={styles.emptyText}>Chưa có danh mục nào</Text>
                 ) : (
-                  filteredCategories.map((c, idx) => (
+                  expenseCategories.map((c, idx) => (
                     <View key={c.id}>
                       <View style={styles.itemRow}>
                         <View style={[styles.itemIcon, { backgroundColor: c.color + '22' }]}>
@@ -380,7 +398,6 @@ export default function SettingsScreen() {
                         </View>
                         <View style={styles.itemInfo}>
                           <Text style={styles.itemName}>{c.name}</Text>
-                          <Text style={styles.itemMeta}>{TYPE_LABELS[c.type] ?? c.type}</Text>
                         </View>
                         <TouchableOpacity style={styles.actionBtn} onPress={() => openEditCategory(c)}>
                           <Text style={styles.actionEdit}>Sửa</Text>
@@ -389,7 +406,7 @@ export default function SettingsScreen() {
                           <Text style={styles.actionDelete}>Xoá</Text>
                         </TouchableOpacity>
                       </View>
-                      {idx < filteredCategories.length - 1 && <View style={styles.divider} />}
+                      {idx < expenseCategories.length - 1 && <View style={styles.divider} />}
                     </View>
                   ))
                 )}
@@ -415,7 +432,7 @@ export default function SettingsScreen() {
               activeOpacity={0.75}
             >
               {exporting ? (
-                <ActivityIndicator size="small" color={Colors.neutral[0]} />
+                <ActivityIndicator size="small" color={colors.action.primaryText} />
               ) : (
                 <Text style={styles.backupBtnIcon}>📤</Text>
               )}
@@ -432,7 +449,7 @@ export default function SettingsScreen() {
               activeOpacity={0.75}
             >
               {importing ? (
-                <ActivityIndicator size="small" color={Colors.neutral[700]} />
+                <ActivityIndicator size="small" color={colors.neutral[700]} />
               ) : (
                 <Text style={styles.backupBtnIcon}>📥</Text>
               )}
@@ -471,7 +488,7 @@ export default function SettingsScreen() {
               <TextInput
                 style={[styles.editInput, edit.kind === 'source' && { flex: 1 }]}
                 placeholder="Tên..."
-                placeholderTextColor={Colors.neutral[400]}
+                placeholderTextColor={colors.neutral[400]}
                 value={edit.name}
                 onChangeText={(name) => setEdit((p) => p && { ...p, name })}
                 maxLength={30}
@@ -490,21 +507,6 @@ export default function SettingsScreen() {
 
             {edit.kind === 'category' && (
               <>
-                <Text style={styles.editLabel}>Loại</Text>
-                <View style={styles.typeRow}>
-                  {(['chi', 'thu'] as TransactionType[]).map((t) => (
-                    <TouchableOpacity
-                      key={t}
-                      style={[styles.typeChip, edit.type === t && styles.typeChipActive]}
-                      onPress={() => setEdit((p) => p && { ...p, type: t })}
-                    >
-                      <Text style={[styles.typeChipText, edit.type === t && styles.typeChipTextActive]}>
-                        {TYPE_LABELS[t]}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
                 <Text style={styles.editLabel}>Màu sắc</Text>
                 <View style={styles.colorRow}>
                   {(CategoryColors as readonly string[]).map((c) => (
@@ -552,19 +554,20 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background.primary },
+function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
+  return StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background.primary },
   scroll: { padding: Spacing.base, gap: Spacing.lg },
 
   header: { gap: 4, paddingVertical: Spacing.sm },
   headerTitle: {
     fontSize: Typography.fontSize.xl,
     fontWeight: '800',
-    color: Colors.neutral[700],
+    color: colors.neutral[700],
   },
   headerSub: {
     fontSize: Typography.fontSize.sm,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
   },
 
   section: { gap: Spacing.sm },
@@ -576,29 +579,71 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: Typography.fontSize.base,
     fontWeight: '700',
-    color: Colors.neutral[700],
+    color: colors.neutral[700],
+  },
+  appearanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.base,
+    paddingVertical: Spacing.md,
+    gap: Spacing.md,
+  },
+  appearanceRowActive: {
+    backgroundColor: colors.action.selectedBackground,
+  },
+  appearanceInfo: { flex: 1, gap: 2 },
+  appearanceLabel: {
+    fontSize: Typography.fontSize.base,
+    fontWeight: '600',
+    color: colors.neutral[700],
+  },
+  appearanceLabelActive: {
+    color: colors.action.selectedText,
+    fontWeight: '700',
+  },
+  appearanceHint: {
+    fontSize: Typography.fontSize.xs,
+    color: colors.neutral[400],
+    fontWeight: '500',
+  },
+  appearanceRadio: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: colors.neutral[300],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  appearanceRadioActive: {
+    borderColor: colors.action.selectedBorder,
+  },
+  appearanceRadioDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: colors.action.selectedBorder,
   },
   addChip: {
-    backgroundColor: Colors.pink[100],
+    backgroundColor: colors.action.secondaryBackground,
     borderRadius: BorderRadius.full,
     paddingHorizontal: Spacing.md,
     paddingVertical: 5,
     borderWidth: 1,
-    borderColor: Colors.pink[200],
+    borderColor: colors.action.secondaryBorder,
   },
   addChipText: {
     fontSize: Typography.fontSize.xs,
     fontWeight: '700',
-    color: Colors.pink[500],
+    color: colors.action.secondaryText,
   },
 
   card: {
-    backgroundColor: Colors.background.card,
+    backgroundColor: colors.background.surface,
     borderRadius: BorderRadius.xl,
-    borderWidth: 1.5,
-    borderColor: Colors.neutral[200],
+    borderWidth: 1,
+    borderColor: colors.metallic.platinum,
     overflow: 'hidden',
-    ...Shadows.soft,
   },
   cardPadded: {
     padding: Spacing.base,
@@ -624,33 +669,45 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: Typography.fontSize.base,
     fontWeight: '600',
-    color: Colors.neutral[700],
+    color: colors.neutral[700],
   },
   itemMeta: {
     fontSize: Typography.fontSize.xs,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
     fontWeight: '500',
   },
   actionBtn: { paddingHorizontal: 6, paddingVertical: 4 },
   actionEdit: {
     fontSize: Typography.fontSize.sm,
     fontWeight: '600',
-    color: Colors.pink[500],
+    color: colors.action.selectedText,
   },
   actionDelete: {
     fontSize: Typography.fontSize.sm,
     fontWeight: '600',
-    color: Colors.neutral[400],
+    color: colors.action.destructiveText,
   },
   divider: {
     height: 1,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: colors.neutral[100],
     marginLeft: 40 + Spacing.base + Spacing.sm,
+  },
+  dividerFull: {
+    height: 1,
+    backgroundColor: colors.neutral[100],
+  },
+  aiIntro: {
+    fontSize: Typography.fontSize.sm,
+    color: colors.neutral[500],
+    lineHeight: 20,
+    paddingHorizontal: Spacing.base,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.sm,
   },
   emptyText: {
     textAlign: 'center',
     paddingVertical: Spacing.lg,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
     fontSize: Typography.fontSize.sm,
   },
 
@@ -662,19 +719,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: 6,
     borderRadius: BorderRadius.full,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: colors.neutral[100],
   },
   filterChipActive: {
-    backgroundColor: Colors.pink[100],
+    backgroundColor: colors.action.selectedBackground,
     borderWidth: 1,
-    borderColor: Colors.pink[300],
+    borderColor: colors.action.selectedBorder,
   },
   filterChipText: {
     fontSize: Typography.fontSize.xs,
     fontWeight: '600',
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
   },
-  filterChipTextActive: { color: Colors.pink[500] },
+  filterChipTextActive: { color: colors.action.selectedText },
 
   infoRow: {
     flexDirection: 'row',
@@ -684,17 +741,17 @@ const styles = StyleSheet.create({
   },
   infoLabel: {
     fontSize: Typography.fontSize.sm,
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
     fontWeight: '500',
   },
   infoValue: {
     fontSize: Typography.fontSize.sm,
     fontWeight: '700',
-    color: Colors.neutral[700],
+    color: colors.neutral[700],
   },
   infoDivider: {
     height: 1,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: colors.neutral[100],
   },
 
   statsRow: {
@@ -703,30 +760,29 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: Colors.background.card,
+    backgroundColor: colors.background.surface,
     borderRadius: BorderRadius.xl,
     padding: Spacing.md,
     alignItems: 'center',
     gap: 4,
-    borderWidth: 1.5,
-    borderColor: Colors.neutral[200],
-    ...Shadows.soft,
+    borderWidth: 1,
+    borderColor: colors.metallic.platinum,
   },
   statEmoji: { fontSize: 22 },
   statValue: {
     fontSize: Typography.fontSize.md,
     fontWeight: '800',
-    color: Colors.neutral[700],
+    color: colors.neutral[700],
   },
   statLabel: {
     fontSize: Typography.fontSize.xs,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
     fontWeight: '500',
   },
 
   backupHint: {
     fontSize: Typography.fontSize.sm,
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
     lineHeight: 20,
   },
   backupBtn: {
@@ -736,29 +792,29 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.lg,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.base,
-    borderWidth: 1.5,
+    borderWidth: 1,
   },
   backupBtnExport: {
-    backgroundColor: Colors.pink[400],
-    borderColor: Colors.pink[500],
-    ...Shadows.medium,
+    backgroundColor: colors.action.primaryBackground,
+    borderColor: colors.action.primaryPressed,
+    ...shadows.medium,
   },
   backupBtnImport: {
-    backgroundColor: Colors.lavender[100],
-    borderColor: Colors.lavender[300],
-    ...Shadows.soft,
+    backgroundColor: colors.action.secondaryBackground,
+    borderColor: colors.action.secondaryBorder,
+    ...shadows.soft,
   },
   backupBtnIcon: { fontSize: 22 },
   backupBtnText: { flex: 1, gap: 2 },
   backupBtnLabel: {
     fontSize: Typography.fontSize.sm,
     fontWeight: '700',
-    color: Colors.neutral[0],
+    color: colors.action.primaryText,
   },
-  backupBtnLabelDark: { color: Colors.neutral[700] },
+  backupBtnLabelDark: { color: colors.action.secondaryText },
   backupBtnSub: {
     fontSize: Typography.fontSize.xs,
-    color: Colors.neutral[600],
+    color: colors.neutral[600],
     fontWeight: '500',
   },
 
@@ -766,14 +822,14 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Colors.neutral[300],
+    backgroundColor: colors.neutral[300],
     alignSelf: 'center',
     marginBottom: Spacing.md,
   },
   sheetTitle: {
     fontSize: Typography.fontSize.base,
     fontWeight: '700',
-    color: Colors.neutral[600],
+    color: colors.neutral[600],
     paddingHorizontal: Spacing.base,
     marginBottom: Spacing.sm,
   },
@@ -790,7 +846,7 @@ const styles = StyleSheet.create({
   editPreviewName: {
     fontSize: Typography.fontSize.sm,
     fontWeight: '700',
-    color: Colors.neutral[700],
+    color: colors.neutral[700],
   },
   editRow: {
     flexDirection: 'row',
@@ -800,29 +856,29 @@ const styles = StyleSheet.create({
   },
   editInput: {
     flex: 1,
-    backgroundColor: Colors.background.surface,
+    backgroundColor: colors.background.surface,
     borderRadius: BorderRadius.lg,
-    borderWidth: 1.5,
-    borderColor: Colors.neutral[200],
+    borderWidth: 1,
+    borderColor: colors.metallic.platinum,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.md,
     fontSize: Typography.fontSize.base,
-    color: Colors.neutral[700],
+    color: colors.neutral[700],
   },
   editIconInput: {
     width: 52,
     height: 52,
-    backgroundColor: Colors.background.surface,
+    backgroundColor: colors.background.surface,
     borderRadius: BorderRadius.lg,
-    borderWidth: 1.5,
-    borderColor: Colors.neutral[200],
+    borderWidth: 1,
+    borderColor: colors.metallic.platinum,
     fontSize: 24,
-    color: Colors.neutral[700],
+    color: colors.neutral[700],
   },
   editLabel: {
     fontSize: Typography.fontSize.sm,
     fontWeight: '600',
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
     paddingHorizontal: Spacing.base,
     marginTop: Spacing.sm,
     marginBottom: 4,
@@ -837,20 +893,20 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     borderRadius: BorderRadius.lg,
     alignItems: 'center',
-    backgroundColor: Colors.neutral[100],
-    borderWidth: 1.5,
-    borderColor: Colors.neutral[200],
+    backgroundColor: colors.neutral[100],
+    borderWidth: 1,
+    borderColor: colors.neutral[200],
   },
   typeChipActive: {
-    backgroundColor: Colors.pink[100],
-    borderColor: Colors.pink[300],
+    backgroundColor: colors.action.selectedBackground,
+    borderColor: colors.action.selectedBorder,
   },
   typeChipText: {
     fontSize: Typography.fontSize.sm,
     fontWeight: '600',
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
   },
-  typeChipTextActive: { color: Colors.pink[500] },
+  typeChipTextActive: { color: colors.action.selectedText },
   colorRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -866,21 +922,22 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   colorDotOn: {
-    borderColor: Colors.neutral[700],
+    borderColor: colors.neutral[700],
     transform: [{ scale: 1.15 }],
   },
   saveEditBtn: {
-    backgroundColor: Colors.pink[400],
+    backgroundColor: colors.action.primaryBackground,
     borderRadius: BorderRadius.xl,
     paddingVertical: Spacing.md,
     alignItems: 'center',
     marginHorizontal: Spacing.base,
     marginTop: Spacing.md,
-    ...Shadows.medium,
+    ...shadows.medium,
   },
   saveEditBtnText: {
-    color: '#fff',
+    color: colors.action.primaryText,
     fontSize: Typography.fontSize.base,
     fontWeight: '700',
   },
 });
+}

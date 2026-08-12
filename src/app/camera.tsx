@@ -1,7 +1,7 @@
 import { CameraType, CameraView, FlashMode, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState, useMemo } from 'react';
 import {
   Dimensions,
   Image,
@@ -14,7 +14,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CaptureButton } from '../components/camera/CaptureButton';
-import { BorderRadius, Colors, Spacing, Typography } from '../constants/theme';
+import { BorderRadius, Spacing, ThemeColors, Typography } from '../constants/theme';
+import { useAppTheme } from '../context/ThemeContext';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 const PREVIEW_W = SW - Spacing.base * 2;
@@ -22,6 +23,8 @@ const PREVIEW_H = PREVIEW_W * 1.15;
 
 // ─── Web: chọn file từ máy ────────────────────────────────────────────────────
 function WebImagePicker() {
+  const { colors } = useAppTheme();
+  const webStyles = useMemo(() => createWebStyles(colors), [colors]);
   const router = useRouter();
   const { transactionDate } = useLocalSearchParams<{ transactionDate?: string }>();
   const [preview, setPreview] = useState<string | null>(null);
@@ -97,8 +100,8 @@ function WebImagePicker() {
               maxWidth: 420,
               minHeight: 240,
               borderRadius: 24,
-              border: `2px dashed ${isDragging ? '#FF8FAB' : 'rgba(255,143,171,0.45)'}`,
-              backgroundColor: isDragging ? 'rgba(255,143,171,0.08)' : 'rgba(255,255,255,0.05)',
+              border: `2px dashed ${isDragging ? colors.action.primaryPressed : colors.action.primaryBackground + '73'}`,
+              backgroundColor: isDragging ? colors.action.primaryBackground + '14' : 'rgba(255,255,255,0.05)',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
@@ -165,6 +168,8 @@ export default function CameraScreen() {
 }
 
 function NativeCameraScreen() {
+  const { colors } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const router = useRouter();
   const { transactionDate } = useLocalSearchParams<{ transactionDate?: string }>();
   const cameraRef = useRef<CameraView>(null);
@@ -311,8 +316,8 @@ function NativeCameraScreen() {
   );
 }
 
-// ─── Web styles ───────────────────────────────────────────────────────────────
-const webStyles = StyleSheet.create({
+function createWebStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0D0D0D' },
   header: {
     flexDirection: 'row',
@@ -349,18 +354,18 @@ const webStyles = StyleSheet.create({
     textAlign: 'center',
   },
   dropHint: {
-    color: 'rgba(255,143,171,0.7)',
+    color: colors.action.secondaryText,
     fontSize: Typography.fontSize.xs,
     textAlign: 'center',
   },
   selectBtn: {
-    backgroundColor: Colors.pink[400],
+    backgroundColor: colors.action.primaryBackground,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing['2xl'],
     borderRadius: BorderRadius.full,
   },
   selectBtnText: {
-    color: '#FFFFFF',
+    color: colors.action.primaryText,
     fontSize: Typography.fontSize.base,
     fontWeight: '700',
   },
@@ -374,9 +379,11 @@ const webStyles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
 });
+}
 
 // ─── Native styles ────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0D0D0D' },
 
   topBar: {
@@ -411,8 +418,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.25)',
   },
   iconBtnActive: {
-    backgroundColor: 'rgba(255,143,171,0.5)',
-    borderColor: Colors.pink[300],
+    backgroundColor: colors.action.selectedBackground,
+    borderColor: colors.action.selectedBorder,
   },
   iconBtnText: { fontSize: 16 },
 
@@ -446,7 +453,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 28,
     height: 28,
-    borderColor: 'rgba(255,143,171,0.9)',
+    borderColor: colors.blue[400],
     borderWidth: 3,
   },
   cTL: { top: 0, left: 0, borderRightWidth: 0, borderBottomWidth: 0, borderTopLeftRadius: 10 },
@@ -537,11 +544,16 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   permBtn: {
-    backgroundColor: Colors.pink[400],
+    backgroundColor: colors.action.primaryBackground,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing['2xl'],
     borderRadius: BorderRadius.full,
     marginTop: Spacing.sm,
   },
-  permBtnText: { color: '#FFFFFF', fontSize: Typography.fontSize.base, fontWeight: '700' },
+  permBtnText: {
+    color: colors.action.primaryText,
+    fontSize: Typography.fontSize.base,
+    fontWeight: '700',
+  },
 });
+}

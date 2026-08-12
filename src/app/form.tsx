@@ -1,7 +1,7 @@
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -20,8 +20,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AmountKeyboard, formatAmount } from '../components/form/AmountKeyboard';
 import { BottomSheetModal } from '../components/ui/BottomSheetModal';
-import { BorderRadius, Colors, Shadows, Spacing, Typography } from '../constants/theme';
-import { getAllPayers, getAllSources, getCategoriesByType, updateStreak } from '../database/categories';
+import { BorderRadius, Spacing, ThemeColors, ThemeShadows, Typography } from '../constants/theme';
+import { useAppTheme } from '../context/ThemeContext';
+import { getAllPayers, getAllSources, getExpenseCategories, updateStreak } from '../database/categories';
 import {
   getTransactionById,
   insertTransaction,
@@ -29,7 +30,19 @@ import {
 } from '../database/transactions';
 import { useGemini } from '../hooks/useGemini';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { Category, Payer, PayerRecord, Source, TransactionFormData, TransactionType } from '../types';
+import type {
+  Category,
+  ExpenseAudience,
+  Payer,
+  PayerRecord,
+  Source,
+  TransactionFormData,
+} from '../types';
+import {
+  DEFAULT_EXPENSE_AUDIENCE,
+  EXPENSE_AUDIENCE_CHOICES,
+  EXPENSE_AUDIENCE_LABELS,
+} from '../types';
 import {
   dateFromCreatedAt,
   formatDateVi,
@@ -48,20 +61,38 @@ interface PickerOption {
 
 interface DropdownPickerProps {
   value: number | string | null;
-  placeholder: string;
+  label: string;
+  placeholder?: string;
   options: PickerOption[];
   onSelect: (id: number | string) => void;
   accentColor?: string;
 }
 
-function DropdownPicker({ value, placeholder, options, onSelect, accentColor }: DropdownPickerProps) {
+const AUDIENCE_ICONS: Record<Exclude<ExpenseAudience, 'unspecified'>, string> = {
+  wife: '👩',
+  husband: '👨',
+  couple: '💑',
+  couple_and_sister: '👨‍👩‍👧',
+};
+
+function DropdownPicker({
+  value,
+  label,
+  placeholder = 'Chọn',
+  options,
+  onSelect,
+  accentColor,
+}: DropdownPickerProps) {
+  const { colors, shadows, resolvedColorScheme } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors, shadows, resolvedColorScheme), [colors, shadows, resolvedColorScheme]);
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.id === value);
 
   return (
-    <>
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>{label}</Text>
       <TouchableOpacity
-        style={[styles.pill, selected && { borderColor: selected.color ?? accentColor ?? Colors.pink[300] }]}
+        style={[styles.pill, selected && styles.pillSelected]}
         onPress={() => setOpen(true)}
         activeOpacity={0.8}
       >
@@ -73,38 +104,40 @@ function DropdownPicker({ value, placeholder, options, onSelect, accentColor }: 
       </TouchableOpacity>
 
       <BottomSheetModal visible={open} onClose={() => setOpen(false)}>
-          <View style={styles.sheetHandle} />
-          <Text style={styles.sheetTitle}>{placeholder}</Text>
-          <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
-            {options.map((opt) => {
-              const isActive = opt.id === value;
-              return (
-                <TouchableOpacity
-                  key={String(opt.id)}
-                  style={[styles.sheetOption, isActive && styles.sheetOptionActive]}
-                  onPress={() => { onSelect(opt.id); setOpen(false); }}
-                >
-                  {opt.icon && (
-                    <View style={[styles.sheetOptionIcon, { backgroundColor: (opt.color ?? Colors.pink[300]) + '22' }]}>
-                      <Text style={{ fontSize: 20 }}>{opt.icon}</Text>
-                    </View>
-                  )}
-                  <Text style={[styles.sheetOptionText, isActive && styles.sheetOptionTextActive]}>
-                    {opt.label}
-                  </Text>
-                  {isActive && <Text style={styles.sheetCheck}>✓</Text>}
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+        <View style={styles.sheetHandle} />
+        <Text style={styles.sheetTitle}>{label}</Text>
+        <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
+          {options.map((opt) => {
+            const isActive = opt.id === value;
+            return (
+              <TouchableOpacity
+                key={String(opt.id)}
+                style={[styles.sheetOption, isActive && styles.sheetOptionActive]}
+                onPress={() => { onSelect(opt.id); setOpen(false); }}
+              >
+                {opt.icon && (
+                  <View style={[styles.sheetOptionIcon, { backgroundColor: (opt.color ?? colors.pink[300]) + '22' }]}>
+                    <Text style={{ fontSize: 20 }}>{opt.icon}</Text>
+                  </View>
+                )}
+                <Text style={[styles.sheetOptionText, isActive && styles.sheetOptionTextActive]}>
+                  {opt.label}
+                </Text>
+                {isActive && <Text style={styles.sheetCheck}>✓</Text>}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </BottomSheetModal>
-    </>
+    </View>
   );
 }
 
 // ─── Main Form ────────────────────────────────────────────────────────────────
 
 export default function TransactionForm() {
+  const { colors, shadows, resolvedColorScheme } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors, shadows, resolvedColorScheme), [colors, shadows, resolvedColorScheme]);
   const router = useRouter();
   const params = useLocalSearchParams<{
     imageUri?: string;
@@ -128,6 +161,7 @@ export default function TransactionForm() {
     category_id: null,
     source_id: null,
     payer: 'Vợ',
+    expense_audience: DEFAULT_EXPENSE_AUDIENCE,
     image_uri: imageUri,
     location: '',
     note: '',
@@ -147,9 +181,9 @@ export default function TransactionForm() {
 
   const { analyze, isLoading: isAiLoading } = useGemini();
 
-  // Tải danh mục theo loại, auto-chọn danh mục đầu tiên nếu chưa có
+  // Tải danh mục chi tiêu, auto-chọn danh mục đầu tiên nếu chưa có
   useEffect(() => {
-    getCategoriesByType(formData.type).then((cats) => {
+    getExpenseCategories().then((cats) => {
       categoriesRef.current = cats;
       setCategories(cats);
       if (formMode === 'create-complete') {
@@ -159,7 +193,7 @@ export default function TransactionForm() {
         }));
       }
     }).catch(console.error);
-  }, [formData.type, formMode]);
+  }, [formMode]);
 
   // Tải nguồn tiền và người trả
   useEffect(() => {
@@ -193,6 +227,7 @@ export default function TransactionForm() {
         category_id: txn.category_id,
         source_id: txn.source_id,
         payer: txn.payer,
+        expense_audience: txn.expense_audience ?? 'unspecified',
         image_uri: txn.image_uri,
         note: txn.note?.trim() || txn.location?.trim() || '',
         location: '',
@@ -250,9 +285,8 @@ export default function TransactionForm() {
 
   const applyScanResult = useCallback(async (result: Awaited<ReturnType<typeof analyze>>) => {
     const summary = result.description || result.note || '';
-    const resultType: TransactionType = result.type === 'thu' ? 'thu' : 'chi';
 
-    const cats = await getCategoriesByType(resultType);
+    const cats = await getExpenseCategories();
     categoriesRef.current = cats;
     setCategories(cats);
 
@@ -267,7 +301,7 @@ export default function TransactionForm() {
         ...prev,
         note: summary || prev.note,
         location: '',
-        type: resultType,
+        type: 'chi',
         category_id: categoryId,
       }));
       Alert.alert(
@@ -282,7 +316,7 @@ export default function TransactionForm() {
       amount: result.amount && result.amount > 0 ? String(result.amount) : prev.amount,
       note: summary || prev.note,
       location: '',
-      type: resultType,
+      type: 'chi',
       category_id: categoryId,
     }));
     const lines: string[] = [];
@@ -374,8 +408,8 @@ export default function TransactionForm() {
     : 'Cập nhật giao dịch ✏️';
 
   const displayAmount = formatAmount(formData.amount);
-  const isChi = formData.type === 'chi';
-  const accentColor = isChi ? Colors.pink[400] : Colors.mint[400];
+  const isDark = resolvedColorScheme === 'dark';
+  const accentColor = colors.pink[400];
   const maxDate = new Date();
   const isBackdated = formData.transaction_date !== formatLocalDate(new Date());
   const { bottom: screenBottomInset } = useSafeAreaInsets();
@@ -403,6 +437,17 @@ export default function TransactionForm() {
     icon: s.name === 'Tiền mặt' ? '💵' : s.name === 'Chuyển khoản' ? '🏦' : '💳',
   }));
 
+  const audienceOptions: PickerOption[] = [
+    ...EXPENSE_AUDIENCE_CHOICES.map((key) => ({
+      id: key,
+      label: EXPENSE_AUDIENCE_LABELS[key],
+      icon: AUDIENCE_ICONS[key],
+    })),
+    ...(formData.expense_audience === 'unspecified'
+      ? [{ id: 'unspecified' as const, label: EXPENSE_AUDIENCE_LABELS.unspecified, icon: '❔' }]
+      : []),
+  ];
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
@@ -412,35 +457,29 @@ export default function TransactionForm() {
       >
 
         {/* ═══ TOP: IMAGE BG + AMOUNT OVERLAY ═══ */}
-        <View style={styles.topSection}>
+        <View style={[
+          styles.topSection,
+          { backgroundColor: isDark ? colors.pink[100] : colors.pink[400] },
+        ]}>
           {/* Background image or gradient */}
           {imageUri ? (
             <Image source={{ uri: imageUri }} style={styles.bgImage} blurRadius={18} />
           ) : null}
-          <View style={[styles.bgOverlay, { backgroundColor: isChi ? 'rgba(255,100,130,0.55)' : 'rgba(70,190,150,0.55)' }]} />
+          <View style={[
+            styles.bgOverlay,
+            {
+              backgroundColor: isDark ? 'rgba(36, 25, 34, 0.42)' : 'rgba(244,132,168,0.52)',
+            },
+          ]} />
 
-          {/* Close + Type toggle */}
+          {/* Close + Quét lại */}
           <View style={styles.topBar}>
             <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
               <Text style={styles.closeBtnText}>✕</Text>
             </TouchableOpacity>
 
-            <View style={styles.typeToggle}>
-              <TouchableOpacity
-                style={[styles.typeBtn, !isChi && styles.typeBtnActive]}
-                onPress={() => setFormData((p) => ({ ...p, type: 'thu', category_id: null }))}
-              >
-                <Text style={[styles.typeBtnText, !isChi && styles.typeBtnTextActive]}>Thu</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.typeBtn, isChi && styles.typeBtnActive]}
-                onPress={() => setFormData((p) => ({ ...p, type: 'chi', category_id: null }))}
-              >
-                <Text style={[styles.typeBtnText, isChi && styles.typeBtnTextActive]}>Chi</Text>
-              </TouchableOpacity>
-            </View>
+            <View style={{ flex: 1 }} />
 
-            {/* Quét lại */}
             {imageUri ? (
               <TouchableOpacity
                 style={[styles.aiBtn, isAiLoading && styles.aiBtnLoading]}
@@ -448,19 +487,25 @@ export default function TransactionForm() {
                 disabled={isAiLoading}
               >
                 {isAiLoading
-                  ? <ActivityIndicator size="small" color="#fff" />
+                  ? <ActivityIndicator size="small" color={isDark ? colors.neutral[700] : '#fff'} />
                   : <Text style={styles.aiBtnText}>✨ Quét</Text>}
               </TouchableOpacity>
-            ) : <View style={{ width: 60 }} />}
+            ) : <View style={{ width: 34 }} />}
           </View>
 
           {/* Amount */}
           <View style={styles.amountWrap}>
-            <Text style={styles.amountSign}>{isChi ? '-' : '+'}</Text>
-            <Text style={[styles.amountValue, !formData.amount && styles.amountEmpty]}>
+            <Text style={[styles.amountSign, styles.amountAccent]}>
+              -
+            </Text>
+            <Text style={[
+              styles.amountValue,
+              !formData.amount && styles.amountEmpty,
+              formData.amount ? styles.amountAccent : null,
+            ]}>
               {displayAmount || '0'}
             </Text>
-            <Text style={styles.amountUnit}>đ</Text>
+            <Text style={[styles.amountUnit, styles.amountAccent]}>đ</Text>
           </View>
 
           {/* Mô tả — nằm cao trên màn hình để không bị bàn phím che */}
@@ -472,7 +517,7 @@ export default function TransactionForm() {
               value={formData.note}
               onChangeText={(t) => setFormData((p) => ({ ...p, note: t, location: '' }))}
               placeholder="Thêm mô tả..."
-              placeholderTextColor="rgba(255,255,255,0.55)"
+              placeholderTextColor={isDark ? colors.neutral[400] : 'rgba(255,255,255,0.55)'}
               multiline
               numberOfLines={2}
               maxLength={200}
@@ -490,12 +535,12 @@ export default function TransactionForm() {
           keyboardShouldPersistTaps="always"
           showsVerticalScrollIndicator={false}
         >
-          {/* Dropdown row 1: Category + Payer */}
+          {/* Hàng 1: Danh mục | Ai trả */}
           <View style={styles.pillRow}>
             <View style={styles.pillFlex}>
               <DropdownPicker
                 value={formData.category_id}
-                placeholder="Danh mục"
+                label="Danh mục"
                 options={categoryOptions}
                 onSelect={(id) => setFormData((p) => ({ ...p, category_id: id as number }))}
                 accentColor={accentColor}
@@ -504,7 +549,7 @@ export default function TransactionForm() {
             <View style={styles.pillFlex}>
               <DropdownPicker
                 value={formData.payer}
-                placeholder="Ai trả"
+                label="Ai trả"
                 options={payerOptions}
                 onSelect={(id) => setFormData((p) => ({ ...p, payer: id as Payer }))}
                 accentColor={accentColor}
@@ -512,28 +557,47 @@ export default function TransactionForm() {
             </View>
           </View>
 
-          {/* Dropdown row 2: Source + Date */}
+          {/* Hàng 2: Chi cho ai — full width */}
+          <DropdownPicker
+            value={formData.expense_audience}
+            label="Chi cho ai"
+            options={audienceOptions}
+            onSelect={(id) =>
+              setFormData((p) => ({ ...p, expense_audience: id as ExpenseAudience }))
+            }
+            accentColor={accentColor}
+          />
+
+          {/* Hàng 3: Nguồn tiền | Ngày giao dịch */}
           <View style={styles.pillRow}>
             <View style={styles.pillFlex}>
               <DropdownPicker
                 value={formData.source_id}
-                placeholder="Nguồn tiền"
+                label="Nguồn tiền"
                 options={sourceOptions}
                 onSelect={(id) => setFormData((p) => ({ ...p, source_id: id as number }))}
                 accentColor={accentColor}
               />
             </View>
-            <TouchableOpacity
-              style={[styles.pill, styles.datePill, isBackdated && styles.datePillBackdated]}
-              onPress={() => setShowDatePicker(true)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.pillIcon}>📅</Text>
-              <Text style={[styles.pillText, isBackdated && styles.datePillTextBackdated]} numberOfLines={1}>
-                {formatDateVi(formData.transaction_date)}
-              </Text>
-              <Text style={styles.pillChevron}>▾</Text>
-            </TouchableOpacity>
+            <View style={styles.pillFlex}>
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Ngày giao dịch</Text>
+                <TouchableOpacity
+                  style={[styles.pill, isBackdated && styles.datePillBackdated]}
+                  onPress={() => setShowDatePicker(true)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.pillIcon}>📅</Text>
+                  <Text
+                    style={[styles.pillText, isBackdated && styles.datePillTextBackdated]}
+                    numberOfLines={1}
+                  >
+                    {formatDateVi(formData.transaction_date)}
+                  </Text>
+                  <Text style={styles.pillChevron}>▾</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
         </ScrollView>
 
@@ -550,13 +614,13 @@ export default function TransactionForm() {
         {/* ═══ SAVE BUTTON ═══ */}
         <View style={[styles.bottomBar, { paddingBottom: Spacing.base + screenBottomInset }]}>
           <TouchableOpacity
-            style={[styles.saveBtn, { backgroundColor: accentColor }, isSaving && { opacity: 0.6 }]}
+            style={[styles.saveBtn, isSaving && { opacity: 0.6 }]}
             onPress={handlePrimarySave}
             disabled={isSaving}
             activeOpacity={0.85}
           >
             {isSaving
-              ? <ActivityIndicator size="small" color="#fff" />
+              ? <ActivityIndicator size="small" color={colors.action.primaryText} />
               : <Text style={styles.saveBtnText}>{primaryButtonLabel}</Text>
             }
           </TouchableOpacity>
@@ -585,7 +649,7 @@ export default function TransactionForm() {
                 onChange={handleDateChange}
               />
               <TouchableOpacity
-                style={[styles.doneBtn, { backgroundColor: accentColor, marginHorizontal: Spacing.base }]}
+                style={[styles.doneBtn, { marginHorizontal: Spacing.base }]}
                 onPress={() => setShowDatePicker(false)}
               >
                 <Text style={styles.doneBtnText}>Xong ✓</Text>
@@ -620,15 +684,21 @@ export default function TransactionForm() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: Colors.background.primary },
+function createStyles(
+  colors: ThemeColors,
+  shadows: ThemeShadows,
+  scheme: 'light' | 'dark',
+) {
+  const isDark = scheme === 'dark';
+  return StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: colors.background.primary },
   container: { flex: 1 },
   webDateInput: {
     fontSize: 16,
     padding: 12,
     borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#E5E5E5',
+    borderWidth: 1,
+    borderColor: colors.metallic.platinum,
     width: '100%',
   },
 
@@ -636,7 +706,7 @@ const styles = StyleSheet.create({
   topSection: {
     minHeight: 200,
     overflow: 'hidden',
-    backgroundColor: Colors.pink[400],
+    backgroundColor: colors.pink[400],
     justifyContent: 'space-between',
   },
   bgImage: {
@@ -661,42 +731,33 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: isDark ? colors.background.surface : 'rgba(255,255,255,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  closeBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  typeToggle: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: BorderRadius.full,
-    padding: 3,
-    gap: 2,
-  },
-  typeBtn: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 6,
-    borderRadius: BorderRadius.full,
-  },
-  typeBtnActive: { backgroundColor: 'rgba(255,255,255,0.35)' },
-  typeBtnText: {
-    fontSize: Typography.fontSize.sm,
+  closeBtnText: {
+    color: isDark ? colors.neutral[700] : '#fff',
+    fontSize: 15,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.7)',
   },
-  typeBtnTextActive: { color: '#fff' },
   aiBtn: {
     width: 60,
     height: 30,
     borderRadius: BorderRadius.full,
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: isDark ? colors.background.surface : 'rgba(255,255,255,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: isDark ? colors.metallic.platinum : 'rgba(255,255,255,0.3)',
   },
-  aiBtnLoading: { backgroundColor: 'rgba(255,255,255,0.15)' },
-  aiBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  aiBtnLoading: {
+    backgroundColor: isDark ? colors.background.card : 'rgba(255,255,255,0.15)',
+  },
+  aiBtnText: {
+    color: isDark ? colors.neutral[700] : '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
 
   amountWrap: {
     flexDirection: 'row',
@@ -708,19 +769,24 @@ const styles = StyleSheet.create({
   amountSign: {
     fontSize: Typography.fontSize.xl,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.85)',
+    color: isDark ? colors.pink[400] : 'rgba(255,255,255,0.85)',
   },
   amountValue: {
     fontSize: 46,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: isDark ? colors.pink[400] : '#FFFFFF',
     letterSpacing: -1,
   },
-  amountEmpty: { color: 'rgba(255,255,255,0.45)' },
+  amountEmpty: {
+    color: isDark ? colors.neutral[400] : 'rgba(255,255,255,0.45)',
+  },
   amountUnit: {
     fontSize: Typography.fontSize.xl,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.8)',
+    color: isDark ? colors.pink[400] : 'rgba(255,255,255,0.8)',
+  },
+  amountAccent: {
+    color: isDark ? colors.pink[400] : '#FFFFFF',
   },
 
   noteInputWrap: {
@@ -735,7 +801,7 @@ const styles = StyleSheet.create({
   noteInput: {
     flex: 1,
     fontSize: Typography.fontSize.sm,
-    color: '#FFFFFF',
+    color: isDark ? colors.neutral[600] : '#FFFFFF',
     fontWeight: '500',
     paddingVertical: 4,
     minHeight: 36,
@@ -746,7 +812,8 @@ const styles = StyleSheet.create({
   // ── Body ──
   body: { flex: 1 },
   bodyContent: {
-    padding: Spacing.base,
+    paddingHorizontal: Spacing.base,
+    paddingVertical: Spacing.sm,
     gap: Spacing.md,
   },
 
@@ -754,35 +821,40 @@ const styles = StyleSheet.create({
   pillRow: {
     flexDirection: 'row',
     gap: Spacing.sm,
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
-  pillFlex: { flex: 1 },
+  pillFlex: { flex: 1, minWidth: 0 },
+  field: { gap: 6 },
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.neutral[500],
+  },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: Colors.background.surface,
+    minHeight: 40,
+    backgroundColor: colors.background.surface,
     borderRadius: BorderRadius.full,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
-    borderWidth: 1.5,
-    borderColor: Colors.neutral[200],
-    ...Shadows.soft,
+    borderWidth: 1,
+    borderColor: colors.metallic.platinum,
   },
-  datePill: {
-    flex: 1,
-    borderColor: Colors.neutral[200],
+  pillSelected: {
+    borderColor: colors.action.selectedBorder,
   },
   datePillBackdated: {
-    borderColor: Colors.pink[300],
-    backgroundColor: Colors.pink[50],
+    borderColor: colors.lavender[300],
+    backgroundColor: colors.lavender[50],
   },
   datePillTextBackdated: {
-    color: Colors.pink[500],
+    color: colors.lavender[400],
     fontWeight: '700',
   },
   dateSheetWeb: {
-    backgroundColor: Colors.background.surface,
+    backgroundColor: colors.background.surface,
     borderRadius: BorderRadius.xl,
     padding: Spacing.base,
     marginHorizontal: Spacing['2xl'],
@@ -795,12 +867,12 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: Typography.fontSize.sm,
     fontWeight: '600',
-    color: Colors.neutral[700],
+    color: colors.neutral[700],
   },
-  pillPlaceholder: { color: Colors.neutral[400] },
+  pillPlaceholder: { color: colors.neutral[400] },
   pillChevron: {
     fontSize: 11,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
     marginLeft: 2,
   },
 
@@ -809,25 +881,30 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     paddingHorizontal: Spacing.base,
     paddingTop: Spacing.sm,
-    backgroundColor: Colors.background.primary,
+    backgroundColor: colors.background.primary,
     borderTopWidth: 1,
-    borderTopColor: Colors.neutral[200],
+    borderTopColor: colors.neutral[200],
   },
   doneBtn: {
     paddingVertical: Spacing.md,
     borderRadius: BorderRadius.lg,
     alignItems: 'center',
+    backgroundColor: colors.action.primaryBackground,
   },
-  doneBtnText: { color: '#fff', fontSize: Typography.fontSize.base, fontWeight: '700' },
+  doneBtnText: {
+    color: colors.action.primaryText,
+    fontSize: Typography.fontSize.base,
+    fontWeight: '700',
+  },
 
   // Save
   bottomBar: {
     paddingHorizontal: Spacing.base,
     paddingBottom: Spacing.base,
     paddingTop: Spacing.sm,
-    backgroundColor: Colors.background.primary,
+    backgroundColor: colors.background.primary,
     borderTopWidth: 1,
-    borderTopColor: Colors.neutral[200],
+    borderTopColor: colors.neutral[200],
   },
   saveBtn: {
     alignSelf: 'stretch',
@@ -837,10 +914,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: Spacing.base,
     borderRadius: BorderRadius.xl,
-    ...Shadows.medium,
+    backgroundColor: colors.action.primaryBackground,
+    ...shadows.medium,
   },
   saveBtnText: {
-    color: '#FFFFFF',
+    color: colors.action.primaryText,
     fontSize: Typography.fontSize.md,
     fontWeight: '800',
     letterSpacing: 0.3,
@@ -849,20 +927,20 @@ const styles = StyleSheet.create({
   // Bottom sheet (nội dung bên trong BottomSheetModal)
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: colors.background.overlay,
   },
   sheetHandle: {
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Colors.neutral[300],
+    backgroundColor: colors.metallic.whiteGold,
     alignSelf: 'center',
     marginBottom: Spacing.md,
   },
   sheetTitle: {
     fontSize: Typography.fontSize.base,
     fontWeight: '700',
-    color: Colors.neutral[600],
+    color: colors.neutral[600],
     paddingHorizontal: Spacing.base,
     marginBottom: Spacing.sm,
   },
@@ -873,9 +951,9 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     paddingVertical: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: colors.neutral[100],
   },
-  sheetOptionActive: { backgroundColor: Colors.pink[50] },
+  sheetOptionActive: { backgroundColor: colors.action.selectedBackground },
   sheetOptionIcon: {
     width: 40,
     height: 40,
@@ -887,12 +965,13 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: Typography.fontSize.base,
     fontWeight: '500',
-    color: Colors.neutral[700],
+    color: colors.neutral[700],
   },
-  sheetOptionTextActive: { fontWeight: '700', color: Colors.pink[500] },
+  sheetOptionTextActive: { fontWeight: '700', color: colors.action.selectedText },
   sheetCheck: {
     fontSize: Typography.fontSize.base,
-    color: Colors.pink[400],
+    color: colors.action.selectedText,
     fontWeight: '800',
   },
 });
+}

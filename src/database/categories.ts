@@ -16,6 +16,14 @@ export async function getAllCategories(): Promise<Category[]> {
   );
 }
 
+/** Lấy danh mục chi tiêu (chi + both; loại thu legacy) */
+export async function getExpenseCategories(): Promise<Category[]> {
+  const db = await getDatabase();
+  return await db.getAllAsync<Category>(
+    `SELECT * FROM categories WHERE type = 'chi' OR type = 'both' ORDER BY name;`,
+  );
+}
+
 /** Lấy danh mục theo loại giao dịch */
 export async function getCategoriesByType(type: 'thu' | 'chi'): Promise<Category[]> {
   const db = await getDatabase();
@@ -182,6 +190,7 @@ export async function updateStreak(): Promise<void> {
     `SELECT DISTINCT date(created_at) as d
      FROM transactions
      WHERE status = '${TRANSACTION_STATUS_COMPLETE}'
+       AND type = 'chi'
      ORDER BY d DESC;`,
   );
 

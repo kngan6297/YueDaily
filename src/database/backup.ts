@@ -8,6 +8,8 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
 import { getDatabase } from './initDb';
+import { normalizeExpenseAudience } from './transactions';
+import type { ExpenseAudience } from '../types';
 
 export interface BackupData {
   appVersion: string;
@@ -49,6 +51,7 @@ interface ValidTransaction {
   category_id: number | null;
   source_id: number | null;
   payer: string;
+  expense_audience: ExpenseAudience;
   image_uri: string | null;
   location: string | null;
   note: string | null;
@@ -172,6 +175,14 @@ function validateTransaction(row: unknown, index: number): ValidTransaction {
   const createdAt = assertString(row.created_at, `${p}.created_at`);
   if (!CREATED_AT_RE.test(createdAt)) fail(`${p}.created_at`);
 
+  // Backup cũ thiếu field → unspecified (không crash)
+  let expenseAudience: ExpenseAudience = 'unspecified';
+  if (row.expense_audience !== undefined && row.expense_audience !== null) {
+    const rawAudience = assertString(row.expense_audience, `${p}.expense_audience`);
+    expenseAudience = normalizeExpenseAudience(rawAudience);
+    if (rawAudience !== expenseAudience) fail(`${p}.expense_audience`);
+  }
+
   return {
     id: assertIntegerId(row.id, `${p}.id`),
     amount,
@@ -179,6 +190,7 @@ function validateTransaction(row: unknown, index: number): ValidTransaction {
     category_id: assertNullableId(row.category_id, `${p}.category_id`),
     source_id: assertNullableId(row.source_id, `${p}.source_id`),
     payer: assertString(row.payer, `${p}.payer`),
+    expense_audience: expenseAudience,
     image_uri: assertNullableString(row.image_uri, `${p}.image_uri`),
     location: assertNullableString(row.location, `${p}.location`),
     note: assertNullableString(row.note, `${p}.note`),
@@ -384,9 +396,9 @@ export async function importBackup(): Promise<RestoreResult> {
       for (const tx of backup.transactions) {
         await db.runAsync(
           `INSERT INTO transactions
-             (id, amount, type, category_id, source_id, payer,
+             (id, amount, type, category_id, source_id, payer, expense_audience,
               image_uri, location, note, status, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
           [
             tx.id,
             tx.amount,
@@ -394,6 +406,7 @@ export async function importBackup(): Promise<RestoreResult> {
             tx.category_id,
             tx.source_id,
             tx.payer,
+            tx.expense_audience,
             tx.image_uri,
             tx.location,
             tx.note,

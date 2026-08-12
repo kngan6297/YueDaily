@@ -12,7 +12,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BorderRadius, Colors, Shadows, Spacing, Typography } from '../../constants/theme';
+import { BorderRadius, Spacing, ThemeColors, ThemeShadows, Typography } from '../../constants/theme';
+import { useAppTheme } from '../../context/ThemeContext';
 import { BottomSheetModal } from '../../components/ui/BottomSheetModal';
 import { getAllPayers, updateStreak } from '../../database/categories';
 import {
@@ -22,6 +23,8 @@ import {
 } from '../../database/transactions';
 import { useStreak } from '../../hooks/useStreak';
 import type { Transaction } from '../../types';
+import { EXPENSE_AUDIENCE_LABELS } from '../../types';
+import { formatDateVi } from '../../utils/date';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const CELL_SIZE = Math.floor((SCREEN_W - Spacing.base * 2 - Spacing.xs * 6) / 7);
@@ -45,6 +48,8 @@ const getGreeting = () => {
 };
 
 export default function HomeScreen() {
+  const { colors, shadows } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors, shadows), [colors, shadows]);
   const router = useRouter();
   const now = new Date();
   const [calMonth, setCalMonth] = useState(now.getMonth() + 1);
@@ -54,7 +59,7 @@ export default function HomeScreen() {
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [monthTxns, setMonthTxns] = useState<TxnWithMeta[]>([]);
-  const [monthSummary, setMonthSummary] = useState({ chi: 0, thu: 0 });
+  const [monthSummary, setMonthSummary] = useState({ chi: 0 });
   const [payers, setPayers] = useState<Array<{ name: string; icon: string; color: string }>>([]);
 
   const loadData = useCallback(async () => {
@@ -86,7 +91,7 @@ export default function HomeScreen() {
   );
 
   const payerColor = useCallback((name: string) => {
-    return payers.find((p) => p.name === name)?.color ?? Colors.pink[300];
+    return payers.find((p) => p.name === name)?.color ?? colors.pink[300];
   }, [payers]);
 
   // --- Calendar helpers ---
@@ -98,9 +103,10 @@ export default function HomeScreen() {
   // Dùng string slice thay vì new Date() để tránh Hermes parse sai timezone
   // với format "YYYY-MM-DD HH:MM:SS" của SQLite localtime
   const txnsByDay = useMemo(() => {
-    const source = activeFilter === 'all'
+    const source = (activeFilter === 'all'
       ? monthTxns
-      : monthTxns.filter((t) => t.payer === activeFilter);
+      : monthTxns.filter((t) => t.payer === activeFilter)
+    ).filter((t) => t.type === 'chi');
     const map: Record<number, TxnWithMeta[]> = {};
     for (const t of source) {
       const dateStr = t.created_at.slice(0, 10); // "YYYY-MM-DD"
@@ -118,6 +124,18 @@ export default function HomeScreen() {
     if (!selectedDay) return [];
     return txnsByDay[selectedDay] ?? [];
   }, [txnsByDay, selectedDay]);
+
+  const selectedDaySummary = useMemo(() => ({
+    totalChi: selectedTxns.reduce((s, t) => s + t.amount, 0),
+    count: selectedTxns.length,
+  }), [selectedTxns]);
+
+  const selectedDayLabel = useMemo(() => {
+    if (!selectedDay) return '';
+    const m = String(calMonth).padStart(2, '0');
+    const d = String(selectedDay).padStart(2, '0');
+    return formatDateVi(`${calYear}-${m}-${d}`);
+  }, [selectedDay, calMonth, calYear]);
 
   // Month nav
   const prevMonth = () => {
@@ -184,7 +202,6 @@ export default function HomeScreen() {
     const isSelected = day === selectedDay;
     const imgTxn = txns.find((t) => t.image_uri);
     const hasTxns = txns.length > 0;
-    const totalAmt = txns.reduce((s, t) => s + (t.type === 'chi' ? t.amount : 0), 0);
 
     return (
       <TouchableOpacity
@@ -235,8 +252,7 @@ export default function HomeScreen() {
   };
 
   const renderTxn = (item: TxnWithMeta, withActions = false) => {
-    const isIncome = item.type === 'thu';
-    const bgColor = item.category_color ? item.category_color + '22' : Colors.pink[100];
+    const bgColor = item.category_color ? item.category_color + '22' : colors.pink[100];
     return (
       <View>
         <View style={styles.txnRow}>
@@ -245,21 +261,24 @@ export default function HomeScreen() {
               <Image source={{ uri: item.image_uri }} style={styles.txnThumb} />
             ) : (
               <Text style={styles.txnIconEmoji}>
-                {item.category_icon ?? (isIncome ? '💰' : '💸')}
+                {item.category_icon ?? '💸'}
               </Text>
             )}
           </View>
           <View style={styles.txnInfo}>
             <Text style={styles.txnName} numberOfLines={1}>
-              {item.category_name ?? (isIncome ? 'Thu nhập' : 'Chi tiêu')}
+              {item.category_name ?? 'Chi tiêu'}
             </Text>
             <Text style={styles.txnNote} numberOfLines={1}>
               {item.note || item.location || item.payer}
             </Text>
+            <Text style={styles.txnAudience} numberOfLines={1}>
+              Chi cho: {EXPENSE_AUDIENCE_LABELS[item.expense_audience] ?? 'Chưa phân loại'}
+            </Text>
           </View>
           <View style={styles.txnRight}>
-            <Text style={[styles.txnAmount, isIncome ? styles.incomeText : styles.expenseText]}>
-              {isIncome ? '+' : '-'}{fmt(item.amount)}đ
+            <Text style={[styles.txnAmount, styles.expenseText]}>
+              -{fmt(item.amount)}đ
             </Text>
             <View style={[styles.payerChip, { backgroundColor: payerColor(item.payer) + '33' }]}>
               <Text style={styles.payerChipText}>{item.payer}</Text>
@@ -303,12 +322,8 @@ export default function HomeScreen() {
         </View>
         <View style={styles.summaryCards}>
           <View style={[styles.summaryCard, styles.summaryCardChi]}>
-            <Text style={styles.summaryCardLabel}>Chi</Text>
+            <Text style={styles.summaryCardLabel}>Tổng chi tháng này</Text>
             <Text style={[styles.summaryCardAmt, styles.expenseText]}>{fmt(monthSummary.chi)}đ</Text>
-          </View>
-          <View style={[styles.summaryCard, styles.summaryCardThu]}>
-            <Text style={styles.summaryCardLabel}>Thu</Text>
-            <Text style={[styles.summaryCardAmt, styles.incomeText]}>{fmt(monthSummary.thu)}đ</Text>
           </View>
         </View>
       </View>
@@ -364,7 +379,7 @@ export default function HomeScreen() {
 
           {/* Calendar grid */}
           {isLoading ? (
-            <ActivityIndicator color={Colors.pink[400]} style={{ paddingVertical: 40 }} />
+            <ActivityIndicator color={colors.blue[400]} style={{ paddingVertical: 40 }} />
           ) : (
             <View style={styles.calGrid}>
               {calCells.map((day, idx) => renderDayCell(day, idx))}
@@ -382,17 +397,23 @@ export default function HomeScreen() {
       >
           <View style={styles.modalHandle} />
 
-          {/* Modal header */}
+          {/* Modal header + daily summary */}
           <View style={styles.modalHeader}>
-            <View>
-              <Text style={styles.modalTitle}>
-                Ngày {selectedDay}/{calMonth}
-              </Text>
-              <Text style={styles.modalSubtitle}>
-                {selectedTxns.length > 0
-                  ? `${selectedTxns.length} giao dịch`
-                  : 'Chưa có giao dịch'}
-              </Text>
+            <View style={styles.modalHeaderMain}>
+              <Text style={styles.modalTitle}>{selectedDayLabel}</Text>
+              <View style={styles.daySummaryRow}>
+                <View style={styles.daySummaryItem}>
+                  <Text style={styles.daySummaryLabel}>Tổng chi</Text>
+                  <Text style={[styles.daySummaryAmt, styles.expenseText]}>
+                    {fmt(selectedDaySummary.totalChi)}đ
+                  </Text>
+                </View>
+                <View style={styles.daySummaryDivider} />
+                <View style={styles.daySummaryItem}>
+                  <Text style={styles.daySummaryLabel}>Giao dịch</Text>
+                  <Text style={styles.daySummaryAmt}>{selectedDaySummary.count}</Text>
+                </View>
+              </View>
             </View>
             <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowDayModal(false)}>
               <Text style={styles.modalCloseText}>✕</Text>
@@ -446,8 +467,9 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background.primary },
+function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
+  return StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background.primary },
   scroll: { paddingBottom: 8 },
 
   header: {
@@ -459,63 +481,54 @@ const styles = StyleSheet.create({
   greeting: {
     fontSize: Typography.fontSize.lg,
     fontWeight: '800',
-    color: Colors.neutral[700],
+    color: colors.neutral[700],
   },
   streakBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: Colors.yellow[100],
+    backgroundColor: colors.yellow[100],
     borderRadius: BorderRadius.full,
     paddingHorizontal: Spacing.md,
     paddingVertical: 3,
-    borderWidth: 1.5,
-    borderColor: Colors.yellow[300],
+    borderWidth: 1,
+    borderColor: colors.yellow[300],
     marginTop: 4,
   },
   streakText: {
     fontSize: Typography.fontSize.xs,
     fontWeight: '700',
-    color: Colors.neutral[600],
+    color: colors.neutral[600],
   },
   summaryCards: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
     marginTop: Spacing.xs,
   },
   summaryCard: {
-    flex: 1,
     borderRadius: BorderRadius.xl,
-    padding: Spacing.md,
-    gap: 3,
-    ...Shadows.soft,
+    paddingHorizontal: Spacing.base,
+    paddingVertical: Spacing.md,
+    gap: 2,
   },
   summaryCardChi: {
-    backgroundColor: Colors.pink[50],
-    borderWidth: 1.5,
-    borderColor: Colors.pink[100],
-  },
-  summaryCardThu: {
-    backgroundColor: Colors.mint[50],
-    borderWidth: 1.5,
-    borderColor: Colors.mint[100],
+    backgroundColor: colors.background.surface,
+    borderWidth: 1,
+    borderColor: colors.metallic.platinum,
   },
   summaryCardLabel: {
     fontSize: Typography.fontSize.xs,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
     fontWeight: '600',
   },
   summaryCardAmt: {
-    fontSize: Typography.fontSize.md,
+    fontSize: Typography.fontSize.xl,
     fontWeight: '800',
   },
-  expenseText: { color: Colors.pink[500] },
-  incomeText: { color: Colors.mint[400] },
+  expenseText: { color: colors.pink[500] },
 
   // Filter
   filterRow: {
     flexDirection: 'row',
     marginHorizontal: Spacing.base,
     marginBottom: Spacing.md,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: colors.neutral[100],
     borderRadius: BorderRadius.xl,
     padding: 4,
     gap: 4,
@@ -533,29 +546,30 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   filterTabActive: {
-    backgroundColor: Colors.background.surface,
-    ...Shadows.soft,
+    backgroundColor: colors.action.selectedBackground,
+    borderWidth: 1,
+    borderColor: colors.action.selectedBorder,
+    ...shadows.soft,
   },
   filterTabText: {
     fontSize: Typography.fontSize.xs,
     fontWeight: '600',
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
   },
   filterTabTextActive: {
-    color: Colors.pink[500],
+    color: colors.action.selectedText,
   },
 
   // Calendar
   calendarCard: {
     marginHorizontal: Spacing.base,
-    backgroundColor: Colors.background.card,
+    backgroundColor: colors.background.surface,
     borderRadius: BorderRadius['2xl'],
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.xs,
-    borderWidth: 1.5,
-    borderColor: Colors.neutral[200],
+    borderWidth: 1,
+    borderColor: colors.metallic.platinum,
     marginBottom: Spacing.base,
-    ...Shadows.soft,
   },
   calHeader: {
     flexDirection: 'row',
@@ -573,14 +587,14 @@ const styles = StyleSheet.create({
   calArrowDisabled: { opacity: 0.3 },
   calArrowText: {
     fontSize: 26,
-    color: Colors.pink[400],
+    color: colors.blue[500],
     fontWeight: '600',
   },
-  calArrowTextDisabled: { color: Colors.neutral[400] },
+  calArrowTextDisabled: { color: colors.neutral[400] },
   calMonthLabel: {
     fontSize: Typography.fontSize.base,
     fontWeight: '700',
-    color: Colors.neutral[700],
+    color: colors.neutral[700],
     textTransform: 'capitalize',
   },
   calDayHeaders: {
@@ -590,10 +604,10 @@ const styles = StyleSheet.create({
   dayHeaderText: {
     fontSize: Typography.fontSize.xs,
     fontWeight: '700',
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
     textAlign: 'center',
   },
-  dayHeaderSun: { color: Colors.pink[400] },
+  dayHeaderSun: { color: colors.blue[400] },
 
   calGrid: {
     flexDirection: 'row',
@@ -612,23 +626,25 @@ const styles = StyleSheet.create({
     width: CELL_SIZE - 6,
     height: CELL_SIZE - 6,
     borderRadius: (CELL_SIZE - 6) / 2,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
   dayCircleHasTxn: {
-    borderWidth: 2.5,
-    borderColor: Colors.pink[200],
+    backgroundColor: colors.background.card,
+    borderWidth: 1.5,
+    borderColor: colors.action.selectedBorder,
   },
   dayCircleSelected: {
-    borderColor: Colors.pink[400],
-    borderWidth: 2.5,
-    ...Shadows.soft,
+    borderColor: colors.action.selectedBorder,
+    borderWidth: 2,
+    backgroundColor: colors.action.selectedBackground,
   },
   dayCircleToday: {
-    borderColor: Colors.lavender[300],
-    borderWidth: 2,
+    borderColor: colors.lavender[300],
+    borderWidth: 1.5,
+    backgroundColor: colors.lavender[50],
   },
   dayThumb: {
     width: '100%',
@@ -642,7 +658,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 1,
     right: 1,
-    backgroundColor: Colors.pink[400],
+    backgroundColor: colors.action.primaryBackground,
     borderRadius: 6,
     paddingHorizontal: 3,
     paddingVertical: 1,
@@ -650,26 +666,26 @@ const styles = StyleSheet.create({
   dayBadgeText: {
     fontSize: 8,
     fontWeight: '800',
-    color: '#fff',
+    color: colors.action.primaryText,
   },
   dayNum: {
     fontSize: 10,
     fontWeight: '600',
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
   },
   dayNumToday: {
-    color: Colors.lavender[400],
+    color: colors.lavender[400],
     fontWeight: '800',
   },
   dayNumSelected: {
-    color: Colors.pink[500],
+    color: colors.action.selectedText,
     fontWeight: '800',
   },
   todayDot: {
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Colors.lavender[300],
+    backgroundColor: colors.action.primaryBackground,
     position: 'absolute',
     bottom: 2,
   },
@@ -679,42 +695,65 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Colors.neutral[300],
+    backgroundColor: colors.metallic.whiteGold,
     alignSelf: 'center',
     marginBottom: Spacing.md,
   },
   modalHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.base,
     paddingBottom: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.neutral[100],
+    borderBottomColor: colors.neutral[100],
+    gap: Spacing.sm,
   },
+  modalHeaderMain: { flex: 1, gap: Spacing.sm },
   modalTitle: {
     fontSize: Typography.fontSize.md,
     fontWeight: '800',
-    color: Colors.neutral[700],
+    color: colors.neutral[700],
   },
-  modalSubtitle: {
+  daySummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.pink[50],
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.pink[100],
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+  },
+  daySummaryItem: { flex: 1, gap: 2 },
+  daySummaryDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: colors.pink[200],
+    marginHorizontal: Spacing.sm,
+  },
+  daySummaryLabel: {
     fontSize: Typography.fontSize.xs,
-    color: Colors.neutral[400],
-    fontWeight: '500',
-    marginTop: 2,
+    color: colors.neutral[400],
+    fontWeight: '600',
+  },
+  daySummaryAmt: {
+    fontSize: Typography.fontSize.base,
+    fontWeight: '800',
+    color: colors.neutral[700],
   },
   modalCloseBtn: {
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: colors.neutral[100],
     alignItems: 'center',
     justifyContent: 'center',
   },
   modalCloseText: {
     fontSize: 13,
     fontWeight: '700',
-    color: Colors.neutral[500],
+    color: colors.neutral[500],
   },
   modalScroll: { flexGrow: 0 },
   modalScrollContent: {
@@ -728,34 +767,33 @@ const styles = StyleSheet.create({
   emptyStateIcon: { fontSize: 40 },
   emptyStateText: {
     fontSize: Typography.fontSize.sm,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
     fontWeight: '500',
   },
   modalFooter: {
     paddingHorizontal: Spacing.base,
     paddingVertical: Spacing.md,
     borderTopWidth: 1,
-    borderTopColor: Colors.neutral[100],
+    borderTopColor: colors.neutral[100],
   },
   modalAddBtn: {
-    backgroundColor: Colors.pink[400],
+    backgroundColor: colors.action.primaryBackground,
     borderRadius: BorderRadius.xl,
     paddingVertical: Spacing.md,
     alignItems: 'center',
-    ...Shadows.soft,
+    ...shadows.soft,
   },
   modalAddBtnText: {
     fontSize: Typography.fontSize.base,
     fontWeight: '700',
-    color: '#fff',
+    color: colors.action.primaryText,
   },
   txnCard: {
-    backgroundColor: Colors.background.card,
+    backgroundColor: colors.background.surface,
     borderRadius: BorderRadius.xl,
-    borderWidth: 1.5,
-    borderColor: Colors.neutral[200],
+    borderWidth: 1,
+    borderColor: colors.metallic.platinum,
     overflow: 'hidden',
-    ...Shadows.soft,
   },
   txnRow: {
     flexDirection: 'row',
@@ -765,7 +803,7 @@ const styles = StyleSheet.create({
   },
   txnDivider: {
     height: 1,
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: colors.neutral[100],
     marginLeft: 52 + Spacing.base,
   },
   txnIcon: {
@@ -793,37 +831,43 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: BorderRadius.lg,
     alignItems: 'center',
-    backgroundColor: Colors.neutral[100],
+    backgroundColor: colors.neutral[100],
   },
   txnEditBtnText: {
     fontSize: Typography.fontSize.xs,
     fontWeight: '700',
-    color: Colors.neutral[600],
+    color: colors.neutral[600],
   },
   txnDeleteBtn: {
     paddingVertical: 7,
     paddingHorizontal: Spacing.lg,
     borderRadius: BorderRadius.lg,
     alignItems: 'center',
-    backgroundColor: Colors.pink[50],
+    backgroundColor: colors.pink[50],
     borderWidth: 1,
-    borderColor: Colors.pink[100],
+    borderColor: colors.pink[100],
   },
   txnDeleteBtnText: {
     fontSize: Typography.fontSize.xs,
     fontWeight: '700',
-    color: Colors.pink[500],
+    color: colors.pink[500],
   },
   txnInfo: { flex: 1 },
   txnName: {
     fontSize: Typography.fontSize.sm,
     fontWeight: '600',
-    color: Colors.neutral[700],
+    color: colors.neutral[700],
   },
   txnNote: {
     fontSize: Typography.fontSize.xs,
-    color: Colors.neutral[400],
+    color: colors.neutral[400],
     marginTop: 2,
+  },
+  txnAudience: {
+    fontSize: 10,
+    color: colors.neutral[400],
+    marginTop: 1,
+    fontWeight: '600',
   },
   txnRight: { alignItems: 'flex-end', gap: 4 },
   txnAmount: {
@@ -835,11 +879,12 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: BorderRadius.full,
   },
-  payerWife: { backgroundColor: Colors.pink[100] },
-  payerHusband: { backgroundColor: Colors.mint[100] },
+  payerWife: { backgroundColor: colors.pink[100] },
+  payerHusband: { backgroundColor: colors.mint[100] },
   payerChipText: {
     fontSize: 9,
     fontWeight: '700',
-    color: Colors.neutral[600],
+    color: colors.neutral[600],
   },
 });
+}

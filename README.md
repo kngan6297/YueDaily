@@ -1,9 +1,9 @@
 # YueDaily 🌸
 
-> Local-first app quản lý thu chi gia đình · Expo SDK 54 · SQLite · AI quét hoá đơn
+> Local-first app theo dõi chi tiêu gia đình · Expo SDK 54 · SQLite · AI quét hoá đơn
 
-**Đặc tả sản phẩm (PRD):** [`APP_SPECIFICATION.md`](./APP_SPECIFICATION.md) — *app làm gì, cho ai, phạm vi tính năng*
-**Tài liệu này** — *cách clone, chạy, build và hiểu codebase*
+**Đặc tả sản phẩm (PRD):** [`APP_SPECIFICATION.md`](./APP_SPECIFICATION.md) — _app làm gì, cho ai, phạm vi tính năng_
+**Tài liệu này** — _cách clone, chạy, build và hiểu codebase_
 
 ---
 
@@ -21,11 +21,11 @@ echo "EXPO_PUBLIC_GEMINI_API_KEY=AIzaSyxxxxxxxx" >> .env
 npm start
 ```
 
-| Yêu cầu | Ghi chú |
-|---------|---------|
-| Node.js ≥ 18 | |
-| API key | [Groq](https://console.groq.com) hoặc [Gemini](https://aistudio.google.com) |
-| EAS CLI | Chỉ khi build APK: `npm i -g eas-cli` |
+| Yêu cầu      | Ghi chú                                                                     |
+| ------------ | --------------------------------------------------------------------------- |
+| Node.js ≥ 18 |                                                                             |
+| API key      | [Groq](https://console.groq.com) hoặc [Gemini](https://aistudio.google.com) |
+| EAS CLI      | Chỉ khi build APK: `npm i -g eas-cli`                                       |
 
 > Camera im lặng (tắt shutter) cần **EAS native build** — Expo Go không đủ.
 
@@ -45,17 +45,17 @@ npx eas-cli build --platform android --profile production # Play Store
 
 ## Tech stack
 
-| Layer | Thư viện |
-|-------|-----------|
-| Framework | Expo 54 · RN 0.81 · React 19 |
-| Routing | Expo Router 6 (`src/app`) |
-| DB | expo-sqlite 16 · WAL · FK ON |
-| Camera | expo-camera 17 · image-picker · image-manipulator |
-| AI | Groq API → Gemini 2.5 Flash-Lite → Gemini 2.5 Flash |
-| Charts | react-native-svg 15 |
-| Backup | expo-file-system · sharing · document-picker |
-| State | Hooks thuần (`useState`, `useFocusEffect`) |
-| Language | TypeScript strict |
+| Layer     | Thư viện                                            |
+| --------- | --------------------------------------------------- |
+| Framework | Expo 54 · RN 0.81 · React 19                        |
+| Routing   | Expo Router 6 (`src/app`)                           |
+| DB        | expo-sqlite 16 · WAL · FK ON                        |
+| Camera    | expo-camera 17 · image-picker · image-manipulator   |
+| AI        | Groq API → Gemini 2.5 Flash-Lite → Gemini 2.5 Flash |
+| Charts    | react-native-svg 15                                 |
+| Backup    | expo-file-system · sharing · document-picker        |
+| State     | Hooks thuần (`useState`, `useFocusEffect`)          |
+| Language  | TypeScript strict                                   |
 
 ---
 
@@ -72,7 +72,7 @@ YueDaily/
 │   │       ├── _layout.tsx       # Tab bar + FAB camera
 │   │       ├── index.tsx         # Lịch tháng
 │   │       ├── reports.tsx       # Thống kê
-│   │       ├── accounts.tsx      # Số dư theo nguồn
+│   │       ├── accounts.tsx      # Chi theo nguồn tiền
 │   │       ├── settings.tsx      # CRUD + backup
 │   │       └── camera-tab.tsx    # Redirect → /camera
 │   ├── components/
@@ -142,43 +142,43 @@ Database: `yozakura.db`
 
 ### `transactions`
 
-| Cột | Kiểu | Ghi chú |
-|-----|------|---------|
-| `id` | INTEGER PK | |
-| `amount` | INTEGER | VNĐ |
-| `type` | TEXT | `chi` \| `thu` |
-| `category_id` | INTEGER FK | nullable khi xoá danh mục |
-| `source_id` | INTEGER FK | nullable khi xoá nguồn |
-| `payer` | TEXT | Tên người trả (text, sync khi rename payer) |
-| `image_uri` | TEXT | |
-| `location` | TEXT | legacy |
-| `note` | TEXT | Mô tả |
-| `status` | TEXT | `complete` \| `pending` |
-| `created_at` | TEXT | `datetime('now','localtime')` |
+| Cột           | Kiểu       | Ghi chú                                     |
+| ------------- | ---------- | ------------------------------------------- |
+| `id`          | INTEGER PK |                                             |
+| `amount`      | INTEGER    | VNĐ                                         |
+| `type`        | TEXT       | `chi` \| `thu` (legacy; app chỉ ghi `chi`)  |
+| `category_id` | INTEGER FK | nullable khi xoá danh mục                   |
+| `source_id`   | INTEGER FK | nullable khi xoá nguồn                      |
+| `payer`       | TEXT       | Tên người trả (text, sync khi rename payer) |
+| `image_uri`   | TEXT       |                                             |
+| `location`    | TEXT       | legacy                                      |
+| `note`        | TEXT       | Mô tả                                       |
+| `status`      | TEXT       | `complete` \| `pending`                     |
+| `created_at`  | TEXT       | `datetime('now','localtime')`               |
 
 Index: `created_at`, `status`.
 
 ### `categories`
 
-| Cột | Kiểu |
-|-----|------|
-| `id`, `name`, `type` (`chi`\|`thu`\|`both`), `icon`, `color` | |
+| Cột                                                          | Kiểu |
+| ------------------------------------------------------------ | ---- |
+| `id`, `name`, `type` (`chi`\|`thu`\|`both`), `icon`, `color` |      |
 
-Seed: 12 Chi + 5 Thu (xem `src/database/initDb.ts`).
+Seed: 12 danh mục chi tiêu (xem `src/database/initDb.ts`). Cột `type` giữ cho backup cũ.
 
 ### `sources`
 
-| Cột | Kiểu |
-|-----|------|
-| `id`, `name` UNIQUE | |
+| Cột                 | Kiểu |
+| ------------------- | ---- |
+| `id`, `name` UNIQUE |      |
 
 Seed: Tiền mặt, Chuyển khoản.
 
 ### `payers`
 
-| Cột | Kiểu |
-|-----|------|
-| `id`, `name` UNIQUE, `icon`, `color` | |
+| Cột                                  | Kiểu |
+| ------------------------------------ | ---- |
+| `id`, `name` UNIQUE, `icon`, `color` |      |
 
 Seed: Vợ 👩‍🦰, Chồng 👨‍🦱.
 
@@ -209,38 +209,38 @@ EXPO_PUBLIC_GROQ_API_KEY=gsk_...
 EXPO_PUBLIC_GEMINI_API_KEY=AIzaSy...
 ```
 
-Fallback AsyncStorage: `yozakura_groq_api_key`, `yozakura_gemini_api_key`.
+Cấu hình qua `.env` (dev) hoặc biến môi trường EAS (build). Không có màn quản lý API key trong app; key không được backup.
 
 ### Output type
 
 ```typescript
 interface GeminiAnalysisResult {
-  is_receipt?: boolean;  // false → amount = 0, nhập tay
+  is_receipt?: boolean; // false → amount = 0, nhập tay
   amount?: number;
   description?: string;
   category?: string;
-  type?: 'chi' | 'thu';
 }
 ```
 
 ### Error handling
 
-| Tình huống | Hành động |
-|------------|-----------|
-| Mất mạng | Dừng chain |
-| Timeout 20s | Skip provider |
-| 413 (Groq) | Skip → Gemini |
-| 401/403 | Dừng, báo key sai |
-| 429/503 | Retry 1× sau 3.5s, rồi skip |
-| base64 > 4MB | Reject trước khi gọi |
+| Tình huống   | Hành động                   |
+| ------------ | --------------------------- |
+| Mất mạng     | Dừng chain                  |
+| Timeout 20s  | Skip provider               |
+| 413 (Groq)   | Skip → Gemini               |
+| 401/403      | Dừng, báo key sai           |
+| 429/503      | Retry 1× sau 3.5s, rồi skip |
+| base64 > 4MB | Reject trước khi gọi        |
 
 ### Nén ảnh (form.tsx)
 
 ```typescript
-await ImageManipulator.manipulateAsync(uri,
-  [{ resize: { width: 1024 } }],
-  { compress: 0.7, format: SaveFormat.JPEG, base64: true }
-);
+await ImageManipulator.manipulateAsync(uri, [{ resize: { width: 1024 } }], {
+  compress: 0.7,
+  format: SaveFormat.JPEG,
+  base64: true,
+});
 ```
 
 ---
@@ -249,13 +249,13 @@ await ImageManipulator.manipulateAsync(uri,
 
 File: `src/constants/theme.ts` · Pastel sakura — **không dùng đỏ/xanh thô**.
 
-| Token | Hex | Dùng cho |
-|-------|-----|----------|
-| pink[400] | `#FFB7C5` | Nút chính, chi |
-| pink[500] | `#FF8FA8` | Chi tiêu |
-| mint[400] | `#4BBFA0` | Thu nhập |
-| lavender[300] | `#C5B0E8` | Accent |
-| background.primary | `#FFFBFB` | Nền app |
+| Token              | Hex       | Dùng cho       |
+| ------------------ | --------- | -------------- |
+| pink[400]          | `#FFB7C5` | Nút chính, chi |
+| pink[500]          | `#FF8FA8` | Chi tiêu       |
+| mint[400]          | `#4BBFA0` | Accent phụ (legacy palette) |
+| lavender[300]      | `#C5B0E8` | Accent         |
+| background.primary | `#FFFBFB` | Nền app        |
 
 ---
 
@@ -270,7 +270,7 @@ File: `src/constants/theme.ts` · Pastel sakura — **không dùng đỏ/xanh th
 7. **Tab bar custom** — `TAB_BAR_CONTENT_HEIGHT` (62) + safe area; FAB giữa → `/camera`.
 8. **Master data** — CRUD payers/sources/categories trong Settings; form chỉ chọn, không thêm danh mục.
 9. **Dynamic payers** — Filter Trang chủ / Thống kê / dropdown form load từ bảng `payers`.
-10. **Pending pattern** — DB + `completePendingTransaction()` sẵn sàng; UI inbox chưa có.
+10. **Pending status (legacy)** — Cột `status` + giá trị `pending` giữ cho backup/schema cũ; không có UI inbox hay flow tạo pending.
 
 ---
 
@@ -282,6 +282,7 @@ npm run android    # expo run:android
 npm run ios        # expo run:ios
 npm run web        # expo start --web
 npm run build:web  # expo export --platform web
+npm test           # Unit tests (date + report helpers)
 npx tsc --noEmit   # Typecheck
 ```
 
@@ -289,12 +290,12 @@ npx tsc --noEmit   # Typecheck
 
 ## Environment & config
 
-| File | Vai trò |
-|------|---------|
-| `.env` | API keys (gitignored) |
-| `app.json` | Expo config; `softwareKeyboardLayoutMode: resize` (Android) |
-| `eas.json` | Build profiles |
-| `metro.config.js` | WASM support cho SQLite web |
+| File              | Vai trò                                                     |
+| ----------------- | ----------------------------------------------------------- |
+| `.env`            | API keys (gitignored)                                       |
+| `app.json`        | Expo config; `softwareKeyboardLayoutMode: resize` (Android) |
+| `eas.json`        | Build profiles                                              |
+| `metro.config.js` | WASM support cho SQLite web                                 |
 
 ---
 

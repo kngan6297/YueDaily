@@ -62,21 +62,25 @@ export async function initializeDatabase(): Promise<void> {
   // Tạo bảng transactions (giao dịch) - bảng chính
   await database.execAsync(`
     CREATE TABLE IF NOT EXISTS transactions (
-      id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      amount      INTEGER NOT NULL DEFAULT 0,
-      type        TEXT    NOT NULL DEFAULT 'chi',
-      category_id INTEGER,
-      source_id   INTEGER,
-      payer       TEXT    NOT NULL DEFAULT 'Vợ',
-      image_uri   TEXT,
-      location    TEXT,
-      note        TEXT,
-      status      TEXT    NOT NULL DEFAULT 'complete',
-      created_at  TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      amount            INTEGER NOT NULL DEFAULT 0,
+      type              TEXT    NOT NULL DEFAULT 'chi',
+      category_id       INTEGER,
+      source_id         INTEGER,
+      payer             TEXT    NOT NULL DEFAULT 'Vợ',
+      expense_audience  TEXT    NOT NULL DEFAULT 'couple',
+      image_uri         TEXT,
+      location          TEXT,
+      note              TEXT,
+      status            TEXT    NOT NULL DEFAULT 'complete',
+      created_at        TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
       FOREIGN KEY (category_id) REFERENCES categories(id),
       FOREIGN KEY (source_id)   REFERENCES sources(id)
     );
   `);
+
+  // Migration an toàn cho DB cũ (trước khi có expense_audience)
+  await migrateTransactionsSchema(database);
 
   // Tạo index để tăng tốc truy vấn theo ngày và loại
   await database.execAsync(`
@@ -99,6 +103,22 @@ export async function initializeDatabase(): Promise<void> {
   await seedDefaultData(database);
 }
 
+/**
+ * Thêm cột expense_audience nếu thiếu.
+ * Giao dịch cũ nhận DEFAULT 'unspecified' — không tự gán 'couple'.
+ */
+async function migrateTransactionsSchema(database: SQLite.SQLiteDatabase): Promise<void> {
+  const cols = await database.getAllAsync<{ name: string }>(
+    'PRAGMA table_info(transactions);'
+  );
+  if (cols.some((c) => c.name === 'expense_audience')) return;
+
+  await database.execAsync(
+    `ALTER TABLE transactions
+     ADD COLUMN expense_audience TEXT NOT NULL DEFAULT 'unspecified';`
+  );
+}
+
 /** Chèn dữ liệu mặc định vào database */
 async function seedDefaultData(database: SQLite.SQLiteDatabase): Promise<void> {
   // Kiểm tra đã có dữ liệu categories chưa
@@ -107,9 +127,8 @@ async function seedDefaultData(database: SQLite.SQLiteDatabase): Promise<void> {
   );
 
   if (!catCount || catCount.count === 0) {
-    // Danh mục mặc định dễ thương, phân loại cho cả thu và chi
+    // Danh mục chi tiêu mặc định
     const defaultCategories = [
-      // Danh mục chi tiêu (chi)
       { name: 'Ăn uống',     type: 'chi',  icon: '🍜', color: '#FF8FAB' },
       { name: 'Trà & Cà phê', type: 'chi', icon: '🧋', color: '#FBBAD3' },
       { name: 'Mua sắm',     type: 'chi',  icon: '🛍️', color: '#B882FF' },
@@ -122,12 +141,6 @@ async function seedDefaultData(database: SQLite.SQLiteDatabase): Promise<void> {
       { name: 'Điện - Nước', type: 'chi',  icon: '💡', color: '#FFE9A0' },
       { name: 'Thú cưng',   type: 'chi',   icon: '🐱', color: '#D4AEFF' },
       { name: 'Khác',       type: 'chi',   icon: '✨', color: '#EBD9FF' },
-      // Danh mục thu nhập (thu)
-      { name: 'Lương',      type: 'thu',   icon: '💵', color: '#6FCBA0' },
-      { name: 'Thưởng',     type: 'thu',   icon: '🎁', color: '#FFD966' },
-      { name: 'Bán hàng',   type: 'thu',   icon: '🏪', color: '#82C0FF' },
-      { name: 'Đầu tư',     type: 'thu',   icon: '📈', color: '#B882FF' },
-      { name: 'Thu nhập khác', type: 'thu', icon: '🌟', color: '#FFAA75' },
     ];
 
     for (const cat of defaultCategories) {

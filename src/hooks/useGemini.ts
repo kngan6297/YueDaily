@@ -3,12 +3,8 @@
 // Thứ tự thử: Groq (rất nhanh) → Gemini Lite → Gemini Flash
 // ============================================================
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useState } from 'react';
 import type { GeminiAnalysisResult } from '../types';
-
-export const STORAGE_KEY_GEMINI = 'yozakura_gemini_api_key';
-export const STORAGE_KEY_GROQ = 'yozakura_groq_api_key';
 
 const TIMEOUT_MS = 20_000;
 const RETRY_DELAY = 3_500;
@@ -29,7 +25,7 @@ class SkipProviderError extends Error {
 }
 
 // ── System instruction (Banking + bill + đồ vật) ──────
-const SYSTEM_INSTRUCTION = `Bạn là trợ lý phân tích ảnh chi tiêu cho ứng dụng quản lý thu chi hàng ngày Việt Nam.
+const SYSTEM_INSTRUCTION = `Bạn là trợ lý phân tích ảnh chi tiêu cho ứng dụng theo dõi chi tiêu gia đình Việt Nam.
 
 Nhiệm vụ: Phân tích ảnh hoá đơn hoặc món ăn/sản phẩm chi tiêu. Trả về JSON thuần.
 
@@ -71,7 +67,6 @@ Bước 4 — Gán category (Suy từ hành động trong description):
 - "Khác" chỉ khi thực sự không thể xếp vào đâu.
 
 Quy tắc bắt buộc:
-- type: "thu" nếu tài khoản nhận tiền về (lương, thu nhập, được cho); "chi" nếu mất tiền đi (thanh toán, mua sắm).
 - Chỉ trả về duy nhất JSON thuần, KHÔNG có text hay markdown giải thích xung quanh.`;
 
 // ── Gemini structured output schema (Đã sửa mô tả cho linh hoạt) ─────────────────────────
@@ -89,9 +84,8 @@ const GEMINI_RESPONSE_SCHEMA = {
       type: 'string',
       enum: ['Ăn uống', 'Trà & Cà phê', 'Mua sắm', 'Di chuyển', 'Làm đẹp', 'Sức khoẻ', 'Giải trí', 'Giáo dục', 'Gia đình', 'Thú cưng', 'Khác'],
     },
-    type: { type: 'string', enum: ['chi', 'thu'] },
   },
-  required: ['is_receipt', 'amount', 'description', 'category', 'type'],
+  required: ['is_receipt', 'amount', 'description', 'category'],
 } as const;
 
 // ── User Scan Prompt (Làm sạch, không nhồi nhét ví dụ gây ám thị AI) ─────────────────────────
@@ -263,7 +257,6 @@ function sanitize(raw: unknown): GeminiAnalysisResult {
     description,
     category: resolveCategory(r.category, description),
     note: description,
-    type: r.type === 'thu' ? 'thu' : 'chi',
   };
 }
 
@@ -432,7 +425,7 @@ async function callGemini(
     logGeminiFailure(model, res.status, geminiErr);
 
     if (res.status === 401 || res.status === 403) {
-      throw new Error('Gemini API Key không hợp lệ. Kiểm tra lại trong Cài đặt! 🔑');
+      throw new Error('Gemini API Key không hợp lệ. Kiểm tra EXPO_PUBLIC_GEMINI_API_KEY trong .env nhé! 🔑');
     }
 
     const msg = geminiErr.errorMessage || `Gemini lỗi ${res.status}`;
@@ -475,17 +468,11 @@ export function useGemini(): UseGeminiResult {
   const [error, setError] = useState<string | null>(null);
 
   const analyze = useCallback(async (imageBase64: string): Promise<GeminiAnalysisResult> => {
-    const [groqKey, geminiKey] = await Promise.all([
-      AsyncStorage.getItem(STORAGE_KEY_GROQ).then((v) => v?.trim() || ''),
-      AsyncStorage.getItem(STORAGE_KEY_GEMINI).then((v) => v?.trim() || ''),
-    ]);
-
-    // Fallback: đọc từ .env nếu chưa nhập trong Settings
-    const effectiveGeminiKey = geminiKey || process.env.EXPO_PUBLIC_GEMINI_API_KEY?.trim() || '';
-    const effectiveGroqKey = groqKey || process.env.EXPO_PUBLIC_GROQ_API_KEY?.trim() || '';
+    const effectiveGeminiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY?.trim() || '';
+    const effectiveGroqKey = process.env.EXPO_PUBLIC_GROQ_API_KEY?.trim() || '';
 
     if (!effectiveGroqKey && !effectiveGeminiKey) {
-      throw new Error('Chưa cài đặt API Key. Thêm EXPO_PUBLIC_GROQ_API_KEY vào .env nhé! 🔑');
+      throw new Error('Chưa cài đặt API Key. Thêm EXPO_PUBLIC_GROQ_API_KEY hoặc EXPO_PUBLIC_GEMINI_API_KEY vào .env nhé! 🔑');
     }
 
     setIsLoading(true);
