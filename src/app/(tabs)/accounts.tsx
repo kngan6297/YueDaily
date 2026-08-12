@@ -95,12 +95,12 @@ export default function AccountsScreen() {
           ))}
         </View>
 
-        <View style={styles.balanceCard}>
-          <Text style={styles.balanceLabel}>Tổng chi · {periodLabel}</Text>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryLabel}>Tổng chi · {periodLabel}</Text>
           {isLoading ? (
             <ActivityIndicator color={colors.blue[400]} style={{ paddingVertical: 16 }} />
           ) : (
-            <Text style={[styles.balanceAmount, styles.expenseAmount]}>
+            <Text style={[styles.summaryAmount, styles.expenseAmount]}>
               {fmt(summary.chi)}đ
             </Text>
           )}
@@ -113,7 +113,7 @@ export default function AccountsScreen() {
           ) : sources.length === 0 ? (
             <View style={styles.emptyCard}>
               <Text style={styles.emptyIcon}>💸</Text>
-              <Text style={styles.emptyText}>Chưa có giao dịch nào{'\n'}trong kỳ này</Text>
+              <Text style={styles.emptyText}>Chưa có dữ liệu chi tiêu</Text>
             </View>
           ) : (
             <View style={styles.sourcesCard}>
@@ -131,7 +131,7 @@ export default function AccountsScreen() {
                         <Text style={styles.sourceDetailText}>Đã chi trong kỳ</Text>
                       </View>
 
-                      <Text style={[styles.sourceBalance, styles.expenseAmount]}>
+                      <Text style={[styles.sourceAmount, styles.expenseAmount]}>
                         {fmt(src.chi)}đ
                       </Text>
                     </View>
@@ -206,7 +206,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
       color: colors.action.selectedText,
     },
 
-    balanceCard: {
+    summaryCard: {
       backgroundColor: colors.background.surface,
       borderRadius: BorderRadius['2xl'],
       padding: Spacing.lg,
@@ -214,12 +214,12 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
       borderColor: colors.metallic.platinum,
       gap: Spacing.sm,
     },
-    balanceLabel: {
+    summaryLabel: {
       fontSize: Typography.fontSize.sm,
       color: colors.neutral[400],
       fontWeight: '600',
     },
-    balanceAmount: {
+    summaryAmount: {
       fontSize: Typography.fontSize['3xl'],
       fontWeight: '800',
       letterSpacing: -1,
@@ -264,7 +264,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
       fontWeight: '500',
       color: colors.neutral[400],
     },
-    sourceBalance: {
+    sourceAmount: {
       fontSize: Typography.fontSize.base,
       fontWeight: '800',
     },

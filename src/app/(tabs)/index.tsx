@@ -429,7 +429,7 @@ export default function HomeScreen() {
             {selectedTxns.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyStateIcon}>📭</Text>
-                <Text style={styles.emptyStateText}>Ngày này chưa ghi giao dịch nào</Text>
+                <Text style={styles.emptyStateText}>Chưa có khoản chi trong ngày này</Text>
               </View>
             ) : (
               <View style={styles.txnCard}>

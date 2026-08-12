@@ -176,6 +176,7 @@ export default function TransactionForm() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const noteRef = useRef<TextInput>(null);
   const hasAutoScanned = useRef(false);
+  const scanGenerationRef = useRef(0);
   // Ref luôn giữ bản categories mới nhất — tránh stale closure khi AI scan async
   const categoriesRef = useRef<Category[]>([]);
 
@@ -283,10 +284,16 @@ export default function TransactionForm() {
     );
   }, []);
 
-  const applyScanResult = useCallback(async (result: Awaited<ReturnType<typeof analyze>>) => {
+  const applyScanResult = useCallback(async (
+    result: Awaited<ReturnType<typeof analyze>>,
+    scanGeneration: number,
+  ) => {
+    if (scanGeneration !== scanGenerationRef.current) return;
+
     const summary = result.description || result.note || '';
 
     const cats = await getExpenseCategories();
+    if (scanGeneration !== scanGenerationRef.current) return;
     categoriesRef.current = cats;
     setCategories(cats);
 
@@ -328,11 +335,13 @@ export default function TransactionForm() {
   // ── AI scan ──
   const handleAiScan = useCallback(async () => {
     if (!imageUri) { Alert.alert('Chưa có ảnh', 'Hãy chụp hoặc chọn ảnh trước!'); return; }
+    const scanGeneration = ++scanGenerationRef.current;
     try {
       const base64 = await imageToBase64(imageUri);
       const result = await analyze(base64);
-      await applyScanResult(result);
+      await applyScanResult(result, scanGeneration);
     } catch (err) {
+      if (scanGeneration !== scanGenerationRef.current) return;
       const msg = err instanceof Error ? err.message : 'Không thể phân tích ảnh.';
       Alert.alert(
         'Lỗi AI 🤖',
@@ -381,10 +390,11 @@ export default function TransactionForm() {
 
   const handlePrimarySave = useCallback(async () => {
     if (isSaving) return;
+    if (!validateCompleteTransaction()) return;
+
     setIsSaving(true);
     try {
       if (formMode === 'create-complete') {
-        if (!validateCompleteTransaction()) return;
         await insertTransaction(formData);
         await updateStreak();
         router.dismissAll();
@@ -392,7 +402,6 @@ export default function TransactionForm() {
       }
 
       if (!transactionId) return;
-      if (!validateCompleteTransaction()) return;
       await updateTransaction(transactionId, formData);
       await updateStreak();
       router.dismissAll();
@@ -484,7 +493,7 @@ export default function TransactionForm() {
               <TouchableOpacity
                 style={[styles.aiBtn, isAiLoading && styles.aiBtnLoading]}
                 onPress={handleAiScan}
-                disabled={isAiLoading}
+                disabled={isAiLoading || isSaving}
               >
                 {isAiLoading
                   ? <ActivityIndicator size="small" color={isDark ? colors.neutral[700] : '#fff'} />

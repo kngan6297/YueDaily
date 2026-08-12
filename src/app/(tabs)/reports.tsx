@@ -266,7 +266,13 @@ function BreakdownSection({
   );
 }
 
-function TransactionList({ items }: { items: TransactionWithMeta[] }) {
+function TransactionList({
+  items,
+  emptyMessage = 'Không có giao dịch phù hợp',
+}: {
+  items: TransactionWithMeta[];
+  emptyMessage?: string;
+}) {
   const { colors, shadows } = useAppTheme();
   const styles = useMemo(() => createStyles(colors, shadows), [colors, shadows]);
 
@@ -274,7 +280,7 @@ function TransactionList({ items }: { items: TransactionWithMeta[] }) {
     return (
       <View style={styles.empty}>
         <Text style={styles.emptyIcon}>🌸</Text>
-        <Text style={styles.emptyText}>Chưa có chi tiêu nào</Text>
+        <Text style={styles.emptyText}>{emptyMessage}</Text>
       </View>
     );
   }
@@ -457,6 +463,11 @@ export default function ReportsScreen() {
   const payerStats = useMemo(() => aggregateByPayer(transactions), [transactions]);
   const audienceStats = useMemo(() => aggregateByAudience(transactions), [transactions]);
   const peakDay = useMemo(() => highestSpendingDay(dailySeries), [dailySeries]);
+
+  const hasActiveFilters =
+    person !== 'all' || audience !== 'all' || searchQuery.trim().length > 0;
+  const filteredEmptyMessage = 'Không có giao dịch phù hợp';
+  const periodEmptyMessage = 'Chưa có chi tiêu nào\n trong kỳ này';
 
   const donutSegments: DonutSegment[] = useMemo(() => {
     let offset = 0;
@@ -653,7 +664,9 @@ export default function ReportsScreen() {
               categoryStats.length === 0 ? (
                 <View style={styles.empty}>
                   <Text style={styles.emptyIcon}>📊</Text>
-                  <Text style={styles.emptyText}>Chưa có chi tiêu nào{'\n'}trong kỳ này</Text>
+                  <Text style={styles.emptyText}>
+                    {hasActiveFilters ? filteredEmptyMessage : periodEmptyMessage}
+                  </Text>
                 </View>
               ) : (
                 <View style={styles.catSection}>
@@ -701,7 +714,10 @@ export default function ReportsScreen() {
 
             {/* Transaction list */}
             <Text style={styles.listHeading}>Giao dịch</Text>
-            <TransactionList items={transactions} />
+            <TransactionList
+              items={transactions}
+              emptyMessage={hasActiveFilters ? filteredEmptyMessage : periodEmptyMessage}
+            />
           </>
         )}
       </ScrollView>

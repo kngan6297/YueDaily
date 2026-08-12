@@ -692,18 +692,6 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     backgroundColor: colors.neutral[100],
     marginLeft: 40 + Spacing.base + Spacing.sm,
   },
-  dividerFull: {
-    height: 1,
-    backgroundColor: colors.neutral[100],
-  },
-  aiIntro: {
-    fontSize: Typography.fontSize.sm,
-    color: colors.neutral[500],
-    lineHeight: 20,
-    paddingHorizontal: Spacing.base,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
-  },
   emptyText: {
     textAlign: 'center',
     paddingVertical: Spacing.lg,
