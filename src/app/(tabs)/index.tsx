@@ -397,10 +397,15 @@ export default function HomeScreen() {
       >
           <View style={styles.modalHandle} />
 
-          {/* Modal header + daily summary */}
-          <View style={styles.modalHeader}>
-            <View style={styles.modalHeaderMain}>
-              <Text style={styles.modalTitle}>{selectedDayLabel}</Text>
+          <View style={styles.sheetContent}>
+            <View style={styles.sheetHeaderSection}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{selectedDayLabel}</Text>
+                <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowDayModal(false)}>
+                  <Text style={styles.modalCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
               <View style={styles.daySummaryRow}>
                 <View style={styles.daySummaryItem}>
                   <Text style={styles.daySummaryLabel}>Tổng chi</Text>
@@ -415,52 +420,47 @@ export default function HomeScreen() {
                 </View>
               </View>
             </View>
-            <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowDayModal(false)}>
-              <Text style={styles.modalCloseText}>✕</Text>
-            </TouchableOpacity>
-          </View>
 
-          {/* Transaction list */}
-          <ScrollView
-            style={styles.modalScroll}
-            contentContainerStyle={styles.modalScrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {selectedTxns.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyStateIcon}>📭</Text>
-                <Text style={styles.emptyStateText}>Chưa có khoản chi trong ngày này</Text>
-              </View>
-            ) : (
-              <View style={styles.txnCard}>
-                {selectedTxns.map((item, idx) => (
-                  <View key={item.id}>
-                    {renderTxn(item, true)}
-                    {idx < selectedTxns.length - 1 && <View style={styles.txnDivider} />}
-                  </View>
-                ))}
-              </View>
-            )}
-          </ScrollView>
-
-          {/* Add transaction CTA */}
-          <View style={styles.modalFooter}>
-            <TouchableOpacity
-              style={styles.modalAddBtn}
-              onPress={() => {
-                if (!selectedDay) return;
-                setShowDayModal(false);
-                const m = String(calMonth).padStart(2, '0');
-                const d = String(selectedDay).padStart(2, '0');
-                router.push({
-                  pathname: '/camera',
-                  params: { transactionDate: `${calYear}-${m}-${d}` },
-                });
-              }}
-              activeOpacity={0.85}
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={styles.modalScrollContent}
+              showsVerticalScrollIndicator={false}
             >
-              <Text style={styles.modalAddBtnText}>+ Thêm giao dịch</Text>
-            </TouchableOpacity>
+              {selectedTxns.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyStateIcon}>📭</Text>
+                  <Text style={styles.emptyStateText}>Chưa có khoản chi trong ngày này</Text>
+                </View>
+              ) : (
+                <View style={styles.txnCard}>
+                  {selectedTxns.map((item, idx) => (
+                    <View key={item.id}>
+                      {renderTxn(item, true)}
+                      {idx < selectedTxns.length - 1 && <View style={styles.txnDivider} />}
+                    </View>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.modalAddBtn}
+                onPress={() => {
+                  if (!selectedDay) return;
+                  setShowDayModal(false);
+                  const m = String(calMonth).padStart(2, '0');
+                  const d = String(selectedDay).padStart(2, '0');
+                  router.push({
+                    pathname: '/camera',
+                    params: { transactionDate: `${calYear}-${m}-${d}` },
+                  });
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.modalAddBtnText}>+ Thêm giao dịch</Text>
+              </TouchableOpacity>
+            </View>
           </View>
       </BottomSheetModal>
     </SafeAreaView>
@@ -699,18 +699,24 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     alignSelf: 'center',
     marginBottom: Spacing.md,
   },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
+  sheetContent: {
     paddingHorizontal: Spacing.base,
+  },
+  sheetHeaderSection: {
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
     paddingBottom: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.neutral[100],
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: Spacing.sm,
   },
-  modalHeaderMain: { flex: 1, gap: Spacing.sm },
   modalTitle: {
+    flex: 1,
     fontSize: Typography.fontSize.md,
     fontWeight: '800',
     color: colors.neutral[700],
@@ -718,6 +724,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
   daySummaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'stretch',
     backgroundColor: colors.pink[50],
     borderRadius: BorderRadius.lg,
     borderWidth: 1,
@@ -757,7 +764,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
   },
   modalScroll: { flexGrow: 0 },
   modalScrollContent: {
-    padding: Spacing.base,
+    paddingVertical: Spacing.base,
   },
   emptyState: {
     alignItems: 'center',
@@ -771,7 +778,6 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     fontWeight: '500',
   },
   modalFooter: {
-    paddingHorizontal: Spacing.base,
     paddingVertical: Spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.neutral[100],
