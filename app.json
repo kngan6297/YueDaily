@@ -3,7 +3,7 @@
     "name": "YueDaily",
     "slug": "Yozakura",
     "platforms": ["android"],
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -11,7 +11,7 @@
 
     "android": {
       "icon": "./assets/icon.png",
-      "versionCode": 2,
+      "versionCode": 3,
       "predictiveBackGestureEnabled": false,
       "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "resize",
