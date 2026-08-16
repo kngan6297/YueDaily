@@ -11,33 +11,70 @@ export const TRANSACTION_STATUS_PENDING: TransactionStatus = 'pending';
 /** Loại giao dịch — legacy DB column; app chỉ ghi `chi` */
 export type TransactionType = 'thu' | 'chi';
 
-/** Ai được hưởng khoản chi */
+/** Ai được hưởng khoản chi — identifier nội bộ giữ nguyên để migration an toàn */
 export type ExpenseAudience =
   | 'wife'
   | 'husband'
   | 'couple'
+  | 'wife_and_sister'
   | 'couple_and_sister'
   | 'unspecified';
 
+/** Label UI P1.5 — Yue / Kai / Meo. Không đổi identifier nội bộ. */
 export const EXPENSE_AUDIENCE_LABELS: Record<ExpenseAudience, string> = {
-  wife: 'Vợ',
-  husband: 'Chồng',
-  couple: '2 vợ chồng',
-  couple_and_sister: '2 vợ chồng + em gái',
+  wife: 'Yue',
+  husband: 'Kai',
+  couple: 'Yue + Kai',
+  wife_and_sister: 'Yue + Meo',
+  couple_and_sister: 'Yue + Kai + Meo',
   unspecified: 'Chưa phân loại',
 };
 
-/** 4 lựa chọn khi tạo/sửa (không gồm unspecified) */
+export const EXPENSE_AUDIENCE_SHORT: Record<ExpenseAudience, string> = {
+  ...EXPENSE_AUDIENCE_LABELS,
+};
+
+export const EXPENSE_AUDIENCE_ICONS: Record<ExpenseAudience, string> = {
+  wife: '🌸',
+  husband: '🌿',
+  couple: '💑',
+  wife_and_sister: '👭',
+  couple_and_sister: '👨‍👩‍👧',
+  unspecified: '❔',
+};
+
+/** Lựa chọn khi tạo giao dịch mới (không gồm unspecified) */
 export const EXPENSE_AUDIENCE_CHOICES: Exclude<ExpenseAudience, 'unspecified'>[] = [
   'wife',
   'husband',
   'couple',
+  'wife_and_sister',
   'couple_and_sister',
 ];
 
 export const DEFAULT_EXPENSE_AUDIENCE: ExpenseAudience = 'couple';
 
-/** Người chi tiêu — tên lưu trong giao dịch, danh sách quản lý ở bảng payers */
+export function isExpenseAudience(value: unknown): value is ExpenseAudience {
+  return typeof value === 'string' && value in EXPENSE_AUDIENCE_LABELS;
+}
+
+/** NULL/giá trị lạ → unspecified. Không suy wife → wife_and_sister. */
+export function normalizeExpenseAudience(value: unknown): ExpenseAudience {
+  return isExpenseAudience(value) ? value : 'unspecified';
+}
+
+/**
+ * Schema `payer` TEXT NOT NULL DEFAULT 'Vợ'.
+ * Form P1.5 không nhập field này; giá trị mặc định khớp cột DB / user Yue.
+ */
+export const LEGACY_DEFAULT_PAYER = 'Vợ';
+
+export function resolvePayerForInsert(payer: string | null | undefined): string {
+  const trimmed = payer?.trim();
+  return trimmed ? trimmed : LEGACY_DEFAULT_PAYER;
+}
+
+/** Người chi tiêu — legacy DB; không còn primary UX */
 export type Payer = string;
 
 /** Bản ghi người trả trong cài đặt */
@@ -73,7 +110,7 @@ export interface Category {
   color: string;    // mã màu HEX
 }
 
-/** Cấu trúc bảng nguồn tiền */
+/** Cấu trúc bảng nguồn chi (master data generic — không hardcode ngân hàng) */
 export interface Source {
   id: number;
   name: string;
@@ -103,7 +140,8 @@ export interface TransactionFormData {
   type: TransactionType;
   category_id: number | null;
   source_id: number | null;
-  payer: Payer;
+  /** Legacy — form P1.5 không gửi; insert dùng LEGACY_DEFAULT_PAYER */
+  payer?: Payer;
   expense_audience: ExpenseAudience;
   image_uri: string | null;
   location: string;

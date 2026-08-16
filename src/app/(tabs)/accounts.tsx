@@ -27,11 +27,6 @@ const PERIODS: { id: Period; label: string }[] = [
   { id: 'all',   label: 'Tất cả'    },
 ];
 
-const SOURCE_ICONS: Record<string, string> = {
-  'Tiền mặt':    '💵',
-  'Chuyển khoản': '🏦',
-};
-
 const fmt = (n: number) => Math.abs(n).toLocaleString('vi-VN');
 
 export default function AccountsScreen() {
@@ -70,7 +65,7 @@ export default function AccountsScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>💳 Chi theo nguồn tiền</Text>
+          <Text style={styles.headerTitle}>💳 Chi theo nguồn chi</Text>
           <TouchableOpacity
             style={styles.addBtn}
             onPress={() => router.push('/camera')}
@@ -107,7 +102,7 @@ export default function AccountsScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Nguồn tiền</Text>
+          <Text style={styles.sectionTitle}>Nguồn chi</Text>
           {isLoading ? (
             <ActivityIndicator color={colors.blue[400]} style={{ paddingVertical: 20 }} />
           ) : sources.length === 0 ? (
@@ -118,12 +113,11 @@ export default function AccountsScreen() {
           ) : (
             <View style={styles.sourcesCard}>
               {sources.map((src, idx) => {
-                const icon = SOURCE_ICONS[src.source_name] ?? '💳';
                 return (
                   <View key={String(src.source_id ?? idx)}>
                     <View style={styles.sourceRow}>
                       <View style={[styles.sourceIcon, { backgroundColor: colors.pink[100] }]}>
-                        <Text style={styles.sourceIconText}>{icon}</Text>
+                        <Text style={styles.sourceIconText}>💳</Text>
                       </View>
 
                       <View style={styles.sourceInfo}>

@@ -3,26 +3,33 @@
 // ============================================================
 
 import {
+  aggregateByAudience,
+  aggregateBySource,
   buildMonthDailySeries,
-  buildSearchFilter,
+  buildReportFilterClauses,
   computeExpenseSummaryMetrics,
+  EXPENSE_DISPLAY_LIMIT,
   highestSpendingDay,
   resolveReportRange,
   type DailyAmount,
+  type NamedAmount,
   type ReportPeriodKind,
   type ReportRange,
   type ResolvedReportRange,
 } from './reportCalculations';
 import { getDatabase } from './initDb';
-import { normalizeExpenseAudience } from './transactions';
+import { normalizeExpenseAudience } from '../types';
 import type { ExpenseAudience, Transaction } from '../types';
-import { EXPENSE_AUDIENCE_LABELS, TRANSACTION_STATUS_COMPLETE } from '../types';
+import { TRANSACTION_STATUS_COMPLETE } from '../types';
 
-export type { ReportPeriodKind, ReportRange, ResolvedReportRange, DailyAmount };
+export type { ReportPeriodKind, ReportRange, ResolvedReportRange, DailyAmount, NamedAmount };
 export {
+  aggregateByAudience,
+  aggregateBySource,
   buildMonthDailySeries,
   buildSearchFilter,
   computeExpenseSummaryMetrics,
+  EXPENSE_DISPLAY_LIMIT,
   highestSpendingDay,
   isExpenseTransaction,
   parseVndAmountFromSearch,
@@ -30,9 +37,11 @@ export {
 } from './reportCalculations';
 
 export interface ReportFilters {
-  payer?: string;
+  sourceId?: number | 'all' | null;
   audience?: ExpenseAudience | 'all';
   search?: string;
+  /** Legacy — UI P1.5 không dùng làm primary filter */
+  payer?: string;
 }
 
 export interface ExpenseSummary {
@@ -41,13 +50,6 @@ export interface ExpenseSummary {
   averagePerTransaction: number;
   averagePerDay: number;
   calendarDays: number;
-}
-
-export interface NamedAmount {
-  name: string;
-  amount: number;
-  icon?: string;
-  color?: string;
 }
 
 export type TransactionWithMeta = Transaction & {
@@ -67,27 +69,7 @@ function mapRow(row: TransactionWithMeta): TransactionWithMeta {
 }
 
 function buildFilterClauses(filters: ReportFilters): { clause: string; params: (string | number)[] } {
-  let clause = '';
-  const params: (string | number)[] = [];
-
-  if (filters.payer && filters.payer !== 'all') {
-    clause += ' AND t.payer = ?';
-    params.push(filters.payer);
-  }
-
-  if (filters.audience && filters.audience !== 'all') {
-    clause += ' AND t.expense_audience = ?';
-    params.push(filters.audience);
-  }
-
-  const search = filters.search?.trim() ?? '';
-  if (search) {
-    const { clause: searchCl, params: searchParams } = buildSearchFilter(search);
-    clause += searchCl;
-    params.push(...searchParams);
-  }
-
-  return { clause, params };
+  return buildReportFilterClauses(filters);
 }
 
 function rangeClause(resolved: ResolvedReportRange): { clause: string; params: string[] } {
@@ -114,7 +96,7 @@ export async function getExpenseTransactions(
      LEFT JOIN sources s ON t.source_id = s.id
      WHERE ${EXPENSE_BASE}${rangeCl}${filterCl}
      ORDER BY t.created_at DESC
-     LIMIT 50;`,
+     LIMIT ${EXPENSE_DISPLAY_LIMIT};`,
     [...rangeParams, ...filterParams],
   );
 
@@ -173,6 +155,97 @@ export async function getDailyExpenseTotals(
   return rows.map((r) => ({ date: r.date, day: r.day, amount: r.amount }));
 }
 
+function scopedExpenseQuery(range: ReportRange, filters: ReportFilters) {
+  const resolved = resolveReportRange(range);
+  const { clause: rangeCl, params: rangeParams } = rangeClause(resolved);
+  const { clause: filterCl, params: filterParams } = buildFilterClauses(filters);
+  return {
+    where: `${EXPENSE_BASE}${rangeCl}${filterCl}`,
+    params: [...rangeParams, ...filterParams],
+  };
+}
+
+/** Chi theo nguồn — toàn bộ giao dịch khớp filter, không LIMIT list. */
+export async function getExpenseSourceTotals(
+  range: ReportRange,
+  filters: ReportFilters = {},
+): Promise<NamedAmount[]> {
+  const db = await getDatabase();
+  const { where, params } = scopedExpenseQuery(range, filters);
+  const rows = await db.getAllAsync<{
+    source_id: number | null;
+    source_name: string;
+    amount: number;
+  }>(
+    `SELECT t.source_id,
+            COALESCE(s.name, 'Không rõ nguồn') as source_name,
+            COALESCE(SUM(t.amount), 0) as amount
+     FROM transactions t
+     LEFT JOIN categories c ON t.category_id = c.id
+     LEFT JOIN sources s ON t.source_id = s.id
+     WHERE ${where}
+     GROUP BY t.source_id
+     ORDER BY amount DESC;`,
+    params,
+  );
+  return aggregateBySource(rows);
+}
+
+/** Chi cho ai — toàn bộ giao dịch khớp filter, không LIMIT list. */
+export async function getExpenseAudienceTotals(
+  range: ReportRange,
+  filters: ReportFilters = {},
+): Promise<NamedAmount[]> {
+  const db = await getDatabase();
+  const { where, params } = scopedExpenseQuery(range, filters);
+  const rows = await db.getAllAsync<{
+    expense_audience: string | null;
+    amount: number;
+  }>(
+    `SELECT t.expense_audience,
+            COALESCE(SUM(t.amount), 0) as amount
+     FROM transactions t
+     LEFT JOIN categories c ON t.category_id = c.id
+     WHERE ${where}
+     GROUP BY t.expense_audience
+     ORDER BY amount DESC;`,
+    params,
+  );
+  return aggregateByAudience(rows);
+}
+
+/** Chi theo danh mục — cùng semantics unlimited như source/audience. */
+export async function getExpenseCategoryTotals(
+  range: ReportRange,
+  filters: ReportFilters = {},
+): Promise<NamedAmount[]> {
+  const db = await getDatabase();
+  const { where, params } = scopedExpenseQuery(range, filters);
+  const rows = await db.getAllAsync<{
+    name: string;
+    icon: string | null;
+    color: string | null;
+    amount: number;
+  }>(
+    `SELECT COALESCE(c.name, 'Không rõ danh mục') as name,
+            c.icon as icon,
+            c.color as color,
+            COALESCE(SUM(t.amount), 0) as amount
+     FROM transactions t
+     LEFT JOIN categories c ON t.category_id = c.id
+     WHERE ${where}
+     GROUP BY t.category_id
+     ORDER BY amount DESC;`,
+    params,
+  );
+  return rows.map((r) => ({
+    name: r.name,
+    amount: r.amount,
+    icon: r.icon ?? undefined,
+    color: r.color ?? undefined,
+  }));
+}
+
 export function aggregateByCategory(transactions: TransactionWithMeta[]): NamedAmount[] {
   const map = new Map<string, NamedAmount>();
   for (const t of transactions) {
@@ -185,28 +258,6 @@ export function aggregateByCategory(transactions: TransactionWithMeta[]): NamedA
     };
     existing.amount += t.amount;
     map.set(name, existing);
-  }
-  return [...map.values()].sort((a, b) => b.amount - a.amount);
-}
-
-export function aggregateByPayer(transactions: TransactionWithMeta[]): NamedAmount[] {
-  const map = new Map<string, NamedAmount>();
-  for (const t of transactions) {
-    const existing = map.get(t.payer) ?? { name: t.payer, amount: 0 };
-    existing.amount += t.amount;
-    map.set(t.payer, existing);
-  }
-  return [...map.values()].sort((a, b) => b.amount - a.amount);
-}
-
-export function aggregateByAudience(transactions: TransactionWithMeta[]): NamedAmount[] {
-  const map = new Map<string, NamedAmount>();
-  for (const t of transactions) {
-    const key = t.expense_audience ?? 'unspecified';
-    const name = EXPENSE_AUDIENCE_LABELS[key] ?? key;
-    const existing = map.get(key) ?? { name, amount: 0 };
-    existing.amount += t.amount;
-    map.set(key, existing);
   }
   return [...map.values()].sort((a, b) => b.amount - a.amount);
 }

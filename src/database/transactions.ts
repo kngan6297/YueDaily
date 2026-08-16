@@ -7,25 +7,13 @@ import { getDatabase } from './initDb';
 import type { ExpenseAudience, Transaction, TransactionFormData } from '../types';
 import {
   DEFAULT_EXPENSE_AUDIENCE,
+  normalizeExpenseAudience,
+  resolvePayerForInsert,
   TRANSACTION_STATUS_COMPLETE,
   TRANSACTION_STATUS_PENDING,
 } from '../types';
 
-const VALID_AUDIENCES = new Set<string>([
-  'wife',
-  'husband',
-  'couple',
-  'couple_and_sister',
-  'unspecified',
-]);
-
-/** Chuẩn hoá giá trị đọc từ SQLite (NULL/lạ → unspecified) */
-export function normalizeExpenseAudience(value: unknown): ExpenseAudience {
-  if (typeof value === 'string' && VALID_AUDIENCES.has(value)) {
-    return value as ExpenseAudience;
-  }
-  return 'unspecified';
-}
+export { normalizeExpenseAudience };
 
 function resolveExpenseAudienceForSave(value: ExpenseAudience): ExpenseAudience {
   return normalizeExpenseAudience(value);
@@ -43,6 +31,7 @@ export async function insertTransaction(data: TransactionFormData): Promise<numb
   const db = await getDatabase();
   const createdAt = buildCreatedAt(data.transaction_date);
   const expenseAudience = resolveExpenseAudienceForSave(data.expense_audience);
+  const payerToSave = resolvePayerForInsert(data.payer);
 
   const result = await db.runAsync(
     `INSERT INTO transactions
@@ -53,7 +42,7 @@ export async function insertTransaction(data: TransactionFormData): Promise<numb
       'chi',
       data.category_id,
       data.source_id,
-      data.payer,
+      payerToSave,
       expenseAudience,
       data.image_uri,
       data.location,
@@ -126,17 +115,17 @@ export async function updateTransaction(id: number, data: TransactionFormData): 
   const expenseAudience = resolveExpenseAudienceForSave(data.expense_audience);
   const typeToSave = existing.type;
 
+  // Không ghi đè payer: form P1.5 không expose field này.
   await db.runAsync(
     `UPDATE transactions
      SET amount = ?, type = ?, category_id = ?, source_id = ?,
-         payer = ?, expense_audience = ?, location = ?, note = ?, created_at = ?
+         expense_audience = ?, location = ?, note = ?, created_at = ?
      WHERE id = ?;`,
     [
       parseInt(data.amount.replace(/\D/g, ''), 10) || 0,
       typeToSave,
       data.category_id,
       data.source_id,
-      data.payer,
       expenseAudience,
       data.location,
       data.note,
@@ -201,7 +190,7 @@ function periodWhere(period: Period): { clause: string; params: string[] } {
   return { clause: '', params: [] };
 }
 
-/** Tổng chi theo kỳ (báo cáo nguồn tiền) */
+/** Tổng chi theo kỳ (báo cáo nguồn chi) */
 export async function getAccountSummary(
   period: Period = 'month'
 ): Promise<{ chi: number }> {
@@ -216,7 +205,7 @@ export async function getAccountSummary(
   return { chi: row?.total ?? 0 };
 }
 
-/** Chi theo từng nguồn tiền trong kỳ */
+/** Chi theo từng nguồn chi trong kỳ */
 export async function getSourceBalances(period: Period = 'month'): Promise<
   Array<{ source_id: number | null; source_name: string; chi: number }>
 > {
@@ -228,7 +217,7 @@ export async function getSourceBalances(period: Period = 'month'): Promise<
     total: number;
   }>(
     `SELECT t.source_id,
-            COALESCE(s.name, 'Không rõ') as source_name,
+            COALESCE(s.name, 'Không rõ nguồn') as source_name,
             SUM(t.amount) as total
      FROM transactions t
      LEFT JOIN sources s ON t.source_id = s.id

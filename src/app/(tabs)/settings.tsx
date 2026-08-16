@@ -174,7 +174,7 @@ export default function SettingsScreen() {
   };
 
   const handleDeleteSource = (s: Source) => {
-    confirmDelete('Xoá nguồn tiền?', `Xoá 「${s.name}」? Giao dịch cũ sẽ mất liên kết nguồn.`, async () => {
+    confirmDelete('Xoá nguồn chi?', `Xoá 「${s.name}」? Giao dịch cũ sẽ mất liên kết nguồn.`, async () => {
       const result = await deleteSource(s.id);
       if (!result.ok) Alert.alert('Không thể xoá', result.reason);
       else await loadData();
@@ -234,7 +234,7 @@ export default function SettingsScreen() {
     edit?.kind === 'payer'
       ? edit.id ? 'Sửa người trả' : 'Thêm người trả'
       : edit?.kind === 'source'
-        ? edit.id ? 'Sửa nguồn tiền' : 'Thêm nguồn tiền'
+        ? edit.id ? 'Sửa nguồn chi' : 'Thêm nguồn chi'
         : edit?.id ? 'Sửa danh mục' : 'Thêm danh mục';
 
   const streakCount = streak?.current_streak ?? 0;
@@ -245,7 +245,7 @@ export default function SettingsScreen() {
 
         <View style={styles.header}>
           <Text style={styles.headerTitle}>⚙️ Cài đặt</Text>
-          <Text style={styles.headerSub}>Quản lý người trả, nguồn tiền và danh mục</Text>
+          <Text style={styles.headerSub}>Quản lý nguồn chi và danh mục</Text>
         </View>
 
         {/* ── Thông tin app ── */}
@@ -346,10 +346,10 @@ export default function SettingsScreen() {
               </View>
             </View>
 
-            {/* ── Nguồn tiền ── */}
+            {/* ── Nguồn chi ── */}
             <View style={styles.section}>
               <View style={styles.sectionHead}>
-                <Text style={styles.sectionTitle}>💳 Nguồn tiền</Text>
+                <Text style={styles.sectionTitle}>💳 Nguồn chi</Text>
                 <TouchableOpacity style={styles.addChip} onPress={() => openAdd('source')}>
                   <Text style={styles.addChipText}>+ Thêm</Text>
                 </TouchableOpacity>
@@ -360,7 +360,7 @@ export default function SettingsScreen() {
                     <View style={styles.itemRow}>
                       <View style={[styles.itemIcon, { backgroundColor: colors.blue[100] }]}>
                         <Text style={styles.itemIconText}>
-                          {s.name === 'Tiền mặt' ? '💵' : s.name === 'Chuyển khoản' ? '🏦' : '💳'}
+                          {s.name === 'Tiền mặt' || s.name.includes('Tiền mặt') ? '💵' : '💳'}
                         </Text>
                       </View>
                       <Text style={styles.itemName}>{s.name}</Text>
@@ -420,7 +420,7 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>💾 Sao lưu & Khôi phục</Text>
           <View style={[styles.card, styles.cardPadded]}>
             <Text style={styles.backupHint}>
-              Xuất dữ liệu ra file JSON để lưu vào Google Drive, máy tính, hoặc bất kỳ đâu. Khi cần, nhập lại để khôi phục toàn bộ giao dịch, danh mục, nguồn tiền và người trả.
+              Xuất dữ liệu ra file JSON để lưu vào Google Drive, máy tính, hoặc bất kỳ đâu. Khi cần, nhập lại để khôi phục toàn bộ giao dịch, danh mục, nguồn chi và dữ liệu lịch sử.
             </Text>
 
             <View style={styles.infoDivider} />

@@ -22,7 +22,7 @@ import { AmountKeyboard, formatAmount } from '../components/form/AmountKeyboard'
 import { BottomSheetModal } from '../components/ui/BottomSheetModal';
 import { BorderRadius, Spacing, ThemeColors, ThemeShadows, Typography } from '../constants/theme';
 import { useAppTheme } from '../context/ThemeContext';
-import { getAllPayers, getAllSources, getExpenseCategories, updateStreak } from '../database/categories';
+import { getAllSources, getExpenseCategories, updateStreak } from '../database/categories';
 import {
   getTransactionById,
   insertTransaction,
@@ -33,14 +33,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type {
   Category,
   ExpenseAudience,
-  Payer,
-  PayerRecord,
   Source,
   TransactionFormData,
 } from '../types';
 import {
   DEFAULT_EXPENSE_AUDIENCE,
   EXPENSE_AUDIENCE_CHOICES,
+  EXPENSE_AUDIENCE_ICONS,
   EXPENSE_AUDIENCE_LABELS,
 } from '../types';
 import {
@@ -49,6 +48,7 @@ import {
   formatLocalDate,
   parseLocalDate,
 } from '../utils/date';
+import { getLastSelectedSourceId, setLastSelectedSourceId } from '../utils/lastSource';
 
 // ─── Dropdown Picker ──────────────────────────────────────────────────────────
 
@@ -69,10 +69,11 @@ interface DropdownPickerProps {
 }
 
 const AUDIENCE_ICONS: Record<Exclude<ExpenseAudience, 'unspecified'>, string> = {
-  wife: '👩',
-  husband: '👨',
-  couple: '💑',
-  couple_and_sister: '👨‍👩‍👧',
+  wife: EXPENSE_AUDIENCE_ICONS.wife,
+  husband: EXPENSE_AUDIENCE_ICONS.husband,
+  couple: EXPENSE_AUDIENCE_ICONS.couple,
+  wife_and_sister: EXPENSE_AUDIENCE_ICONS.wife_and_sister,
+  couple_and_sister: EXPENSE_AUDIENCE_ICONS.couple_and_sister,
 };
 
 function DropdownPicker({
@@ -160,7 +161,6 @@ export default function TransactionForm() {
     type: 'chi',
     category_id: null,
     source_id: null,
-    payer: 'Vợ',
     expense_audience: DEFAULT_EXPENSE_AUDIENCE,
     image_uri: imageUri,
     location: '',
@@ -170,7 +170,6 @@ export default function TransactionForm() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
-  const [payers, setPayers] = useState<PayerRecord[]>([]);
   const [systemKeyboardVisible, setSystemKeyboardVisible] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -196,24 +195,18 @@ export default function TransactionForm() {
     }).catch(console.error);
   }, [formMode]);
 
-  // Tải nguồn tiền và người trả
+  // Tải nguồn chi — giao dịch mới nhớ nguồn chọn gần nhất
   useEffect(() => {
-    getAllSources().then((srcs) => {
+    getAllSources().then(async (srcs) => {
       setSources(srcs);
-      if (formMode === 'create-complete') {
-        setFormData((p) => {
-          if (p.source_id !== null) return p;
-          const defaultSrc = srcs.find((s) => s.name === 'Chuyển khoản') ?? srcs[0];
-          return defaultSrc ? { ...p, source_id: defaultSrc.id } : p;
-        });
-      }
-    }).catch(console.error);
-
-    getAllPayers().then((pays) => {
-      setPayers(pays);
-      if (formMode === 'create-complete' && pays.length > 0) {
-        setFormData((p) => (p.payer ? p : { ...p, payer: pays[0].name }));
-      }
+      if (formMode !== 'create-complete') return;
+      const lastId = await getLastSelectedSourceId();
+      setFormData((p) => {
+        if (p.source_id !== null) return p;
+        const last = srcs.find((s) => s.id === lastId);
+        const fallback = last ?? srcs[0];
+        return fallback ? { ...p, source_id: fallback.id } : p;
+      });
     }).catch(console.error);
   }, [formMode]);
 
@@ -227,7 +220,6 @@ export default function TransactionForm() {
         type: txn.type,
         category_id: txn.category_id,
         source_id: txn.source_id,
-        payer: txn.payer,
         expense_audience: txn.expense_audience ?? 'unspecified',
         image_uri: txn.image_uri,
         note: txn.note?.trim() || txn.location?.trim() || '',
@@ -369,11 +361,7 @@ export default function TransactionForm() {
       return false;
     }
     if (formData.source_id === null) {
-      Alert.alert('Thiếu nguồn tiền', 'Chọn nguồn tiền trước nhé! 💳');
-      return false;
-    }
-    if (!formData.payer || !formData.payer.trim()) {
-      Alert.alert('Thiếu người trả', 'Chọn người trả trước nhé! 👤');
+      Alert.alert('Thiếu nguồn chi', 'Chọn nguồn chi trước nhé! 💳');
       return false;
     }
     if (!formData.transaction_date) {
@@ -396,6 +384,9 @@ export default function TransactionForm() {
     try {
       if (formMode === 'create-complete') {
         await insertTransaction(formData);
+        if (formData.source_id != null) {
+          await setLastSelectedSourceId(formData.source_id);
+        }
         await updateStreak();
         router.dismissAll();
         return;
@@ -403,6 +394,9 @@ export default function TransactionForm() {
 
       if (!transactionId) return;
       await updateTransaction(transactionId, formData);
+      if (formData.source_id != null) {
+        await setLastSelectedSourceId(formData.source_id);
+      }
       await updateStreak();
       router.dismissAll();
     } catch {
@@ -433,17 +427,10 @@ export default function TransactionForm() {
     id: c.id, label: c.name, icon: c.icon, color: c.color,
   }));
 
-  const payerOptions: PickerOption[] = payers.map((p) => ({
-    id: p.name,
-    label: p.name,
-    icon: p.icon,
-    color: p.color,
-  }));
-
   const sourceOptions: PickerOption[] = sources.map((s) => ({
     id: s.id,
     label: s.name,
-    icon: s.name === 'Tiền mặt' ? '💵' : s.name === 'Chuyển khoản' ? '🏦' : '💳',
+    icon: '💳',
   }));
 
   const audienceOptions: PickerOption[] = [
@@ -544,7 +531,7 @@ export default function TransactionForm() {
           keyboardShouldPersistTaps="always"
           showsVerticalScrollIndicator={false}
         >
-          {/* Hàng 1: Danh mục | Ai trả */}
+          {/* Hàng 1: Danh mục | Chi cho ai */}
           <View style={styles.pillRow}>
             <View style={styles.pillFlex}>
               <DropdownPicker
@@ -557,32 +544,23 @@ export default function TransactionForm() {
             </View>
             <View style={styles.pillFlex}>
               <DropdownPicker
-                value={formData.payer}
-                label="Ai trả"
-                options={payerOptions}
-                onSelect={(id) => setFormData((p) => ({ ...p, payer: id as Payer }))}
+                value={formData.expense_audience}
+                label="Chi cho ai"
+                options={audienceOptions}
+                onSelect={(id) =>
+                  setFormData((p) => ({ ...p, expense_audience: id as ExpenseAudience }))
+                }
                 accentColor={accentColor}
               />
             </View>
           </View>
 
-          {/* Hàng 2: Chi cho ai — full width */}
-          <DropdownPicker
-            value={formData.expense_audience}
-            label="Chi cho ai"
-            options={audienceOptions}
-            onSelect={(id) =>
-              setFormData((p) => ({ ...p, expense_audience: id as ExpenseAudience }))
-            }
-            accentColor={accentColor}
-          />
-
-          {/* Hàng 3: Nguồn tiền | Ngày giao dịch */}
+          {/* Hàng 2: Nguồn chi | Ngày giao dịch */}
           <View style={styles.pillRow}>
             <View style={styles.pillFlex}>
               <DropdownPicker
                 value={formData.source_id}
-                label="Nguồn tiền"
+                label="Nguồn chi"
                 options={sourceOptions}
                 onSelect={(id) => setFormData((p) => ({ ...p, source_id: id as number }))}
                 accentColor={accentColor}

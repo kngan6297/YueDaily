@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BorderRadius, Spacing, ThemeColors, ThemeShadows, Typography } from '../../constants/theme';
 import { useAppTheme } from '../../context/ThemeContext';
 import { BottomSheetModal } from '../../components/ui/BottomSheetModal';
-import { getAllPayers, updateStreak } from '../../database/categories';
+import { updateStreak } from '../../database/categories';
 import {
   deleteTransaction,
   getMonthSummary,
@@ -32,11 +32,11 @@ const CELL_SIZE = Math.floor((SCREEN_W - Spacing.base * 2 - Spacing.xs * 6) / 7)
 const fmt = (n: number) => n.toLocaleString('vi-VN');
 const DAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 
-type FilterTab = 'all' | string;
 type TxnWithMeta = Transaction & {
   category_name?: string;
   category_icon?: string;
   category_color?: string;
+  source_name?: string;
 };
 
 const getGreeting = () => {
@@ -56,11 +56,9 @@ export default function HomeScreen() {
   const [calYear, setCalYear] = useState(now.getFullYear());
   const [selectedDay, setSelectedDay] = useState<number | null>(now.getDate());
   const [showDayModal, setShowDayModal] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [monthTxns, setMonthTxns] = useState<TxnWithMeta[]>([]);
   const [monthSummary, setMonthSummary] = useState({ chi: 0 });
-  const [payers, setPayers] = useState<Array<{ name: string; icon: string; color: string }>>([]);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -84,15 +82,8 @@ export default function HomeScreen() {
     useCallback(() => {
       loadData();
       refreshStreak();
-      getAllPayers().then((p) =>
-        setPayers(p.map(({ name, icon, color }) => ({ name, icon, color })))
-      ).catch(console.error);
     }, [loadData, refreshStreak])
   );
-
-  const payerColor = useCallback((name: string) => {
-    return payers.find((p) => p.name === name)?.color ?? colors.pink[300];
-  }, [payers]);
 
   // --- Calendar helpers ---
   const daysInMonth = new Date(calYear, calMonth, 0).getDate();
@@ -103,10 +94,7 @@ export default function HomeScreen() {
   // Dùng string slice thay vì new Date() để tránh Hermes parse sai timezone
   // với format "YYYY-MM-DD HH:MM:SS" của SQLite localtime
   const txnsByDay = useMemo(() => {
-    const source = (activeFilter === 'all'
-      ? monthTxns
-      : monthTxns.filter((t) => t.payer === activeFilter)
-    ).filter((t) => t.type === 'chi');
+    const source = monthTxns.filter((t) => t.type === 'chi');
     const map: Record<number, TxnWithMeta[]> = {};
     for (const t of source) {
       const dateStr = t.created_at.slice(0, 10); // "YYYY-MM-DD"
@@ -117,7 +105,7 @@ export default function HomeScreen() {
       }
     }
     return map;
-  }, [monthTxns, calYear, calMonth, activeFilter]);
+  }, [monthTxns, calYear, calMonth]);
 
   // Giao dịch của ngày được chọn (đã được lọc sẵn trong txnsByDay)
   const selectedTxns = useMemo(() => {
@@ -269,20 +257,22 @@ export default function HomeScreen() {
             <Text style={styles.txnName} numberOfLines={1}>
               {item.category_name ?? 'Chi tiêu'}
             </Text>
-            <Text style={styles.txnNote} numberOfLines={1}>
-              {item.note || item.location || item.payer}
-            </Text>
+            {(item.note || item.location) ? (
+              <Text style={styles.txnNote} numberOfLines={1}>
+                {item.note || item.location}
+              </Text>
+            ) : null}
             <Text style={styles.txnAudience} numberOfLines={1}>
               Chi cho: {EXPENSE_AUDIENCE_LABELS[item.expense_audience] ?? 'Chưa phân loại'}
+            </Text>
+            <Text style={styles.txnAudience} numberOfLines={1}>
+              Nguồn: {item.source_name || 'Không rõ nguồn'}
             </Text>
           </View>
           <View style={styles.txnRight}>
             <Text style={[styles.txnAmount, styles.expenseText]}>
               -{fmt(item.amount)}đ
             </Text>
-            <View style={[styles.payerChip, { backgroundColor: payerColor(item.payer) + '33' }]}>
-              <Text style={styles.payerChipText}>{item.payer}</Text>
-            </View>
           </View>
         </View>
 
@@ -329,25 +319,6 @@ export default function HomeScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-
-        {/* === FILTER TABS === */}
-        <View style={styles.filterRow}>
-          {([
-            { id: 'all', emoji: '🗂', label: 'Tất cả' },
-            ...payers.map((p) => ({ id: p.name, emoji: p.icon, label: p.name })),
-          ] as { id: FilterTab; emoji: string; label: string }[]).map((tab) => (
-            <TouchableOpacity
-              key={tab.id}
-              style={[styles.filterTab, activeFilter === tab.id && styles.filterTabActive]}
-              onPress={() => setActiveFilter(tab.id)}
-            >
-              <Text style={styles.filterTabEmoji}>{tab.emoji}</Text>
-              <Text style={[styles.filterTabText, activeFilter === tab.id && styles.filterTabTextActive]} numberOfLines={1}>
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
 
         {/* === CALENDAR === */}
         <View style={styles.calendarCard}>

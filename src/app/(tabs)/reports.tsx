@@ -20,11 +20,11 @@ import { TAB_BAR_CONTENT_HEIGHT } from '../../constants/layout';
 import { BorderRadius, Spacing, ThemeColors, ThemeShadows, Typography } from '../../constants/theme';
 import { useAppTheme } from '../../context/ThemeContext';
 import {
-  aggregateByAudience,
-  aggregateByCategory,
-  aggregateByPayer,
   buildMonthDailySeries,
   getDailyExpenseTotals,
+  getExpenseAudienceTotals,
+  getExpenseCategoryTotals,
+  getExpenseSourceTotals,
   getExpenseSummary,
   getExpenseTransactions,
   highestSpendingDay,
@@ -34,11 +34,12 @@ import {
   type ReportRange,
   type TransactionWithMeta,
 } from '../../database/reportQueries';
-import { getAllPayers } from '../../database/categories';
+import { getAllSources } from '../../database/categories';
 import type { ExpenseAudience } from '../../types';
 import {
   EXPENSE_AUDIENCE_CHOICES,
   EXPENSE_AUDIENCE_LABELS,
+  EXPENSE_AUDIENCE_SHORT,
 } from '../../types';
 import {
   formatDateVi,
@@ -51,7 +52,7 @@ import {
 
 // ─── Types ───────────────────────────────────────────────────
 type PeriodKind = 'day' | 'month' | 'custom';
-type Person = 'all' | string;
+type SourceFilter = 'all' | number;
 type AudienceFilter = 'all' | ExpenseAudience;
 
 interface FilterOption {
@@ -63,11 +64,12 @@ interface FilterOption {
 
 const AUDIENCE_SHORT: Record<ExpenseAudience | 'all', string> = {
   all: 'Tất cả',
-  wife: 'Vợ',
-  husband: 'Chồng',
-  couple: '2VC',
-  couple_and_sister: '2VC + em gái',
-  unspecified: 'Chưa phân loại',
+  wife: EXPENSE_AUDIENCE_SHORT.wife,
+  husband: EXPENSE_AUDIENCE_SHORT.husband,
+  couple: EXPENSE_AUDIENCE_SHORT.couple,
+  wife_and_sister: EXPENSE_AUDIENCE_SHORT.wife_and_sister,
+  couple_and_sister: EXPENSE_AUDIENCE_SHORT.couple_and_sister,
+  unspecified: EXPENSE_AUDIENCE_SHORT.unspecified,
 };
 
 const MONTH_NAMES = [
@@ -306,7 +308,9 @@ function TransactionList({
                 </Text>
               ) : null}
               <Text style={styles.txnMeta} numberOfLines={1}>
-                {item.payer} trả · {AUDIENCE_SHORT[item.expense_audience ?? 'unspecified']}
+                Chi cho: {AUDIENCE_SHORT[item.expense_audience ?? 'unspecified']}
+                {' · '}
+                Nguồn: {item.source_name || 'Không rõ nguồn'}
               </Text>
             </View>
             <View style={styles.txnRight}>
@@ -342,14 +346,17 @@ export default function ReportsScreen() {
     return formatLocalDate(d);
   });
   const [customTo, setCustomTo] = useState(today);
-  const [person, setPerson] = useState<Person>('all');
+  const [sourceId, setSourceId] = useState<SourceFilter>('all');
   const [audience, setAudience] = useState<AudienceFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [transactions, setTransactions] = useState<TransactionWithMeta[]>([]);
   const [summary, setSummary] = useState<ExpenseSummary | null>(null);
   const [dailySeries, setDailySeries] = useState<DailyAmount[]>([]);
-  const [payers, setPayers] = useState<Array<{ name: string; icon: string }>>([]);
+  const [sourceStats, setSourceStats] = useState<NamedAmount[]>([]);
+  const [audienceStats, setAudienceStats] = useState<NamedAmount[]>([]);
+  const [categoryRows, setCategoryRows] = useState<NamedAmount[]>([]);
+  const [sources, setSources] = useState<Array<{ id: number; name: string }>>([]);
   const [datePicker, setDatePicker] = useState<'day' | 'from' | 'to' | null>(null);
 
   const customRange = useMemo(
@@ -377,20 +384,26 @@ export default function ReportsScreen() {
   }, [period, navDate, navYear, navMonth, customRange]);
 
   const filters = useMemo(() => ({
-    payer: person,
+    sourceId,
     audience,
     search: searchQuery,
-  }), [person, audience, searchQuery]);
+  }), [sourceId, audience, searchQuery]);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [txns, sum] = await Promise.all([
+      const [txns, sum, bySource, byAudience, byCategory] = await Promise.all([
         getExpenseTransactions(reportRange, filters),
         getExpenseSummary(reportRange, filters),
+        getExpenseSourceTotals(reportRange, filters),
+        getExpenseAudienceTotals(reportRange, filters),
+        getExpenseCategoryTotals(reportRange, filters),
       ]);
       setTransactions(txns);
       setSummary(sum);
+      setSourceStats(bySource);
+      setAudienceStats(byAudience);
+      setCategoryRows(byCategory);
 
       if (period === 'month') {
         const daily = await getDailyExpenseTotals(reportRange, filters);
@@ -406,8 +419,8 @@ export default function ReportsScreen() {
   }, [reportRange, filters, period, navYear, navMonth]);
 
   useFocusEffect(useCallback(() => {
-    getAllPayers().then((p) =>
-      setPayers(p.map(({ name, icon }) => ({ name, icon })))
+    getAllSources().then((s) =>
+      setSources(s.map(({ id, name }) => ({ id, name })))
     ).catch(console.error);
   }, []));
 
@@ -453,19 +466,15 @@ export default function ReportsScreen() {
 
   const totalChi = summary?.totalChi ?? 0;
   const categoryStats = useMemo(() => {
-    const rows = aggregateByCategory(transactions);
-    return rows.map((s) => ({
+    return categoryRows.map((s) => ({
       ...s,
       pct: totalChi > 0 ? (s.amount / totalChi) * 100 : 0,
     }));
-  }, [transactions, totalChi]);
-
-  const payerStats = useMemo(() => aggregateByPayer(transactions), [transactions]);
-  const audienceStats = useMemo(() => aggregateByAudience(transactions), [transactions]);
+  }, [categoryRows, totalChi]);
   const peakDay = useMemo(() => highestSpendingDay(dailySeries), [dailySeries]);
 
   const hasActiveFilters =
-    person !== 'all' || audience !== 'all' || searchQuery.trim().length > 0;
+    sourceId !== 'all' || audience !== 'all' || searchQuery.trim().length > 0;
   const filteredEmptyMessage = 'Không có giao dịch phù hợp';
   const periodEmptyMessage = 'Chưa có chi tiêu nào\n trong kỳ này';
 
@@ -478,10 +487,15 @@ export default function ReportsScreen() {
     });
   }, [categoryStats, colors.pink]);
 
-  const payerOptions: FilterOption[] = useMemo(() => [
+  const sourceOptions: FilterOption[] = useMemo(() => [
     { id: 'all', shortLabel: 'Tất cả', fullLabel: 'Tất cả', icon: '🗂' },
-    ...payers.map((p) => ({ id: p.name, shortLabel: p.name, fullLabel: p.name, icon: p.icon })),
-  ], [payers]);
+    ...sources.map((s) => ({
+      id: String(s.id),
+      shortLabel: s.name,
+      fullLabel: s.name,
+      icon: '💳',
+    })),
+  ], [sources]);
 
   const audienceOptions: FilterOption[] = useMemo(() => [
     { id: 'all', shortLabel: AUDIENCE_SHORT.all, fullLabel: 'Tất cả' },
@@ -590,7 +604,7 @@ export default function ReportsScreen() {
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
             style={styles.searchInput}
-            placeholder="Tìm mô tả, số tiền, danh mục, người trả..."
+            placeholder="Tìm mô tả, số tiền, danh mục..."
             placeholderTextColor={colors.neutral[400]}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -626,7 +640,12 @@ export default function ReportsScreen() {
 
             {/* Filters */}
             <View style={styles.filterRow}>
-              <FilterDropdown label="Ai trả" value={person} options={payerOptions} onSelect={setPerson} />
+              <FilterDropdown
+                label="Nguồn chi"
+                value={sourceId === 'all' ? 'all' : String(sourceId)}
+                options={sourceOptions}
+                onSelect={(id) => setSourceId(id === 'all' ? 'all' : Number(id))}
+              />
               <FilterDropdown
                 label="Chi cho"
                 value={audience}
@@ -654,8 +673,8 @@ export default function ReportsScreen() {
             {period === 'day' && (
               <>
                 <BreakdownSection title="Chi theo danh mục" rows={categoryStats} total={totalChi} />
-                <BreakdownSection title="Chi theo người trả" rows={payerStats} total={totalChi} />
-                <BreakdownSection title="Chi theo đối tượng" rows={audienceStats} total={totalChi} />
+                <BreakdownSection title="Chi theo nguồn" rows={sourceStats} total={totalChi} />
+                <BreakdownSection title="Chi cho ai" rows={audienceStats} total={totalChi} />
               </>
             )}
 
@@ -710,6 +729,13 @@ export default function ReportsScreen() {
                   </View>
                 </View>
               )
+            )}
+
+            {period !== 'day' && (sourceStats.length > 0 || audienceStats.length > 0) && (
+              <>
+                <BreakdownSection title="Chi theo nguồn" rows={sourceStats} total={totalChi} />
+                <BreakdownSection title="Chi cho ai" rows={audienceStats} total={totalChi} />
+              </>
             )}
 
             {/* Transaction list */}

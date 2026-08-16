@@ -8,8 +8,7 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
 import { getDatabase } from './initDb';
-import { normalizeExpenseAudience } from './transactions';
-import type { ExpenseAudience } from '../types';
+import { normalizeExpenseAudience, type ExpenseAudience } from '../types';
 
 export interface BackupData {
   appVersion: string;

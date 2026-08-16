@@ -4,6 +4,7 @@
 // ============================================================
 
 import * as SQLite from 'expo-sqlite';
+import { missingSourceNames } from './sourceSeed';
 
 let db: SQLite.SQLiteDatabase | null = null;
 
@@ -41,7 +42,7 @@ export async function initializeDatabase(): Promise<void> {
     );
   `);
 
-  // Tạo bảng sources (nguồn tiền)
+  // Tạo bảng sources (nguồn chi)
   await database.execAsync(`
     CREATE TABLE IF NOT EXISTS sources (
       id   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -151,19 +152,13 @@ async function seedDefaultData(database: SQLite.SQLiteDatabase): Promise<void> {
     }
   }
 
-  // Seed nguồn tiền nếu chưa có
-  const srcCount = await database.getFirstAsync<{ count: number }>(
-    'SELECT COUNT(*) as count FROM sources;'
+  // Seed nguồn chi: fresh install nhận example config; DB cũ chỉ thêm tên còn thiếu.
+  // Không rename / merge / remap source lịch sử (Tiền mặt, VCB Shop, …).
+  const existingSources = await database.getAllAsync<{ name: string }>(
+    'SELECT name FROM sources;'
   );
-
-  if (!srcCount || srcCount.count === 0) {
-    const defaultSources = ['Tiền mặt', 'Chuyển khoản'];
-    for (const src of defaultSources) {
-      await database.runAsync(
-        'INSERT INTO sources (name) VALUES (?);',
-        [src]
-      );
-    }
+  for (const name of missingSourceNames(existingSources.map((s) => s.name))) {
+    await database.runAsync('INSERT OR IGNORE INTO sources (name) VALUES (?);', [name]);
   }
 
   const payerCount = await database.getFirstAsync<{ count: number }>(

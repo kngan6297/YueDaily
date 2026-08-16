@@ -71,33 +71,33 @@ export async function deleteCategory(id: number): Promise<DeleteResult> {
   return { ok: true };
 }
 
-/** Lấy tất cả nguồn tiền */
+/** Lấy tất cả nguồn chi */
 export async function getAllSources(): Promise<Source[]> {
   const db = await getDatabase();
   return await db.getAllAsync<Source>('SELECT * FROM sources ORDER BY id;');
 }
 
-/** Thêm nguồn tiền */
+/** Thêm nguồn chi */
 export async function insertSource(name: string): Promise<number> {
   const db = await getDatabase();
   const result = await db.runAsync('INSERT INTO sources (name) VALUES (?);', [name.trim()]);
   return result.lastInsertRowId;
 }
 
-/** Cập nhật nguồn tiền */
+/** Cập nhật nguồn chi */
 export async function updateSource(id: number, name: string): Promise<void> {
   const db = await getDatabase();
   await db.runAsync('UPDATE sources SET name = ? WHERE id = ?;', [name.trim(), id]);
 }
 
-/** Xoá nguồn tiền — gỡ liên kết giao dịch trước */
+/** Xoá nguồn chi — gỡ liên kết giao dịch trước */
 export async function deleteSource(id: number): Promise<DeleteResult> {
   const db = await getDatabase();
   const count = await db.getFirstAsync<{ count: number }>(
     'SELECT COUNT(*) as count FROM sources;'
   );
   if ((count?.count ?? 0) <= 1) {
-    return { ok: false, reason: 'Cần giữ ít nhất một nguồn tiền.' };
+    return { ok: false, reason: 'Cần giữ ít nhất một nguồn chi.' };
   }
   await db.runAsync('UPDATE transactions SET source_id = NULL WHERE source_id = ?;', [id]);
   await db.runAsync('DELETE FROM sources WHERE id = ?;', [id]);
