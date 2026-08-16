@@ -9,6 +9,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
+import { BOTTOM_SHEET_PADDING_TOP } from '../../constants/layout';
 import { BorderRadius, ThemeColors } from '../../constants/theme';
 import { useAppTheme } from '../../context/ThemeContext';
 import { useModalBottomInset } from '../../hooks/useModalBottomInset';
@@ -128,7 +129,7 @@ function createStyles(colors: ThemeColors) {
       backgroundColor: colors.background.modal,
       borderTopLeftRadius: BorderRadius['2xl'],
       borderTopRightRadius: BorderRadius['2xl'],
-      paddingTop: 12,
+      paddingTop: BOTTOM_SHEET_PADDING_TOP,
       maxHeight: '70%',
     },
   });

@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -9,12 +9,18 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  DAY_SHEET_MAX_HEIGHT_RATIO,
+  daySheetListMaxHeight,
+} from '../../constants/layout';
 import { BorderRadius, Spacing, ThemeColors, ThemeShadows, Typography } from '../../constants/theme';
 import { useAppTheme } from '../../context/ThemeContext';
 import { BottomSheetModal } from '../../components/ui/BottomSheetModal';
+import { useModalBottomInset } from '../../hooks/useModalBottomInset';
 import { updateStreak } from '../../database/categories';
 import {
   HOME_SPEND_VIEW_OPTIONS,
@@ -54,6 +60,24 @@ const getGreeting = () => {
 export default function HomeScreen() {
   const { colors, shadows } = useAppTheme();
   const styles = useMemo(() => createStyles(colors, shadows), [colors, shadows]);
+  const { height: windowHeight } = useWindowDimensions();
+  const sheetBottomInset = useModalBottomInset();
+  const daySheetHeaderH = useRef(0);
+  const daySheetFooterH = useRef(0);
+  const [daySheetChromeH, setDaySheetChromeH] = useState(200);
+  const syncDaySheetChrome = useCallback(() => {
+    const next = daySheetHeaderH.current + daySheetFooterH.current;
+    setDaySheetChromeH((prev) => (prev === next ? prev : next));
+  }, []);
+  const daySheetStyle = useMemo(
+    () => ({ maxHeight: `${Math.round(DAY_SHEET_MAX_HEIGHT_RATIO * 100)}%` as const }),
+    [],
+  );
+  const dayListMaxHeight = daySheetListMaxHeight(
+    windowHeight,
+    daySheetChromeH,
+    sheetBottomInset,
+  );
   const router = useRouter();
   const now = new Date();
   const [calMonth, setCalMonth] = useState(now.getMonth() + 1);
@@ -391,10 +415,15 @@ export default function HomeScreen() {
       <BottomSheetModal
         visible={showDayModal && selectedDay !== null}
         onClose={() => setShowDayModal(false)}
+        sheetStyle={daySheetStyle}
       >
-          <View style={styles.modalHandle} />
-
-          <View style={styles.sheetContent}>
+          <View
+            onLayout={(e) => {
+              daySheetHeaderH.current = e.nativeEvent.layout.height;
+              syncDaySheetChrome();
+            }}
+          >
+            <View style={styles.modalHandle} />
             <View style={styles.sheetHeaderSection}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>{selectedDayLabel}</Text>
@@ -417,47 +446,55 @@ export default function HomeScreen() {
                 </View>
               </View>
             </View>
+          </View>
 
-            <ScrollView
-              style={styles.modalScroll}
-              contentContainerStyle={styles.modalScrollContent}
-              showsVerticalScrollIndicator={false}
+          <ScrollView
+            style={[styles.modalScroll, { maxHeight: dayListMaxHeight }]}
+            contentContainerStyle={styles.modalScrollContent}
+            showsVerticalScrollIndicator={selectedTxns.length > 2}
+            nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
+          >
+            {selectedTxns.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateIcon}>📭</Text>
+                <Text style={styles.emptyStateText}>Chưa có khoản chi trong ngày này</Text>
+              </View>
+            ) : (
+              <View style={styles.txnCard}>
+                {selectedTxns.map((item, idx) => (
+                  <View key={item.id}>
+                    {renderTxn(item, true)}
+                    {idx < selectedTxns.length - 1 && <View style={styles.txnDivider} />}
+                  </View>
+                ))}
+              </View>
+            )}
+          </ScrollView>
+
+          <View
+            style={styles.modalFooter}
+            onLayout={(e) => {
+              daySheetFooterH.current = e.nativeEvent.layout.height;
+              syncDaySheetChrome();
+            }}
+          >
+            <TouchableOpacity
+              style={styles.modalAddBtn}
+              onPress={() => {
+                if (!selectedDay) return;
+                setShowDayModal(false);
+                const m = String(calMonth).padStart(2, '0');
+                const d = String(selectedDay).padStart(2, '0');
+                router.push({
+                  pathname: '/camera',
+                  params: { transactionDate: `${calYear}-${m}-${d}` },
+                });
+              }}
+              activeOpacity={0.85}
             >
-              {selectedTxns.length === 0 ? (
-                <View style={styles.emptyState}>
-                  <Text style={styles.emptyStateIcon}>📭</Text>
-                  <Text style={styles.emptyStateText}>Chưa có khoản chi trong ngày này</Text>
-                </View>
-              ) : (
-                <View style={styles.txnCard}>
-                  {selectedTxns.map((item, idx) => (
-                    <View key={item.id}>
-                      {renderTxn(item, true)}
-                      {idx < selectedTxns.length - 1 && <View style={styles.txnDivider} />}
-                    </View>
-                  ))}
-                </View>
-              )}
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={styles.modalAddBtn}
-                onPress={() => {
-                  if (!selectedDay) return;
-                  setShowDayModal(false);
-                  const m = String(calMonth).padStart(2, '0');
-                  const d = String(selectedDay).padStart(2, '0');
-                  router.push({
-                    pathname: '/camera',
-                    params: { transactionDate: `${calYear}-${m}-${d}` },
-                  });
-                }}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.modalAddBtnText}>+ Thêm giao dịch</Text>
-              </TouchableOpacity>
-            </View>
+              <Text style={styles.modalAddBtnText}>+ Thêm giao dịch</Text>
+            </TouchableOpacity>
           </View>
       </BottomSheetModal>
     </SafeAreaView>
@@ -694,10 +731,8 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     alignSelf: 'center',
     marginBottom: Spacing.md,
   },
-  sheetContent: {
-    paddingHorizontal: Spacing.base,
-  },
   sheetHeaderSection: {
+    paddingHorizontal: Spacing.base,
     gap: Spacing.sm,
     marginBottom: Spacing.md,
     paddingBottom: Spacing.md,
@@ -757,9 +792,13 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     fontWeight: '700',
     color: colors.neutral[500],
   },
-  modalScroll: { flexGrow: 0 },
+  modalScroll: {
+    flexGrow: 0,
+    paddingHorizontal: Spacing.base,
+  },
   modalScrollContent: {
-    paddingVertical: Spacing.base,
+    paddingBottom: Spacing.sm,
+    flexGrow: 0,
   },
   emptyState: {
     alignItems: 'center',
@@ -773,7 +812,10 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     fontWeight: '500',
   },
   modalFooter: {
-    paddingVertical: Spacing.md,
+    flexShrink: 0,
+    paddingHorizontal: Spacing.base,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.neutral[100],
   },
@@ -855,7 +897,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     fontWeight: '700',
     color: colors.pink[500],
   },
-  txnInfo: { flex: 1 },
+  txnInfo: { flex: 1, minWidth: 0 },
   txnName: {
     fontSize: Typography.fontSize.sm,
     fontWeight: '600',
