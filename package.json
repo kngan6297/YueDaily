@@ -41,7 +41,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "build:web": "expo export --platform web",
-    "test": "node --experimental-strip-types --import ./scripts/resolve-ts.mjs --test src/utils/date.test.ts src/database/reportQueries.test.ts src/database/sourceSeed.test.ts src/database/attribution.test.ts src/types/expenseAudience.test.ts"
+    "test": "node --experimental-strip-types --import ./scripts/resolve-ts.mjs --test src/utils/date.test.ts src/database/reportQueries.test.ts src/database/sourceSeed.test.ts src/database/attribution.test.ts src/types/expenseAudience.test.ts src/database/sourceLifecycle.test.ts src/database/categoryUsage.test.ts src/database/homeSpendView.test.ts"
   },
   "private": true
 }

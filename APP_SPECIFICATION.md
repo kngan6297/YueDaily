@@ -1,9 +1,9 @@
 # YueDaily — Đặc tả sản phẩm (PRD)
 
 > **Loại tài liệu:** Product Requirements Document  
-> **Phiên bản:** 1.5.1 · **Cập nhật:** 2026-08-16  
+> **Phiên bản:** 1.5.4 · **Cập nhật:** 2026-08-16  
 > **Trạng thái:** Đang phát triển (Expo SDK 54, React Native 0.81, React 19)  
-> **Phase hiện tại:** P1.5 — Source & Audience Foundation
+> **Phase hiện tại:** P1.5.4 — Home monitoring theo Nguồn chi
 
 **Đọc tài liệu này khi cần biết app *là gì*, *cho ai*, *làm gì* và *làm như thế nào ở mức sản phẩm*.**  
 Chi tiết kỹ thuật (cài đặt, build, schema DB, kiến trúc code) → [`README.md`](./README.md).
@@ -172,6 +172,14 @@ Stack:
 Không overload Home. Giữ:
 
 - Lời chào theo giờ + badge streak + card tổng chi tháng hiện tại.
+- **Quick monitoring** (theo **Nguồn chi**, không theo `expense_audience`; không persist; không thêm field trên transaction):
+  - `Tất cả` — mọi giao dịch chi `complete` trong tháng đang xem, gồm personal, household, và nguồn chưa phân loại (mặc định khi mở app).
+  - `Cá nhân Yue` — `sources.spending_group = personal_yue` (seed: VPBank, Tiền mặt Yue).
+  - `Quỹ chung` — `sources.spending_group = household` (seed: Woori · Quỹ ăn, Tiền mặt Kai).
+  - `expense_audience` (**Chi cho ai**) không quyết định tab. Yue + Woori → Quỹ chung; Yue + VPBank → Cá nhân Yue; Kai + Woori → Quỹ chung.
+  - Nguồn legacy không classify (`Tiền mặt`, `Chuyển khoản`, `VCB Shop`) → `spending_group` NULL, chỉ hiện trong Tất cả.
+  - Archived source vẫn report theo `spending_group` đã gắn; `is_active` không lọc lịch sử.
+  - Selection áp dụng cho **cả màn**: tổng tháng, lịch (marker/ảnh/số GD), summary ngày, danh sách bottom sheet. Đổi tháng giữ mode trong session.
 - Lịch tháng:
   - Ô ngày hiển thị: emoji danh mục chính, thumbnail ảnh (nếu có), badge số giao dịch.
 - Chạm vào một ngày:
@@ -206,9 +214,9 @@ Mục tiêu: nhập ≤ 30 giây.
 
 - **Trường luôn hiển thị (critical path):**
   - Số tiền (VNĐ, integer, định dạng `vi-VN`).
-  - Danh mục (dropdown, chỉ danh mục chi tiêu).
+  - Danh mục (dropdown, chỉ danh mục chi tiêu; **thường dùng trước** — `usage_count` giao dịch chi `complete`, không theo số tiền / tháng hiện tại).
   - **Chi cho ai** (dropdown) — `expense_audience`; label Yue / Kai / Meo.
-  - **Nguồn chi** (dropdown) — `source_id`; **bắt buộc**; helper text nếu cần: *Khoản này lấy tiền từ đâu?*
+  - **Nguồn chi** (dropdown) — `source_id`; **bắt buộc**; helper text nếu cần: *Khoản này lấy tiền từ đâu?* Form tạo mới chỉ liệt kê source **đang dùng** (`is_active`). Sửa giao dịch cũ: source archived hiện tại vẫn hiện + các source đang dùng; không đổi silently sang source khác.
   - Ngày giao dịch.
   - Mô tả (TextInput, có thể gõ dài).
 - **Không có trên form P1.5:**
@@ -312,13 +320,14 @@ YueDaily không có đủ accounting context để gọi số “chi từ VCB Sh
 
 Thứ tự section:
 
-1. **Về ứng dụng** — tên, phiên bản, thông tin lưu trữ (local-first).
-2. **Thẻ tóm tắt** — Streak, Privacy, Phiên bản, Storage.
-3. **Nguồn chi** — thêm/sửa/xoá (tên, emoji, màu). Đổi wording **Nguồn tiền** → **Nguồn chi** nếu phù hợp toàn app.
+1. **Giao diện** — sáng / tối / theo hệ thống.
+2. **Thẻ tóm tắt** — Streak, Privacy, Phiên bản.
+3. **Nguồn chi** — thêm/sửa; **Nhóm theo dõi** (Cá nhân Yue / Quỹ chung) khi tạo hoặc khi chưa có giao dịch; xoá khi chưa có giao dịch tham chiếu; Lưu trữ / Dùng lại khi đã có lịch sử.
 4. **Danh mục** — thêm/sửa/xoá danh mục chi tiêu.
 5. **Sao lưu & Khôi phục** — export/import JSON (gồm `sources`, `transaction.source_id`, `expense_audience` kể cả Yue + Meo, legacy `payer` nếu đang tồn tại).
+6. **Về ứng dụng** — mô tả product hiện tại (Danh mục · Nguồn chi · Chi cho ai, local-first, không tài khoản / không đồng bộ ngân hàng, backup, giao diện). Phiên bản đọc từ metadata app.
 
-CRUD **Người thanh toán** không còn là surface chính của P1.5. Nếu UI/CRUD cũ còn tồn tại vì dữ liệu lịch sử, không dùng để bắt user nhập trên form; có thể deprecate sau.
+CRUD **Người trả / Người thanh toán không còn trên Settings.** Cột/bảng `payer` giữ cho backup và giao dịch cũ; form không nhập field này.
 
 **Nguồn chi — CRUD & seed:**
 
@@ -334,14 +343,24 @@ CRUD **Người thanh toán** không còn là surface chính của P1.5. Nếu U
   | 🏪 VCB Shop | Source lịch sử; không còn ưu tiên cho household/personal food mới |
 
 - **Không gộp** `Tiền mặt Yue` và `Tiền mặt Kai` thành một source `Tiền mặt`.
-- `active` / `inactive` (nếu architecture đã có hoặc dễ hỗ trợ): cho phép ẩn source cũ (ví dụ VCB Shop) khỏi quick-selection khi tạo giao dịch mới, vẫn giữ historical reporting. **Không** bắt buộc mở rộng scope nếu implementation hiện tại chưa có activation state — user có thể giữ source nhưng không chọn thủ công từ thời điểm chuyển workflow.
+- Source có lifecycle **đang dùng / đã lưu trữ** (`is_active`):
+  - Archived ẩn khỏi form tạo giao dịch mới.
+  - Giữ nguyên `source_id` lịch sử; Thống kê / Tài khoản / backup vẫn report đúng tên.
+  - Sửa giao dịch cũ: source archived hiện tại vẫn representable; không migrate VCB Shop → Woori.
+  - Last-selected source nếu đã archived thì không preselect cho giao dịch mới.
+- `spending_group` là metadata của **Nguồn chi** (`personal_yue` | `household` | NULL) — dùng cho Home monitoring, **không** phải transaction scope / `expense_audience`.
+  - Tạo nguồn mới: bắt buộc chọn Nhóm theo dõi. Không đoán từ tên.
+  - Đã có giao dịch: khóa `spending_group` (đổi ý nghĩa → lưu trữ nguồn cũ, tạo nguồn mới). Vẫn được đổi tên / Lưu trữ / Dùng lại.
+  - Seed/migration exact name: VPBank + Tiền mặt Yue → `personal_yue`; Woori · Quỹ ăn + Tiền mặt Kai → `household`. Không classify `Tiền mặt` / `Chuyển khoản` / `VCB Shop`.
+- Installation Yue: archive exact seed names `Tiền mặt`, `Chuyển khoản`, `VCB Shop` nếu chúng tồn tại — không fuzzy, không xóa, không merge.
 
 **Quy tắc xoá:**
 
 - Nguồn chi:
   - Luôn phải còn ≥ 1 nguồn chi.
-  - Không hard-delete nguồn đang được giao dịch sử dụng — tránh mất attribution lịch sử (đặc biệt VCB Shop). Ưu tiên đổi tên / deactivate nếu có.
-  - Khi xoá nguồn không còn giao dịch, giao dịch cũ (nếu còn liên kết) hiển thị “Không rõ nguồn”.
+  - **Chưa từng được giao dịch tham chiếu** (`COUNT(transactions.source_id) = 0`) → cho phép **Xoá**. Không cascade, không null `source_id` của giao dịch khác.
+  - **Đã có giao dịch** → không xoá; chỉ **Lưu trữ** / **Dùng lại**. UI báo: *Nguồn chi này đã có giao dịch nên chỉ có thể lưu trữ.* Repository enforce, không tin count cache trên UI.
+  - Historical `VCB Shop` / `Tiền mặt` / `Chuyển khoản` nếu còn reference: archive, không delete.
 - Danh mục:
   - Khi xoá, giao dịch cũ mất liên kết danh mục (hiển thị “Không rõ danh mục”).
 
@@ -512,6 +531,14 @@ Ví dụ: Yue đi ăn với Meo, hoá đơn 600.000đ → `expense_audience = wi
 
 Field bắt buộc trên form. Terminology UI: **Nguồn chi**. Helper: *Khoản này lấy tiền từ đâu?*
 
+Ba chiều tách nhau:
+
+- `expense_audience` = **Chi cho ai**
+- `source_id` = **Lấy tiền từ đâu**
+- `sources.spending_group` = phân loại Home monitoring trên Nguồn chi (`personal_yue` / `household` / chưa phân loại) — **không** phải field trên transaction, **không** phải `expense_scope`.
+
+Home tabs Tất cả / Cá nhân Yue / Quỹ chung đọc `spending_group`. Thống kê vẫn lọc Chi cho ai bình thường.
+
 **Default giao dịch mới:** nguồn user chọn gần nhất (UI convenience, không phải AI inference). User luôn có thể đổi. Ví dụ vừa nhập Woori thì transaction tiếp theo có thể preselect Woori.
 
 **Ghi fact, không ghi policy:** nếu food fund là Woori nhưng Yue thực tế lấy Tiền mặt Yue để trả → `source_id` = Tiền mặt Yue. Không ghi Woori chỉ vì “đáng lẽ thuộc food budget”. Reimbursement / transfer thuộc phase khác.
@@ -549,7 +576,7 @@ Field bắt buộc trên form. Terminology UI: **Nguồn chi**. Helper: *Khoản
 - Đã từng được dùng cho một số transaction household/personal food trước đây.
 - **Going forward:** Yue chủ động ngừng dùng VCB Shop để thanh toán food/personal household spending.
 - **Không** xóa source; **không** sửa historical transaction; **không** retroactively chuyển VCB → Woori.
-- Statistics vẫn report giao dịch cũ đúng source.
+- Form tạo mới không liệt kê VCB Shop (archived). Statistics vẫn report giao dịch cũ đúng source.
 - App **không** enforce bằng validation; **không** chịu trách nhiệm quản lý chi phí vận hành TOKUani Shop.
 
 ### 7.5 Migration dữ liệu đang có
@@ -562,6 +589,7 @@ Giao dịch hiện có **giữ nguyên**: amount, category, source, payer (nếu
 - **Không** infer audience.
 - **Không** retroactively sửa transaction cũ nếu không có đủ thông tin.
 - Thêm support `wife_and_sister` (UI: Yue + Meo); record cũ giữ nguyên.
+- Thêm `sources.is_active` (DEFAULT đang dùng). Archive exact seed `Tiền mặt` / `Chuyển khoản` / `VCB Shop` nếu có — không fuzzy, không xóa row, không đổi `source_id`.
 
 Chi tiết schema SQL xem ở `README.md` → *Data Model (SQLite)*. README / Data Model cần cập nhật tương ứng (không viết SQL trong PRD này).
 
@@ -876,6 +904,31 @@ Cập nhật 2026-08-16 · phiên bản **1.5.1** · phase **P1.5 Source & Audie
 
 Không xóa feature hiện có của 1.4.1 / 1.5.0 ngoài việc **rút** payer / funding pool / approved_by khỏi primary product surface của phase này.
 
+## CHANGELOG 1.5.2
+
+Cập nhật 2026-08-16 · phiên bản **1.5.2** · **P1.5.2 Transaction Entry UX Cleanup**.
+
+- **Source lifecycle:** `is_active` — archived ẩn khỏi form tạo mới; lịch sử / reporting / edit / backup giữ nguyên `source_id`. Không xóa, không merge, không remap VCB Shop.
+- **Category picker:** form giao dịch sắp xếp theo tần suất dùng (số giao dịch chi `complete`), không theo alphabet hay số tiền. Settings giữ thứ tự hiện tại.
+- **Không** thuộc P1.6 Budget.
+
+## CHANGELOG 1.5.3
+
+Cập nhật 2026-08-16 · phiên bản **1.5.3** · **P1.5.3 UX cleanup**.
+
+- **Settings:** không còn CRUD Người trả trên UI (cột/bảng `payer` giữ cho backup). Nguồn chưa dùng → Xoá; nguồn đã có giao dịch → Lưu trữ / Dùng lại.
+- **About:** mô tả product hiện tại (Danh mục · Nguồn chi · Chi cho ai, local-first, không đồng bộ ngân hàng).
+- **Home:** quick monitoring tabs (session-only). Theme Sakura Twilight + Edit ghost / safe-area footer.
+
+## CHANGELOG 1.5.4
+
+Cập nhật 2026-08-16 · phiên bản **1.5.4** · **Home monitoring theo Nguồn chi**.
+
+- Home tabs **Tất cả / Cá nhân Yue / Quỹ chung** lọc `sources.spending_group`, **không** lọc `expense_audience`.
+- `spending_group` là metadata Nguồn chi (`personal_yue` | `household` | NULL). Không thêm field trên transaction. Khóa nhóm sau khi đã có giao dịch.
+- Backup `backupVersion: '3'`. Restore chấp nhận v1/v2/v3.
+- **Không** thuộc P1.6 Budget.
+
 ---
 
 ## README / TECH SPEC FOLLOW-UP
@@ -885,21 +938,21 @@ Sau khi PRD được duyệt, cập nhật kỹ thuật (không implement trong 
 | Hạng mục | Việc cần làm |
 |----------|----------------|
 | **DB migration** | **Không** thêm `funding_pool` / `approved_by`. Mở rộng check/enum `expense_audience` với `wife_and_sister` nếu chưa có. Existing rows giữ nguyên amount, category, source, payer, audience. Deterministic, không heuristic. |
-| **Legacy payer compatibility** | Giữ cột/field `payer` trên transaction; form mới không bắt chọn; Home/Stats không ưu tiên payer; không xóa historical data. Chuẩn bị deprecate sau. |
-| **Source master-data** | Terminology **Nguồn chi**. CRUD tên / emoji / màu. Seed/example cho installation Yue: Woori · Quỹ ăn, VPBank, Tiền mặt Yue, Tiền mặt Kai, VCB Shop — **không** hardcode thành product enum. Không merge hai source tiền mặt. |
-| **Optional source active/inactive** | Chỉ nếu architecture đã có hoặc rẻ: ẩn VCB Shop khỏi quick-select, vẫn report lịch sử. Không mở rộng scope nếu chưa có activation state. |
+| **Legacy payer compatibility** | Giữ cột/field `payer` trên transaction và bảng `payers` cho backup; **không** expose CRUD Người trả trên Settings. Form không bắt chọn; Home/Stats không ưu tiên payer; không xóa historical data. |
+| **Source master-data** | Terminology **Nguồn chi**. CRUD tên. Seed/example đang dùng: Woori · Quỹ ăn, VPBank, Tiền mặt Yue, Tiền mặt Kai — **không** hardcode thành product enum. `VCB Shop` / `Tiền mặt` / `Chuyển khoản` là lịch sử, không seed install mới. Không merge hai source tiền mặt. |
+| **Source active/inactive** | `is_active`: archived ẩn khỏi form tạo mới; lịch sử / Thống kê / backup giữ `source_id`. |
 | **Audience enum / labels** | Giữ identifier `wife` / `husband` / `couple` / `couple_and_sister` / `unspecified`; thêm `wife_and_sister`; đổi `EXPENSE_AUDIENCE_LABELS` → Yue / Kai / Yue + Kai / Yue + Meo / Yue + Kai + Meo / Chưa phân loại. Default mới vẫn `couple`. |
 | **Transaction form** | Bỏ dropdown Ai trả / Người thanh toán. Layout: Danh mục \| Chi cho ai · Nguồn chi \| Ngày + mô tả. Default audience `couple`; default source last-selected. Không thêm quỹ tiền / người duyệt. |
-| **Home transaction metadata** | Row / bottom sheet: `Chi cho: …` + `Nguồn: …`. Không hiện Người thanh toán. Bỏ hoặc hạ cấp filter payer trên Home. |
+| **Home transaction metadata** | Row / bottom sheet: `Chi cho: …` + `Nguồn: …`. Quick views Tất cả / Cá nhân Yue / Quỹ chung theo `sources.spending_group`. Không hiện Người thanh toán. |
 | **Statistics filters** | Primary: kỳ, danh mục, nguồn chi, chi cho ai, search. Aggregation **Chi theo nguồn** + **Chi cho ai**. Cross-filter §5.5. Payer filter nếu còn: temporary, không core. |
 | **Source aggregation / Tài khoản** | Màn Tài khoản report theo `source_id`, không số dư. Không biến thành budget dashboard. |
-| **Backup schema** | Export `sources` + `transaction.source_id` + `expense_audience` + legacy `payer`. |
+| **Backup schema** | Export `sources` (`is_active` + `spending_group`) + `transaction.source_id` + `expense_audience` + legacy `payer`. |
+| **Settings** | Section **Nguồn chi** (unused → Xoá; referenced → Lưu trữ; Nhóm theo dõi khi tạo / khi chưa dùng). Không CRUD Người trả trên UI. Không thêm Quỹ tiền. |
 | **Restore compatibility** | Backup cũ: giữ source/audience/payer; map label UI Vợ/Chồng → Yue/Kai; không merge cash; không VCB → Woori; không infer. |
 | **Migration tests** | Existing transactions giữ nguyên field cũ; `wife_and_sister` nhận record mới; VCB Shop không bị remap; hai source tiền mặt không gộp. |
 | **Unit / integration tests** | Scenarios A–H; restore cũ; không split audience; form không yêu cầu payer; AI không điền source/audience. |
 | **AI layer** | Đảm bảo prompt/parser không điền `source_id`, `expense_audience`, `payer`. |
 | **Copy / i18n labels** | Thay “Ai trả”, “Người thanh toán”, “Nguồn tiền”, “Nguồn thanh toán”, “Vợ/Chồng” trên form, stats, settings, accounts, home cho khớp P1.5.1. |
-| **Settings** | Section **Nguồn chi**; hạ cấp / không bắt buộc CRUD Người thanh toán; không thêm Quỹ tiền. |
 
 ---
 

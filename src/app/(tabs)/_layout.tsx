@@ -2,20 +2,20 @@ import { Tabs, useRouter } from 'expo-router';
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BorderRadius, ThemeColors, Typography } from '../../constants/theme';
+import { BorderRadius, ThemeColors, ThemeShadows, Typography } from '../../constants/theme';
 import { TAB_BAR_CONTENT_HEIGHT } from '../../constants/layout';
 import { useAppTheme } from '../../context/ThemeContext';
 
 function TabBarBackground() {
-  const { colors } = useAppTheme();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const { colors, shadows } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors, shadows), [colors, shadows]);
   return <View style={styles.tabBarBackground} />;
 }
 
 function CameraTabButton() {
   const router = useRouter();
-  const { colors } = useAppTheme();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const { colors, shadows } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors, shadows), [colors, shadows]);
   return (
     <TouchableOpacity
       style={styles.cameraFab}
@@ -33,8 +33,8 @@ function TabIcon({ emoji, label, focused, badge }: {
   focused: boolean;
   badge?: number;
 }) {
-  const { colors } = useAppTheme();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const { colors, shadows } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors, shadows), [colors, shadows]);
   return (
     <View style={styles.tabItem}>
       <View>
@@ -55,8 +55,8 @@ function TabIcon({ emoji, label, focused, badge }: {
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 8);
-  const { colors } = useAppTheme();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const { colors, shadows } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors, shadows), [colors, shadows]);
 
   return (
     <Tabs
@@ -121,7 +121,7 @@ export default function TabLayout() {
   );
 }
 
-function createStyles(colors: ThemeColors) {
+function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
   return StyleSheet.create({
     tabBar: {
       backgroundColor: 'transparent',
@@ -133,7 +133,7 @@ function createStyles(colors: ThemeColors) {
     tabBarBackground: {
       ...StyleSheet.absoluteFillObject,
       backgroundColor: colors.background.surface,
-      shadowColor: colors.blue[400],
+      shadowColor: shadows.medium.shadowColor,
       shadowOffset: { width: 0, height: -4 },
       shadowOpacity: 0.10,
       shadowRadius: 10,
@@ -197,7 +197,7 @@ function createStyles(colors: ThemeColors) {
       backgroundColor: colors.action.fabBackground,
       alignItems: 'center',
       justifyContent: 'center',
-      shadowColor: colors.blue[600],
+      shadowColor: shadows.medium.shadowColor,
       shadowOffset: { width: 0, height: 3 },
       shadowOpacity: 0.18,
       shadowRadius: 8,

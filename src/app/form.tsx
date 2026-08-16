@@ -17,19 +17,20 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AmountKeyboard, formatAmount } from '../components/form/AmountKeyboard';
 import { BottomSheetModal } from '../components/ui/BottomSheetModal';
 import { BorderRadius, Spacing, ThemeColors, ThemeShadows, Typography } from '../constants/theme';
 import { useAppTheme } from '../context/ThemeContext';
-import { getAllSources, getExpenseCategories, updateStreak } from '../database/categories';
+import { getAllSources, getExpenseCategoriesByUsage, updateStreak } from '../database/categories';
+import { pickerSources, resolveCreateSourceId } from '../database/sourceLifecycle';
 import {
   getTransactionById,
   insertTransaction,
   updateTransaction,
 } from '../database/transactions';
 import { useGemini } from '../hooks/useGemini';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useModalBottomInset } from '../hooks/useModalBottomInset';
 import type {
   Category,
   ExpenseAudience,
@@ -93,7 +94,7 @@ function DropdownPicker({
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <TouchableOpacity
-        style={[styles.pill, selected && styles.pillSelected]}
+        style={[styles.pill, open && styles.pillSelected]}
         onPress={() => setOpen(true)}
         activeOpacity={0.8}
       >
@@ -181,9 +182,9 @@ export default function TransactionForm() {
 
   const { analyze, isLoading: isAiLoading } = useGemini();
 
-  // Tải danh mục chi tiêu, auto-chọn danh mục đầu tiên nếu chưa có
+  // Tải danh mục chi tiêu theo tần suất dùng; auto-chọn đầu danh sách nếu tạo mới
   useEffect(() => {
-    getExpenseCategories().then((cats) => {
+    getExpenseCategoriesByUsage().then((cats) => {
       categoriesRef.current = cats;
       setCategories(cats);
       if (formMode === 'create-complete') {
@@ -195,7 +196,7 @@ export default function TransactionForm() {
     }).catch(console.error);
   }, [formMode]);
 
-  // Tải nguồn chi — giao dịch mới nhớ nguồn chọn gần nhất
+  // Tải nguồn chi — tạo mới: active + last-selected nếu còn active
   useEffect(() => {
     getAllSources().then(async (srcs) => {
       setSources(srcs);
@@ -203,9 +204,8 @@ export default function TransactionForm() {
       const lastId = await getLastSelectedSourceId();
       setFormData((p) => {
         if (p.source_id !== null) return p;
-        const last = srcs.find((s) => s.id === lastId);
-        const fallback = last ?? srcs[0];
-        return fallback ? { ...p, source_id: fallback.id } : p;
+        const nextId = resolveCreateSourceId(pickerSources(srcs, 'create', null), lastId);
+        return nextId != null ? { ...p, source_id: nextId } : p;
       });
     }).catch(console.error);
   }, [formMode]);
@@ -284,7 +284,7 @@ export default function TransactionForm() {
 
     const summary = result.description || result.note || '';
 
-    const cats = await getExpenseCategories();
+    const cats = await getExpenseCategoriesByUsage();
     if (scanGeneration !== scanGenerationRef.current) return;
     categoriesRef.current = cats;
     setCategories(cats);
@@ -416,6 +416,7 @@ export default function TransactionForm() {
   const maxDate = new Date();
   const isBackdated = formData.transaction_date !== formatLocalDate(new Date());
   const { bottom: screenBottomInset } = useSafeAreaInsets();
+  const footerBottomPad = Math.max(useModalBottomInset(), Spacing.base);
 
   const handleDateChange = useCallback((event: DateTimePickerEvent, date?: Date) => {
     if (Platform.OS === 'android') setShowDatePicker(false);
@@ -427,7 +428,11 @@ export default function TransactionForm() {
     id: c.id, label: c.name, icon: c.icon, color: c.color,
   }));
 
-  const sourceOptions: PickerOption[] = sources.map((s) => ({
+  const sourceOptions: PickerOption[] = pickerSources(
+    sources,
+    formMode === 'edit-complete' ? 'edit' : 'create',
+    formData.source_id,
+  ).map((s) => ({
     id: s.id,
     label: s.name,
     icon: '💳',
@@ -445,7 +450,7 @@ export default function TransactionForm() {
   ];
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -570,7 +575,11 @@ export default function TransactionForm() {
               <View style={styles.field}>
                 <Text style={styles.fieldLabel}>Ngày giao dịch</Text>
                 <TouchableOpacity
-                  style={[styles.pill, isBackdated && styles.datePillBackdated]}
+                  style={[
+                    styles.pill,
+                    isBackdated && styles.datePillBackdated,
+                    showDatePicker && styles.pillSelected,
+                  ]}
                   onPress={() => setShowDatePicker(true)}
                   activeOpacity={0.8}
                 >
@@ -588,29 +597,30 @@ export default function TransactionForm() {
           </View>
         </ScrollView>
 
-        {/* Bàn phím số luôn hiển thị; tạm ẩn khi gõ mô tả để nhường chỗ bàn phím hệ thống */}
-        {!systemKeyboardVisible && (
-          <View style={styles.keypadSection}>
-            <AmountKeyboard
-              value={formData.amount}
-              onChange={(val) => setFormData((p) => ({ ...p, amount: val }))}
-            />
-          </View>
-        )}
+        {/* Bàn phím số + CTA — padding đáy theo safe area, không dính navbar */}
+        <View style={[styles.formFooter, { paddingBottom: footerBottomPad }]}>
+          {!systemKeyboardVisible && (
+            <View style={styles.keypadSection}>
+              <AmountKeyboard
+                value={formData.amount}
+                onChange={(val) => setFormData((p) => ({ ...p, amount: val }))}
+              />
+            </View>
+          )}
 
-        {/* ═══ SAVE BUTTON ═══ */}
-        <View style={[styles.bottomBar, { paddingBottom: Spacing.base + screenBottomInset }]}>
-          <TouchableOpacity
-            style={[styles.saveBtn, isSaving && { opacity: 0.6 }]}
-            onPress={handlePrimarySave}
-            disabled={isSaving}
-            activeOpacity={0.85}
-          >
+          <View style={styles.bottomBar}>
+            <TouchableOpacity
+              style={[styles.saveBtn, isSaving && { opacity: 0.6 }]}
+              onPress={handlePrimarySave}
+              disabled={isSaving}
+              activeOpacity={0.85}
+            >
             {isSaving
               ? <ActivityIndicator size="small" color={colors.action.primaryText} />
               : <Text style={styles.saveBtnText}>{primaryButtonLabel}</Text>
             }
-          </TouchableOpacity>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Chọn ngày giao dịch */}
@@ -685,7 +695,7 @@ function createStyles(
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.metallic.platinum,
+    borderColor: colors.ui.fieldBorder,
     width: '100%',
   },
 
@@ -735,7 +745,7 @@ function createStyles(
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: isDark ? colors.metallic.platinum : 'rgba(255,255,255,0.3)',
+    borderColor: isDark ? colors.ui.fieldBorder : 'rgba(255,255,255,0.3)',
   },
   aiBtnLoading: {
     backgroundColor: isDark ? colors.background.card : 'rgba(255,255,255,0.15)',
@@ -827,10 +837,11 @@ function createStyles(
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     borderWidth: 1,
-    borderColor: colors.metallic.platinum,
+    borderColor: colors.ui.fieldBorder,
   },
   pillSelected: {
     borderColor: colors.action.selectedBorder,
+    backgroundColor: colors.action.selectedBackground,
   },
   datePillBackdated: {
     borderColor: colors.lavender[300],
@@ -864,13 +875,16 @@ function createStyles(
   },
 
   // Keypad — luôn hiển thị (trừ khi bàn phím hệ thống mở)
+  formFooter: {
+    backgroundColor: colors.background.primary,
+    borderTopWidth: 1,
+    borderTopColor: colors.neutral[200],
+  },
   keypadSection: {
     gap: Spacing.sm,
     paddingHorizontal: Spacing.base,
     paddingTop: Spacing.sm,
     backgroundColor: colors.background.primary,
-    borderTopWidth: 1,
-    borderTopColor: colors.neutral[200],
   },
   doneBtn: {
     paddingVertical: Spacing.md,
@@ -887,11 +901,9 @@ function createStyles(
   // Save
   bottomBar: {
     paddingHorizontal: Spacing.base,
-    paddingBottom: Spacing.base,
+    paddingBottom: Spacing.sm,
     paddingTop: Spacing.sm,
     backgroundColor: colors.background.primary,
-    borderTopWidth: 1,
-    borderTopColor: colors.neutral[200],
   },
   saveBtn: {
     alignSelf: 'stretch',
@@ -937,10 +949,17 @@ function createStyles(
     alignItems: 'center',
     gap: Spacing.md,
     paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.neutral[100],
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
-  sheetOptionActive: { backgroundColor: colors.action.selectedBackground },
+  sheetOptionActive: {
+    backgroundColor: colors.action.selectedBackground,
+    borderColor: colors.action.selectedBorder,
+  },
   sheetOptionIcon: {
     width: 40,
     height: 40,

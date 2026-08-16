@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState, useMemo } from 'react';
 import {
@@ -25,34 +26,35 @@ import { useAppTheme } from '../../context/ThemeContext';
 import { exportBackup, importBackup } from '../../database/backup';
 import {
   deleteCategory,
-  deletePayer,
   deleteSource,
   getAllCategories,
-  getAllPayers,
-  getAllSources,
+  getSourcesWithReferenceCounts,
   insertCategory,
-  insertPayer,
   insertSource,
+  setSourceActive,
   updateCategory,
-  updatePayer,
   updateSource,
+  type SourceWithRefs,
 } from '../../database/categories';
+import { canEditSourceSpendingGroup, isSourceActive, sourceHasTransactionRefs } from '../../database/sourceLifecycle';
 import { useStreak } from '../../hooks/useStreak';
-import type { Category, PayerRecord, Source } from '../../types';
+import type { Category, SourceSpendingGroup } from '../../types';
+import {
+  SOURCE_SPENDING_GROUP_CHOICES,
+  SOURCE_SPENDING_GROUP_LABELS,
+  sourceSpendingGroupLabel,
+} from '../../types';
 
-const APP_INFO_ROWS = [
-  { label: 'Tên ứng dụng', value: 'YueDaily' },
-  { label: 'Phiên bản', value: '1.0.0' },
-  { label: 'Lưu trữ', value: '100% trên thiết bị' },
-  { label: 'Server', value: 'Không có' },
-];
+function appVersion(): string {
+  return Constants.expoConfig?.version ?? '1.0.2';
+}
 
-type EditKind = 'payer' | 'source' | 'category';
+type EditKind = 'source' | 'category';
 
 const APPEARANCE_OPTIONS: { id: AppearanceMode; label: string; hint: string }[] = [
   { id: 'system', label: 'Theo hệ thống', hint: 'Tự theo chế độ máy' },
   { id: 'light', label: 'Sáng', hint: 'Moonlit Sakura dịu' },
-  { id: 'dark', label: 'Tối', hint: 'Đêm xanh pha tím' },
+  { id: 'dark', label: 'Tối', hint: 'Hoàng hôn sakura' },
 ];
 
 interface EditState {
@@ -61,14 +63,18 @@ interface EditState {
   name: string;
   icon: string;
   color: string;
+  spending_group: SourceSpendingGroup | null;
+  groupLocked: boolean;
 }
 
 function emptyEdit(kind: EditKind): EditState {
   return {
     kind,
     name: '',
-    icon: kind === 'category' ? '✨' : kind === 'payer' ? '👤' : '💳',
+    icon: kind === 'category' ? '✨' : '💳',
     color: CategoryColors[0],
+    spending_group: null,
+    groupLocked: false,
   };
 }
 
@@ -77,8 +83,7 @@ export default function SettingsScreen() {
   const styles = useMemo(() => createStyles(colors, shadows), [colors, shadows]);
   const { streak } = useStreak();
   const [categories, setCategories] = useState<Category[]>([]);
-  const [sources, setSources] = useState<Source[]>([]);
-  const [payers, setPayers] = useState<PayerRecord[]>([]);
+  const [sources, setSources] = useState<SourceWithRefs[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -88,14 +93,12 @@ export default function SettingsScreen() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [cats, srcs, pays] = await Promise.all([
+      const [cats, srcs] = await Promise.all([
         getAllCategories(),
-        getAllSources(),
-        getAllPayers(),
+        getSourcesWithReferenceCounts(),
       ]);
       setCategories(cats);
       setSources(srcs);
-      setPayers(pays);
     } catch (err) {
       console.error(err);
     } finally {
@@ -113,11 +116,16 @@ export default function SettingsScreen() {
 
   const openAdd = (kind: EditKind) => setEdit(emptyEdit(kind));
 
-  const openEditPayer = (p: PayerRecord) =>
-    setEdit({ kind: 'payer', id: p.id, name: p.name, icon: p.icon, color: p.color });
-
-  const openEditSource = (s: Source) =>
-    setEdit({ kind: 'source', id: s.id, name: s.name, icon: '💳', color: CategoryColors[0] });
+  const openEditSource = (s: SourceWithRefs) =>
+    setEdit({
+      kind: 'source',
+      id: s.id,
+      name: s.name,
+      icon: '💳',
+      color: CategoryColors[0],
+      spending_group: s.spending_group,
+      groupLocked: !canEditSourceSpendingGroup(s.reference_count),
+    });
 
   const openEditCategory = (c: Category) =>
     setEdit({
@@ -126,6 +134,8 @@ export default function SettingsScreen() {
       name: c.name,
       icon: c.icon,
       color: c.color,
+      spending_group: null,
+      groupLocked: false,
     });
 
   const handleSaveEdit = async () => {
@@ -135,15 +145,19 @@ export default function SettingsScreen() {
       Alert.alert('Thiếu tên', 'Nhập tên trước nhé!');
       return;
     }
+    if (edit.kind === 'source' && !edit.id && !edit.spending_group) {
+      Alert.alert('Thiếu nhóm theo dõi', 'Chọn Cá nhân Yue hoặc Quỹ chung.');
+      return;
+    }
 
     setSaving(true);
     try {
-      if (edit.kind === 'payer') {
-        if (edit.id) await updatePayer(edit.id, trimmed, edit.icon, edit.color);
-        else await insertPayer(trimmed, edit.icon, edit.color);
-      } else if (edit.kind === 'source') {
-        if (edit.id) await updateSource(edit.id, trimmed);
-        else await insertSource(trimmed);
+      if (edit.kind === 'source') {
+        if (!edit.id) {
+          await insertSource(trimmed, edit.spending_group!);
+        } else {
+          await updateSource(edit.id, trimmed, edit.spending_group);
+        }
       } else {
         if (edit.id) await updateCategory(edit.id, trimmed, 'chi', edit.icon, edit.color);
         else await insertCategory(trimmed, 'chi', edit.icon, edit.color);
@@ -165,20 +179,33 @@ export default function SettingsScreen() {
     ]);
   };
 
-  const handleDeletePayer = (p: PayerRecord) => {
-    confirmDelete('Xoá người trả?', `Xoá 「${p.name}」?`, async () => {
-      const result = await deletePayer(p.id);
-      if (!result.ok) Alert.alert('Không thể xoá', result.reason);
-      else await loadData();
-    });
+  const handleArchiveSource = (s: SourceWithRefs) => {
+    const nextActive = !isSourceActive(s);
+    const title = nextActive ? 'Dùng lại nguồn chi?' : 'Lưu trữ nguồn chi?';
+    const message = nextActive
+      ? `「${s.name}」sẽ hiện lại trên form giao dịch mới. Lịch sử không đổi.`
+      : `「${s.name}」ẩn khỏi form giao dịch mới. Giao dịch cũ vẫn giữ nguồn này.`;
+    Alert.alert(title, message, [
+      { text: 'Huỷ', style: 'cancel' },
+      {
+        text: nextActive ? 'Dùng lại' : 'Lưu trữ',
+        onPress: () => {
+          setSourceActive(s.id, nextActive).then(loadData).catch(console.error);
+        },
+      },
+    ]);
   };
 
-  const handleDeleteSource = (s: Source) => {
-    confirmDelete('Xoá nguồn chi?', `Xoá 「${s.name}」? Giao dịch cũ sẽ mất liên kết nguồn.`, async () => {
-      const result = await deleteSource(s.id);
-      if (!result.ok) Alert.alert('Không thể xoá', result.reason);
-      else await loadData();
-    });
+  const handleDeleteSource = (s: SourceWithRefs) => {
+    confirmDelete(
+      'Xoá nguồn chi?',
+      `Xoá 「${s.name}」? Chỉ xoá được nguồn chưa có giao dịch.`,
+      async () => {
+        const result = await deleteSource(s.id);
+        if (!result.ok) Alert.alert('Không thể xoá', result.reason);
+        else await loadData();
+      },
+    );
   };
 
   const handleDeleteCategory = (c: Category) => {
@@ -231,13 +258,18 @@ export default function SettingsScreen() {
   };
 
   const editTitle =
-    edit?.kind === 'payer'
-      ? edit.id ? 'Sửa người trả' : 'Thêm người trả'
-      : edit?.kind === 'source'
-        ? edit.id ? 'Sửa nguồn chi' : 'Thêm nguồn chi'
-        : edit?.id ? 'Sửa danh mục' : 'Thêm danh mục';
+    edit?.kind === 'source'
+      ? edit.id ? 'Sửa nguồn chi' : 'Thêm nguồn chi'
+      : edit?.id ? 'Sửa danh mục' : 'Thêm danh mục';
 
   const streakCount = streak?.current_streak ?? 0;
+  const version = appVersion();
+  const aboutRows = [
+    { label: 'Tên ứng dụng', value: 'YueDaily' },
+    { label: 'Phiên bản', value: version },
+    { label: 'Lưu trữ', value: 'Cục bộ trên thiết bị' },
+    { label: 'Tài khoản / ngân hàng', value: 'Không cần' },
+  ];
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -246,22 +278,6 @@ export default function SettingsScreen() {
         <View style={styles.header}>
           <Text style={styles.headerTitle}>⚙️ Cài đặt</Text>
           <Text style={styles.headerSub}>Quản lý nguồn chi và danh mục</Text>
-        </View>
-
-        {/* ── Thông tin app ── */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>ℹ️ Về ứng dụng</Text>
-          <View style={[styles.card, styles.cardPadded]}>
-            {APP_INFO_ROWS.map((row, idx) => (
-              <View key={row.label}>
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>{row.label}</Text>
-                  <Text style={styles.infoValue}>{row.value}</Text>
-                </View>
-                {idx < APP_INFO_ROWS.length - 1 && <View style={styles.infoDivider} />}
-              </View>
-            ))}
-          </View>
         </View>
 
         {/* ── Giao diện ── */}
@@ -308,7 +324,7 @@ export default function SettingsScreen() {
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statEmoji}>📱</Text>
-            <Text style={styles.statValue}>v1.0</Text>
+            <Text style={styles.statValue}>v{version}</Text>
             <Text style={styles.statLabel}>Phiên bản</Text>
           </View>
         </View>
@@ -317,35 +333,6 @@ export default function SettingsScreen() {
           <ActivityIndicator color={colors.blue[400]} style={{ paddingVertical: 40 }} />
         ) : (
           <>
-            {/* ── Người trả ── */}
-            <View style={styles.section}>
-              <View style={styles.sectionHead}>
-                <Text style={styles.sectionTitle}>👥 Người trả</Text>
-                <TouchableOpacity style={styles.addChip} onPress={() => openAdd('payer')}>
-                  <Text style={styles.addChipText}>+ Thêm</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.card}>
-                {payers.map((p, idx) => (
-                  <View key={p.id}>
-                    <View style={styles.itemRow}>
-                      <View style={[styles.itemIcon, { backgroundColor: p.color + '22' }]}>
-                        <Text style={styles.itemIconText}>{p.icon}</Text>
-                      </View>
-                      <Text style={styles.itemName}>{p.name}</Text>
-                      <TouchableOpacity style={styles.actionBtn} onPress={() => openEditPayer(p)}>
-                        <Text style={styles.actionEdit}>Sửa</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.actionBtn} onPress={() => handleDeletePayer(p)}>
-                        <Text style={styles.actionDelete}>Xoá</Text>
-                      </TouchableOpacity>
-                    </View>
-                    {idx < payers.length - 1 && <View style={styles.divider} />}
-                  </View>
-                ))}
-              </View>
-            </View>
-
             {/* ── Nguồn chi ── */}
             <View style={styles.section}>
               <View style={styles.sectionHead}>
@@ -355,7 +342,13 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               </View>
               <View style={styles.card}>
-                {sources.map((s, idx) => (
+                {sources.length === 0 ? (
+                  <Text style={styles.emptyText}>Chưa có nguồn chi</Text>
+                ) : (
+                  sources.map((s, idx) => {
+                    const active = isSourceActive(s);
+                    const referenced = sourceHasTransactionRefs(s.reference_count);
+                    return (
                   <View key={s.id}>
                     <View style={styles.itemRow}>
                       <View style={[styles.itemIcon, { backgroundColor: colors.blue[100] }]}>
@@ -363,17 +356,44 @@ export default function SettingsScreen() {
                           {s.name === 'Tiền mặt' || s.name.includes('Tiền mặt') ? '💵' : '💳'}
                         </Text>
                       </View>
-                      <Text style={styles.itemName}>{s.name}</Text>
-                      <TouchableOpacity style={styles.actionBtn} onPress={() => openEditSource(s)}>
-                        <Text style={styles.actionEdit}>Sửa</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.actionBtn} onPress={() => handleDeleteSource(s)}>
-                        <Text style={styles.actionDelete}>Xoá</Text>
-                      </TouchableOpacity>
+                      <View style={styles.itemInfo}>
+                        <Text style={[styles.itemName, !active && styles.itemNameArchived]}>{s.name}</Text>
+                        <Text style={styles.itemMeta}>
+                          {[
+                            sourceSpendingGroupLabel(s.spending_group),
+                            !active ? 'Đã lưu trữ' : null,
+                          ].filter(Boolean).join(' · ')}
+                        </Text>
+                      </View>
+                      <View style={styles.itemActions}>
+                        <TouchableOpacity style={styles.actionChipEdit} onPress={() => openEditSource(s)}>
+                          <Text style={styles.actionChipEditText}>Sửa</Text>
+                        </TouchableOpacity>
+                        {referenced ? (
+                          <TouchableOpacity style={styles.actionChipEdit} onPress={() => handleArchiveSource(s)}>
+                            <Text style={styles.actionChipEditText}>
+                              {active ? 'Lưu trữ' : 'Dùng lại'}
+                            </Text>
+                          </TouchableOpacity>
+                        ) : (
+                          <>
+                            {!active ? (
+                              <TouchableOpacity style={styles.actionChipEdit} onPress={() => handleArchiveSource(s)}>
+                                <Text style={styles.actionChipEditText}>Dùng lại</Text>
+                              </TouchableOpacity>
+                            ) : null}
+                            <TouchableOpacity style={styles.actionChipDanger} onPress={() => handleDeleteSource(s)}>
+                              <Text style={styles.actionChipDangerText}>Xoá</Text>
+                            </TouchableOpacity>
+                          </>
+                        )}
+                      </View>
                     </View>
                     {idx < sources.length - 1 && <View style={styles.divider} />}
                   </View>
-                ))}
+                    );
+                  })
+                )}
               </View>
             </View>
 
@@ -399,12 +419,14 @@ export default function SettingsScreen() {
                         <View style={styles.itemInfo}>
                           <Text style={styles.itemName}>{c.name}</Text>
                         </View>
-                        <TouchableOpacity style={styles.actionBtn} onPress={() => openEditCategory(c)}>
-                          <Text style={styles.actionEdit}>Sửa</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.actionBtn} onPress={() => handleDeleteCategory(c)}>
-                          <Text style={styles.actionDelete}>Xoá</Text>
-                        </TouchableOpacity>
+                        <View style={styles.itemActions}>
+                          <TouchableOpacity style={styles.actionChipEdit} onPress={() => openEditCategory(c)}>
+                            <Text style={styles.actionChipEditText}>Sửa</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.actionChipDanger} onPress={() => handleDeleteCategory(c)}>
+                            <Text style={styles.actionChipDangerText}>Xoá</Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
                       {idx < expenseCategories.length - 1 && <View style={styles.divider} />}
                     </View>
@@ -461,6 +483,29 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* ── Về ứng dụng ── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>ℹ️ Về ứng dụng</Text>
+          <View style={[styles.card, styles.cardPadded]}>
+            <Text style={styles.aboutBlurb}>
+              YueDaily giúp Yue ghi lại và theo dõi chi tiêu hằng ngày theo Danh mục, Nguồn chi và Chi cho ai.
+            </Text>
+            <Text style={styles.aboutBlurb}>
+              Dữ liệu lưu cục bộ trên thiết bị — không cần tài khoản, không đồng bộ ngân hàng. Sao lưu JSON khi cần. Giao diện sáng hoặc tối.
+            </Text>
+            {aboutRows.map((row, idx) => (
+              <View key={row.label}>
+                {idx === 0 ? <View style={styles.infoDivider} /> : null}
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>{row.label}</Text>
+                  <Text style={styles.infoValue}>{row.value}</Text>
+                </View>
+                {idx < aboutRows.length - 1 && <View style={styles.infoDivider} />}
+              </View>
+            ))}
+          </View>
+        </View>
+
         <View style={{ height: 24 }} />
       </ScrollView>
 
@@ -505,24 +550,37 @@ export default function SettingsScreen() {
               )}
             </View>
 
-            {edit.kind === 'category' && (
+            {edit.kind === 'source' && (
               <>
-                <Text style={styles.editLabel}>Màu sắc</Text>
-                <View style={styles.colorRow}>
-                  {(CategoryColors as readonly string[]).map((c) => (
-                    <TouchableOpacity
-                      key={c}
-                      style={[styles.colorDot, { backgroundColor: c }, edit.color === c && styles.colorDotOn]}
-                      onPress={() => setEdit((p) => p && { ...p, color: c })}
-                    />
-                  ))}
-                </View>
+                <Text style={styles.editLabel}>Nhóm theo dõi</Text>
+                {edit.groupLocked ? (
+                  <Text style={styles.groupLockedHint}>
+                    {sourceSpendingGroupLabel(edit.spending_group)} — đã có giao dịch, không đổi nhóm. Đổi ý nghĩa tài chính thì lưu trữ nguồn này và tạo nguồn mới.
+                  </Text>
+                ) : (
+                  <View style={styles.typeRow}>
+                    {SOURCE_SPENDING_GROUP_CHOICES.map((id) => {
+                      const active = edit.spending_group === id;
+                      return (
+                        <TouchableOpacity
+                          key={id}
+                          style={[styles.typeChip, active && styles.typeChipActive]}
+                          onPress={() => setEdit((p) => p && { ...p, spending_group: id })}
+                        >
+                          <Text style={[styles.typeChipText, active && styles.typeChipTextActive]}>
+                            {SOURCE_SPENDING_GROUP_LABELS[id]}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
               </>
             )}
 
-            {edit.kind === 'payer' && (
+            {edit.kind === 'category' && (
               <>
-                <Text style={styles.editLabel}>Màu nhãn</Text>
+                <Text style={styles.editLabel}>Màu sắc</Text>
                 <View style={styles.colorRow}>
                   {(CategoryColors as readonly string[]).map((c) => (
                     <TouchableOpacity
@@ -642,7 +700,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     backgroundColor: colors.background.surface,
     borderRadius: BorderRadius.xl,
     borderWidth: 1,
-    borderColor: colors.metallic.platinum,
+    borderColor: colors.ui.cardBorder,
     overflow: 'hidden',
   },
   cardPadded: {
@@ -666,25 +724,49 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
   itemIconText: { fontSize: 20 },
   itemInfo: { flex: 1, gap: 2 },
   itemName: {
-    flex: 1,
     fontSize: Typography.fontSize.base,
     fontWeight: '600',
     color: colors.neutral[700],
+  },
+  itemNameArchived: {
+    color: colors.neutral[400],
   },
   itemMeta: {
     fontSize: Typography.fontSize.xs,
     color: colors.neutral[400],
     fontWeight: '500',
   },
-  actionBtn: { paddingHorizontal: 6, paddingVertical: 4 },
-  actionEdit: {
-    fontSize: Typography.fontSize.sm,
-    fontWeight: '600',
-    color: colors.action.selectedText,
+  itemActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    justifyContent: 'flex-end',
+    maxWidth: '58%',
   },
-  actionDelete: {
-    fontSize: Typography.fontSize.sm,
-    fontWeight: '600',
+  actionChipEdit: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: BorderRadius.full,
+    backgroundColor: colors.action.secondaryBackground,
+    borderWidth: 1,
+    borderColor: colors.action.secondaryBorder,
+  },
+  actionChipEditText: {
+    fontSize: Typography.fontSize.xs,
+    fontWeight: '700',
+    color: colors.action.secondaryText,
+  },
+  actionChipDanger: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: BorderRadius.full,
+    backgroundColor: colors.action.destructiveBackground,
+    borderWidth: 1,
+    borderColor: colors.pink[200],
+  },
+  actionChipDangerText: {
+    fontSize: Typography.fontSize.xs,
+    fontWeight: '700',
     color: colors.action.destructiveText,
   },
   divider: {
@@ -754,7 +836,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     alignItems: 'center',
     gap: 4,
     borderWidth: 1,
-    borderColor: colors.metallic.platinum,
+    borderColor: colors.ui.cardBorder,
   },
   statEmoji: { fontSize: 22 },
   statValue: {
@@ -772,6 +854,12 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     fontSize: Typography.fontSize.sm,
     color: colors.neutral[500],
     lineHeight: 20,
+  },
+  aboutBlurb: {
+    fontSize: Typography.fontSize.sm,
+    color: colors.neutral[500],
+    lineHeight: 20,
+    marginBottom: Spacing.sm,
   },
   backupBtn: {
     flexDirection: 'row',
@@ -847,7 +935,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     backgroundColor: colors.background.surface,
     borderRadius: BorderRadius.lg,
     borderWidth: 1,
-    borderColor: colors.metallic.platinum,
+    borderColor: colors.ui.fieldBorder,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.md,
     fontSize: Typography.fontSize.base,
@@ -859,7 +947,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     backgroundColor: colors.background.surface,
     borderRadius: BorderRadius.lg,
     borderWidth: 1,
-    borderColor: colors.metallic.platinum,
+    borderColor: colors.ui.fieldBorder,
     fontSize: 24,
     color: colors.neutral[700],
   },
@@ -870,6 +958,14 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     paddingHorizontal: Spacing.base,
     marginTop: Spacing.sm,
     marginBottom: 4,
+  },
+  groupLockedHint: {
+    fontSize: Typography.fontSize.xs,
+    color: colors.neutral[400],
+    fontWeight: '500',
+    lineHeight: 18,
+    paddingHorizontal: Spacing.base,
+    marginBottom: Spacing.sm,
   },
   typeRow: {
     flexDirection: 'row',

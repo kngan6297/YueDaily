@@ -205,7 +205,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
       borderRadius: BorderRadius['2xl'],
       padding: Spacing.lg,
       borderWidth: 1,
-      borderColor: colors.metallic.platinum,
+      borderColor: colors.ui.cardBorder,
       gap: Spacing.sm,
     },
     summaryLabel: {
@@ -229,7 +229,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
       backgroundColor: colors.background.surface,
       borderRadius: BorderRadius.xl,
       borderWidth: 1,
-      borderColor: colors.metallic.platinum,
+      borderColor: colors.ui.cardBorder,
       overflow: 'hidden',
     },
     sourceRow: {
@@ -272,7 +272,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
       backgroundColor: colors.background.surface,
       borderRadius: BorderRadius.xl,
       borderWidth: 1,
-      borderColor: colors.metallic.platinum,
+      borderColor: colors.ui.cardBorder,
       alignItems: 'center',
       paddingVertical: Spacing['2xl'],
       gap: Spacing.sm,

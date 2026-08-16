@@ -4,7 +4,8 @@
 // ============================================================
 
 import * as SQLite from 'expo-sqlite';
-import { missingSourceNames } from './sourceSeed';
+import { sourceIdsToArchiveOnUpgrade } from './sourceLifecycle';
+import { classifyTrustedSourceNames, missingSourceSeeds } from './sourceSeed';
 
 let db: SQLite.SQLiteDatabase | null = null;
 
@@ -45,8 +46,10 @@ export async function initializeDatabase(): Promise<void> {
   // Tạo bảng sources (nguồn chi)
   await database.execAsync(`
     CREATE TABLE IF NOT EXISTS sources (
-      id   INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT    NOT NULL UNIQUE
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      name           TEXT    NOT NULL UNIQUE,
+      is_active      INTEGER NOT NULL DEFAULT 1,
+      spending_group TEXT
     );
   `);
 
@@ -80,8 +83,9 @@ export async function initializeDatabase(): Promise<void> {
     );
   `);
 
-  // Migration an toàn cho DB cũ (trước khi có expense_audience)
+  // Migration an toàn cho DB cũ (expense_audience / is_active / spending_group)
   await migrateTransactionsSchema(database);
+  await migrateSourcesSchema(database);
 
   // Tạo index để tăng tốc truy vấn theo ngày và loại
   await database.execAsync(`
@@ -117,6 +121,61 @@ async function migrateTransactionsSchema(database: SQLite.SQLiteDatabase): Promi
   await database.execAsync(
     `ALTER TABLE transactions
      ADD COLUMN expense_audience TEXT NOT NULL DEFAULT 'unspecified';`
+  );
+}
+
+/**
+ * Thêm is_active nếu thiếu (DEFAULT 1), rồi spending_group nếu thiếu.
+ * is_active: chỉ khi vừa thêm cột mới archive exact legacy seeds.
+ * spending_group: classify exact trusted current names; legacy seeds stay NULL.
+ */
+async function migrateSourcesSchema(database: SQLite.SQLiteDatabase): Promise<void> {
+  const cols = await database.getAllAsync<{ name: string }>(
+    'PRAGMA table_info(sources);'
+  );
+  const names = new Set(cols.map((c) => c.name));
+
+  if (!names.has('is_active')) {
+    await database.execAsync(
+      `ALTER TABLE sources ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1;`
+    );
+    await archiveExactLegacySeededSources(database);
+  }
+
+  if (!names.has('spending_group')) {
+    await database.execAsync(`ALTER TABLE sources ADD COLUMN spending_group TEXT;`);
+    await classifyTrustedExistingSources(database);
+  }
+}
+
+/** Exact-name spending_group for known current sources. Safe after v1/v2 restore. */
+export async function classifyTrustedExistingSources(
+  database: SQLite.SQLiteDatabase,
+): Promise<void> {
+  const existing = await database.getAllAsync<{ id: number; name: string }>(
+    'SELECT id, name FROM sources;'
+  );
+  for (const row of classifyTrustedSourceNames(existing)) {
+    await database.runAsync(
+      'UPDATE sources SET spending_group = ? WHERE id = ?;',
+      [row.spending_group, row.id],
+    );
+  }
+}
+
+/** Exact-name archive of known historical seeds. Safe to call after v1 backup restore. */
+export async function archiveExactLegacySeededSources(
+  database: SQLite.SQLiteDatabase,
+): Promise<void> {
+  const existing = await database.getAllAsync<{ id: number; name: string }>(
+    'SELECT id, name FROM sources;'
+  );
+  const ids = sourceIdsToArchiveOnUpgrade(existing);
+  if (ids.length === 0) return;
+  const placeholders = ids.map(() => '?').join(',');
+  await database.runAsync(
+    `UPDATE sources SET is_active = 0 WHERE id IN (${placeholders});`,
+    ids,
   );
 }
 
@@ -157,8 +216,11 @@ async function seedDefaultData(database: SQLite.SQLiteDatabase): Promise<void> {
   const existingSources = await database.getAllAsync<{ name: string }>(
     'SELECT name FROM sources;'
   );
-  for (const name of missingSourceNames(existingSources.map((s) => s.name))) {
-    await database.runAsync('INSERT OR IGNORE INTO sources (name) VALUES (?);', [name]);
+  for (const seed of missingSourceSeeds(existingSources.map((s) => s.name))) {
+    await database.runAsync(
+      'INSERT OR IGNORE INTO sources (name, is_active, spending_group) VALUES (?, 1, ?);',
+      [seed.name, seed.spending_group],
+    );
   }
 
   const payerCount = await database.getFirstAsync<{ count: number }>(

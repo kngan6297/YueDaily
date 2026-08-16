@@ -1,7 +1,8 @@
 // ============================================================
-// HỆ MÀU YOZAKURA — Moonlit Sakura
-// Cute magical girl × dreamy thanh lịch
-// Baby blue · Sakura pink · Celestial lavender · Soft cream · Platinum
+// HỆ MÀU YOZAKURA — Moonlit Sakura / Sakura Twilight
+// Cute · dreamy · pastel · airy
+// Primary interaction = Baby blue · Secondary accent = Sakura pink
+// Dark = lavender-charcoal twilight, không phải navy dashboard
 // Light / Dark token sets — cùng semantic keys
 // ============================================================
 
@@ -97,7 +98,17 @@ const lightColors = {
     card:     '#F0F1F7',
     surface:  '#FAFBFD',
     modal:    '#FCFCFF',
-    overlay:  'rgba(25, 31, 52, 0.48)',
+    overlay:  'rgba(28, 22, 40, 0.44)',
+  },
+
+  // Chrome — card outline vs field outline vs keypad (light giữ look hiện tại)
+  ui: {
+    cardBorder:    '#E8ECF3',
+    fieldBorder:   '#E8ECF3',
+    keyBackground: '#EAF4FF',
+    keyBorder:     '#BFDEFF',
+    keyPressed:    '#D9ECFF',
+    keyText:       '#4F6F9E',
   },
 
   camera: {
@@ -152,27 +163,28 @@ const darkColors = {
   },
 
   lavender: {
-    50:  '#191724',
-    100: '#29253F',
-    200: '#3B345A',
-    300: '#71689C',
-    400: '#AAA0E2',
-    500: '#CAC2F2',
+    50:  '#1C1824',
+    100: '#2A2434',
+    200: '#3D354C',
+    300: '#7A7098',
+    400: '#B5A8E0',
+    500: '#D4CCF4',
   },
 
+  // Baby blue — interaction / highlight, không phủ nền
   blue: {
-    50:  '#151F30',
-    100: '#1D304A',
-    200: '#29496E',
-    300: '#527EAE',
-    400: '#87B8EE',
-    500: '#A9CEFA',
-    600: '#C4DEFC',
+    50:  '#1E2230',
+    100: '#262A38',
+    200: '#3A4258',
+    300: '#78AEDD',
+    400: '#8FC9F7',
+    500: '#AEDBFF',
+    600: '#D3ECFF',
   },
 
   metallic: {
-    platinum:  '#758096',
-    whiteGold: '#ADB6C8',
+    platinum:  '#8A8296',
+    whiteGold: '#C4BCCE',
     roseGold:  '#CE929D',
   },
 
@@ -190,61 +202,72 @@ const darkColors = {
     300: '#E8A078',
   },
 
+  // Lavender-grey / warm platinum — không blue-grey lạnh
   neutral: {
     0:   '#FFFFFF',
-    50:  '#151A28',
-    100: '#252D40',
-    200: '#303A50',
-    300: '#46516A',
-    400: '#8490AA',
-    500: '#AAB4CA',
-    600: '#CBD3E3',
-    700: '#E8ECF5',
-    800: '#F8FAFF',
+    50:  '#1C1922',
+    100: '#2A2533',
+    200: '#3A3444',
+    300: '#524A5C',
+    400: '#A49BAD',
+    500: '#B8B0C4',
+    600: '#D4CEDC',
+    700: '#F0ECF4',
+    800: '#FBFAFC',
   },
 
   success: '#72D5BA',
   danger:  '#EE93B4',
   warning: '#E8CF72',
-  info:    '#87B8EE',
+  info:    '#8FC9F7',
 
   background: {
-    primary:  '#101421',
-    card:     '#181E2D',
-    surface:  '#1E2536',
-    modal:    '#20283A',
-    overlay:  'rgba(3, 6, 16, 0.72)',
+    primary:  '#1A1720',
+    card:     '#221E29',
+    surface:  '#2A2533',
+    modal:    '#302A3B',
+    overlay:  'rgba(10, 7, 16, 0.72)',
+  },
+
+  // Chrome — hierarchy từ plum depth; border chỉ hỗ trợ nhẹ
+  ui: {
+    cardBorder:    '#3A3444',
+    fieldBorder:   '#51495F',
+    keyBackground: '#302A39',
+    keyBorder:     '#4B4357',
+    keyPressed:    '#3A3444',
+    keyText:       '#D3ECFF',
   },
 
   camera: {
     overlay:            'rgba(0, 0, 0, 0.28)',
     captureButton:      '#D77F9D',
     captureButtonInner: '#FFFFFF',
-    captureRing:        'rgba(135, 184, 238, 0.38)',
+    captureRing:        'rgba(143, 201, 247, 0.38)',
   },
 
-  // ── Action — Moonlight Blue interaction (muted, no neon) ────
+  // ── Action — luminous baby blue, không muted navy ───────────
   action: {
-    primaryBackground: '#527EAE',
-    primaryPressed:    '#3E668F',
-    primaryText:       '#F8FAFF',
+    primaryBackground: '#8FC9F7',
+    primaryPressed:    '#78AEDD',
+    primaryText:       '#1A1720',
 
-    secondaryBackground: '#1D304A',
-    secondaryPressed:    '#29496E',
-    secondaryText:       '#A9CEFA',
-    secondaryBorder:     '#3F6288',
+    secondaryBackground: 'rgba(143, 201, 247, 0.12)',
+    secondaryPressed:    'rgba(143, 201, 247, 0.22)',
+    secondaryText:       '#AEDBFF',
+    secondaryBorder:     'rgba(143, 201, 247, 0.32)',
 
-    selectedBackground: '#29496E',
-    selectedBorder:     '#527EAE',
-    selectedText:       '#C4DEFC',
+    selectedBackground: 'rgba(143, 201, 247, 0.18)',
+    selectedBorder:     '#8FC9F7',
+    selectedText:       '#D3ECFF',
 
     destructiveBackground: '#4A2937',
     destructivePressed:    '#623548',
     destructiveText:       '#FFB3CB',
 
-    fabBackground: '#527EAE',
-    fabPressed:    '#3E668F',
-    fabIcon:       '#F8FAFF',
+    fabBackground: '#8FC9F7',
+    fabPressed:    '#78AEDD',
+    fabIcon:       '#1A1720',
   },
 } as const;
 
@@ -276,21 +299,21 @@ export const lightShadows = {
 
 export const darkShadows = {
   soft: {
-    shadowColor: '#0A0E18',
+    shadowColor: '#0A0710',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.28,
     shadowRadius: 6,
     elevation: 1,
   },
   medium: {
-    shadowColor: '#080B14',
+    shadowColor: '#080610',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.32,
     shadowRadius: 8,
     elevation: 2,
   },
   strong: {
-    shadowColor: '#05070E',
+    shadowColor: '#05040A',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.36,
     shadowRadius: 10,

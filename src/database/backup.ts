@@ -7,12 +7,20 @@ import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
-import { getDatabase } from './initDb';
-import { normalizeExpenseAudience, type ExpenseAudience } from '../types';
+import { getDatabase, archiveExactLegacySeededSources, classifyTrustedExistingSources } from './initDb';
+import { normalizeExpenseAudience, normalizeSourceSpendingGroup, type ExpenseAudience, type SourceSpendingGroup } from '../types';
+import {
+  normalizeSourceIsActive,
+  shouldArchiveLegacySeedsAfterRestore,
+  shouldClassifyTrustedSpendingGroupsAfterRestore,
+} from './sourceLifecycle';
+
+export type BackupVersion = '1' | '2' | '3';
+export const CURRENT_BACKUP_VERSION: BackupVersion = '3';
 
 export interface BackupData {
   appVersion: string;
-  backupVersion: '1';
+  backupVersion: BackupVersion;
   created_at: string;
   transactions: Record<string, unknown>[];
   categories: Record<string, unknown>[];
@@ -34,6 +42,8 @@ interface ValidCategory {
 interface ValidSource {
   id: number;
   name: string;
+  is_active: number;
+  spending_group: SourceSpendingGroup | null;
 }
 
 interface ValidPayer {
@@ -65,6 +75,7 @@ interface ValidStreak {
 }
 
 interface ValidatedBackup {
+  backupVersion: BackupVersion;
   transactions: ValidTransaction[];
   categories: ValidCategory[];
   sources: ValidSource[];
@@ -143,6 +154,8 @@ function validateSource(row: unknown, index: number): ValidSource {
   return {
     id: assertIntegerId(row.id, `${p}.id`),
     name: assertString(row.name, `${p}.name`),
+    is_active: normalizeSourceIsActive(row.is_active),
+    spending_group: normalizeSourceSpendingGroup(row.spending_group),
   };
 }
 
@@ -220,7 +233,8 @@ function validateStreak(row: unknown): ValidStreak {
 function assertValidBackup(raw: unknown): ValidatedBackup {
   if (!isPlainObject(raw)) fail('root');
 
-  if (raw.backupVersion !== '1') fail('backupVersion');
+  if (raw.backupVersion !== '1' && raw.backupVersion !== '2' && raw.backupVersion !== '3') fail('backupVersion');
+  const backupVersion = raw.backupVersion;
 
   if (!Array.isArray(raw.transactions)) fail('transactions');
   if (!Array.isArray(raw.categories)) fail('categories');
@@ -249,7 +263,7 @@ function assertValidBackup(raw: unknown): ValidatedBackup {
     streak = validateStreak(raw.streak);
   }
 
-  return { transactions, categories, sources, payers, streak };
+  return { backupVersion, transactions, categories, sources, payers, streak };
 }
 
 // ── Xuất backup ──────────────────────────────────────────────
@@ -275,7 +289,7 @@ export async function exportBackup(): Promise<void> {
 
   const backup: BackupData = {
     appVersion: '1.0.0',
-    backupVersion: '1',
+    backupVersion: CURRENT_BACKUP_VERSION,
     created_at: new Date().toISOString(),
     transactions,
     categories,
@@ -373,8 +387,8 @@ export async function importBackup(): Promise<RestoreResult> {
 
       for (const src of backup.sources) {
         await db.runAsync(
-          'INSERT INTO sources (id, name) VALUES (?, ?);',
-          [src.id, src.name]
+          'INSERT INTO sources (id, name, is_active, spending_group) VALUES (?, ?, ?, ?);',
+          [src.id, src.name, src.is_active, src.spending_group]
         );
       }
 
@@ -428,6 +442,13 @@ export async function importBackup(): Promise<RestoreResult> {
         await db.runAsync(
           'INSERT INTO streaks (id, current_streak, last_logged_date) VALUES (1, 0, NULL);'
         );
+      }
+
+      if (shouldArchiveLegacySeedsAfterRestore(backup.backupVersion)) {
+        await archiveExactLegacySeededSources(db);
+      }
+      if (shouldClassifyTrustedSpendingGroupsAfterRestore(backup.backupVersion)) {
+        await classifyTrustedExistingSources(db);
       }
     });
 

@@ -87,11 +87,14 @@ YueDaily/
 │   ├── database/
 │   │   ├── initDb.ts             # Schema + seed nguồn chi idempotent
 │   │   ├── sourceSeed.ts         # Example source names (không phải product enum)
+│   │   ├── sourceLifecycle.ts    # Active / archived source picker
+│   │   ├── categoryUsage.ts      # Form category order (usage DESC)
+│   │   ├── homeSpendView.ts      # Home tabs: spending_group, not audience
 │   │   ├── transactions.ts       # CRUD; update preserve legacy payer
 │   │   ├── categories.ts         # categories, sources, payers, streak
 │   │   ├── reportQueries.ts      # Filter/aggregation SQLite
 │   │   ├── reportCalculations.ts # Pure helpers (testable)
-│   │   └── backup.ts             # JSON backup/restore version 1
+│   │   └── backup.ts             # JSON backup/restore version 3
 │   ├── hooks/
 │   │   ├── useDatabase.ts
 │   │   ├── useGemini.ts          # Multi-provider AI
@@ -193,19 +196,38 @@ Giao dịch mới mặc định `couple`. `unspecified` chỉ hiện khi sửa b
 | ------------------------------------------------------------ | ---- |
 | `id`, `name`, `type` (`chi`\|`thu`\|`both`), `icon`, `color` |      |
 
-Seed: 12 danh mục chi tiêu (xem `src/database/initDb.ts`). Cột `type` giữ cho backup cũ.
+Seed: 12 danh mục chi tiêu (xem `src/database/initDb.ts`). Cột `type` giữ cho backup cũ. Form giao dịch sắp xếp danh mục theo số giao dịch chi `complete` (`usage_count DESC`, `name ASC`); Cài đặt giữ `ORDER BY name`.
 
 ### `sources`
 
-| Cột                 | Kiểu |
-| ------------------- | ---- |
-| `id`, `name` UNIQUE |      |
+| Cột                          | Kiểu |
+| ---------------------------- | ---- |
+| `id`, `name` UNIQUE          |      |
+| `is_active` INTEGER NOT NULL | `1` đang dùng / `0` đã lưu trữ; DEFAULT `1` |
+| `spending_group` TEXT        | `personal_yue` \| `household` \| NULL (Chưa phân loại) |
 
-Master data generic — **không** hardcode ngân hàng thành product enum. Form / Thống kê / Tài khoản đọc từ bảng này.
+Master data generic — **không** hardcode ngân hàng thành product enum. Form tạo mới chỉ list source `is_active = 1`. Thống kê / Tài khoản / backup đọc mọi source (kể cả archived) để giữ lịch sử. Home monitoring lọc theo `spending_group`, **không** theo `expense_audience` và **không** theo `is_active`.
 
-Seed idempotent (`missingSourceNames` + `INSERT OR IGNORE`): thêm tên còn thiếu, không rename/merge source đã có (kể cả `Tiền mặt` hay `VCB Shop` lịch sử). Fresh install nhận example config của installation Yue (Woori · Quỹ ăn, VPBank, Tiền mặt Yue, Tiền mặt Kai, VCB Shop) — đây là dữ liệu seed, không phải domain constants.
+Seed idempotent (`missingSourceSeeds` + `INSERT OR IGNORE`): thêm tên còn thiếu kèm group, không rename/merge source đã có (kể cả `Tiền mặt` hay `VCB Shop` lịch sử). Fresh install nhận example config đang dùng của Yue:
+
+| Tên | `spending_group` |
+| --- | --- |
+| Woori · Quỹ ăn | `household` |
+| VPBank | `personal_yue` |
+| Tiền mặt Yue | `personal_yue` |
+| Tiền mặt Kai | `household` |
+
+`VCB Shop` / `Tiền mặt` / `Chuyển khoản` không seed trên install mới.
+
+Migration: `ALTER` thêm `spending_group`, rồi classify **exact name** VPBank / Tiền mặt Yue / Woori · Quỹ ăn / Tiền mặt Kai. Không fuzzy, không classify legacy seeds. Lần chạy sau không re-classify (user có thể đã đổi tên; group đã gắn vẫn giữ).
+
+Tạo nguồn mới bắt buộc chọn Nhóm theo dõi. Source đã có giao dịch: khóa `spending_group`; vẫn đổi tên / Lưu trữ / Dùng lại.
+
+Migration P1.5.2: `ALTER` thêm `is_active DEFAULT 1`, rồi archive **exact name** `Tiền mặt`, `Chuyển khoản`, `VCB Shop` nếu row đó tồn tại. Không fuzzy, không xóa, không đổi `source_id`. Lần chạy sau không re-archive (user có thể Dùng lại trong Cài đặt).
 
 `Tiền mặt Yue` và `Tiền mặt Kai` là hai source khác nhau. Không gộp thành `Tiền mặt`.
+
+Form sửa giao dịch cũ: source archived hiện tại + các source đang dùng. Last-selected source đã archived không preselect cho giao dịch mới.
 
 ### `payers`
 
@@ -213,7 +235,7 @@ Seed idempotent (`missingSourceNames` + `INSERT OR IGNORE`): thêm tên còn thi
 | ------------------------------------ | ---- |
 | `id`, `name` UNIQUE, `icon`, `color` |      |
 
-Seed: Vợ 👩‍🦰, Chồng 👨‍🦱. CRUD còn trong Cài đặt cho dữ liệu lịch sử; không còn dropdown trên form.
+Seed: Vợ 👩‍🦰, Chồng 👨‍🦱. Bảng/cột legacy cho backup; **không** còn CRUD trên Settings hay dropdown trên form.
 
 ### `streaks`
 
@@ -223,16 +245,21 @@ Single row `id=1`: `current_streak`, `last_logged_date`.
 
 ### Backup / restore
 
-`backupVersion: '1'` — **không bump**: `wife_and_sister` là giá trị TEXT mới trên cột đã có; đổi label UI không đổi schema.
+`backupVersion: '3'` — thêm `sources.spending_group`. Export mới ghi `'3'`. Restore chấp nhận `'1'`, `'2'`, `'3'`; version khác → reject.
 
-Backup JSON gồm `transactions` (kể cả `payer` + `expense_audience` + `source_id`), `sources`, `categories`, `payers`, `streak`.
+Backup JSON gồm `transactions` (kể cả `payer` + `expense_audience` + `source_id`), `sources` (kể cả `is_active` + `spending_group`), `categories`, `payers`, `streak`.
+
+Restore:
+
+- v1 không có `is_active` → default đang dùng, rồi archive exact seed `Tiền mặt` / `Chuyển khoản` / `VCB Shop` nếu có; classify exact trusted spending groups
+- v2 giữ nguyên `is_active`; classify exact trusted spending groups (`VPBank` / `Tiền mặt Yue` → personal; `Woori · Quỹ ăn` / `Tiền mặt Kai` → household; legacy → NULL)
+- v3 giữ nguyên `is_active` và `spending_group` (round-trip, kể cả nguồn đã đổi tên)
 
 Restore backup cũ:
 
 - thiếu `expense_audience` → `unspecified`; không infer `wife_and_sister`
 - giữ nguyên `source_id` / tên source; không merge tiền mặt; không map VCB → Woori
 - giữ nguyên `payer`
-- `backupVersion` khác `'1'` → reject
 
 ### Thống kê
 
@@ -320,8 +347,8 @@ File: `src/constants/theme.ts` · Pastel sakura — **không dùng đỏ/xanh th
 5. **Join metadata** — Query giao dịch JOIN categories/sources cho `category_name`, `category_icon`, `source_name`.
 6. **Bottom sheet root-level** — `BottomSheetPortalProvider` ở `_layout.tsx`; inset đáy = navbar hệ thống only (`useModalBottomInset`).
 7. **Tab bar custom** — `TAB_BAR_CONTENT_HEIGHT` (62) + safe area; FAB giữa → `/camera`.
-8. **Master data** — CRUD sources/categories trong Settings; form chỉ chọn, không thêm danh mục. Payers CRUD giữ cho dữ liệu legacy, không còn trên form.
-9. **Source-first filters** — Thống kê lọc theo nguồn chi + chi cho ai (không còn primary filter payer). Last-selected `source_id` lưu AsyncStorage.
+8. **Master data** — CRUD sources/categories trong Settings; form chỉ chọn, không thêm danh mục. Payer **không** còn trên Settings UI (cột/bảng legacy giữ cho backup). Source unused → Xoá; referenced → Lưu trữ / Dùng lại (`is_active`). `spending_group` trên source cho Home (Cá nhân Yue / Quỹ chung); khóa sau khi đã có giao dịch.
+9. **Source-first filters** — Thống kê lọc theo nguồn chi + chi cho ai (không còn primary filter payer). Last-selected `source_id` lưu AsyncStorage; bỏ qua nếu source đã archived.
 10. **Pending status (legacy)** — Cột `status` + giá trị `pending` giữ cho backup/schema cũ; không có UI inbox hay flow tạo pending.
 
 ---
@@ -334,7 +361,7 @@ npm run android    # expo run:android
 npm run ios        # expo run:ios
 npm run web        # expo start --web
 npm run build:web  # expo export --platform web
-npm test           # Unit tests (date, report helpers, attribution P1.5)
+npm test           # Unit tests (date, report helpers, attribution, source lifecycle, category usage, Home spend groups)
 npx tsc --noEmit   # Typecheck
 ```
 

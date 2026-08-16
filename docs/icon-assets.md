@@ -13,14 +13,14 @@ How each file under `assets/` is used in Expo / EAS builds. Keep roles separate 
 
 Android adaptive background (solid color, not an image):
 
-- `expo.android.adaptiveIcon.backgroundColor` → `#0B1F68` (moonlit navy; visibly blue on device, not near-black)
-- Splash uses the same `#0B1F68` so launch and launcher feel consistent
+- `expo.android.adaptiveIcon.backgroundColor` → `#92CFFE` (baby-blue sky from the icon artwork)
+- Splash uses the same `#92CFFE` so launch and launcher feel consistent
 
 ## Asset roles
 
 ### `icon.png`
 
-Complete **square** app icon **with** opaque background (navy or matching brand fill). Used as the general / iOS-style icon.
+Complete **square** app icon **with** opaque background (pastel sky matching the artwork). Used as the general / iOS-style icon.
 
 - Emblem visible area: about **58%–62%** of the canvas
 - Include the full composed look (background + emblem)

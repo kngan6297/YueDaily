@@ -4,7 +4,7 @@
 
 import React, { useMemo, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
-import { ThemeColors } from '../../constants/theme';
+import { ThemeColors, ThemeShadows } from '../../constants/theme';
 import { useAppTheme } from '../../context/ThemeContext';
 
 interface CaptureButtonProps {
@@ -13,10 +13,10 @@ interface CaptureButtonProps {
 }
 
 export function CaptureButton({ onPress, disabled = false }: CaptureButtonProps) {
-  const { colors, resolvedColorScheme } = useAppTheme();
+  const { colors, resolvedColorScheme, shadows } = useAppTheme();
   const styles = useMemo(
-    () => createStyles(colors, resolvedColorScheme),
-    [colors, resolvedColorScheme],
+    () => createStyles(colors, resolvedColorScheme, shadows),
+    [colors, resolvedColorScheme, shadows],
   );
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -57,7 +57,7 @@ export function CaptureButton({ onPress, disabled = false }: CaptureButtonProps)
   );
 }
 
-function createStyles(colors: ThemeColors, scheme: 'light' | 'dark') {
+function createStyles(colors: ThemeColors, scheme: 'light' | 'dark', shadows: ThemeShadows) {
   const isDark = scheme === 'dark';
   return StyleSheet.create({
     wrapper: {
@@ -81,7 +81,7 @@ function createStyles(colors: ThemeColors, scheme: 'light' | 'dark') {
       backgroundColor: colors.camera.captureButton,
       alignItems: 'center',
       justifyContent: 'center',
-      shadowColor: isDark ? '#0A0E18' : colors.blue[600],
+      shadowColor: shadows.soft.shadowColor,
       shadowOffset: { width: 0, height: 3 },
       shadowOpacity: isDark ? 0.28 : 0.14,
       shadowRadius: isDark ? 6 : 8,

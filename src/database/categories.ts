@@ -3,8 +3,10 @@
 // ============================================================
 
 import { getDatabase } from './initDb';
-import type { Category, PayerRecord, Source, Streak } from '../types';
-import { TRANSACTION_STATUS_COMPLETE } from '../types';
+import { CATEGORY_USAGE_JOIN } from './categoryUsage';
+import { canEditSourceSpendingGroup, sourceDeleteGuard } from './sourceLifecycle';
+import type { Category, PayerRecord, Source, SourceSpendingGroup, Streak } from '../types';
+import { normalizeSourceSpendingGroup, TRANSACTION_STATUS_COMPLETE } from '../types';
 
 type DeleteResult = { ok: true } | { ok: false; reason: string };
 
@@ -16,11 +18,24 @@ export async function getAllCategories(): Promise<Category[]> {
   );
 }
 
-/** Lấy danh mục chi tiêu (chi + both; loại thu legacy) */
+/** Lấy danh mục chi tiêu (chi + both; loại thu legacy) — alphabetical, Settings */
 export async function getExpenseCategories(): Promise<Category[]> {
   const db = await getDatabase();
   return await db.getAllAsync<Category>(
     `SELECT * FROM categories WHERE type = 'chi' OR type = 'both' ORDER BY name;`,
+  );
+}
+
+/** Form picker: completed expense usage DESC, then name ASC. Zero-use last. */
+export async function getExpenseCategoriesByUsage(): Promise<Category[]> {
+  const db = await getDatabase();
+  return await db.getAllAsync<Category>(
+    `SELECT c.id, c.name, c.type, c.icon, c.color
+     FROM categories c
+     ${CATEGORY_USAGE_JOIN}
+     WHERE c.type = 'chi' OR c.type = 'both'
+     GROUP BY c.id, c.name, c.type, c.icon, c.color
+     ORDER BY COUNT(t.id) DESC, c.name ASC;`,
   );
 }
 
@@ -71,26 +86,91 @@ export async function deleteCategory(id: number): Promise<DeleteResult> {
   return { ok: true };
 }
 
-/** Lấy tất cả nguồn chi */
-export async function getAllSources(): Promise<Source[]> {
-  const db = await getDatabase();
-  return await db.getAllAsync<Source>('SELECT * FROM sources ORDER BY id;');
+function mapSourceRow(row: Source): Source {
+  return {
+    ...row,
+    spending_group: normalizeSourceSpendingGroup(row.spending_group),
+  };
 }
 
-/** Thêm nguồn chi */
-export async function insertSource(name: string): Promise<number> {
+/** Lấy tất cả nguồn chi (kể cả archived — Settings / Thống kê / backup) */
+export async function getAllSources(): Promise<Source[]> {
   const db = await getDatabase();
-  const result = await db.runAsync('INSERT INTO sources (name) VALUES (?);', [name.trim()]);
+  const rows = await db.getAllAsync<Source>('SELECT * FROM sources ORDER BY id;');
+  return rows.map(mapSourceRow);
+}
+
+/** Nguồn đang dùng — form tạo giao dịch mới */
+export async function getActiveSources(): Promise<Source[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<Source>(
+    'SELECT * FROM sources WHERE is_active = 1 ORDER BY id;',
+  );
+  return rows.map(mapSourceRow);
+}
+
+/** Thêm nguồn chi — bắt buộc chọn nhóm theo dõi */
+export async function insertSource(name: string, spendingGroup: SourceSpendingGroup): Promise<number> {
+  const group = normalizeSourceSpendingGroup(spendingGroup);
+  if (!group) {
+    throw new Error('Chọn nhóm theo dõi: Cá nhân Yue hoặc Quỹ chung.');
+  }
+  const db = await getDatabase();
+  const result = await db.runAsync(
+    'INSERT INTO sources (name, is_active, spending_group) VALUES (?, 1, ?);',
+    [name.trim(), group],
+  );
   return result.lastInsertRowId;
 }
 
-/** Cập nhật nguồn chi */
-export async function updateSource(id: number, name: string): Promise<void> {
+/** Cập nhật tên; spending_group chỉ khi chưa có giao dịch tham chiếu */
+export async function updateSource(
+  id: number,
+  name: string,
+  spendingGroup: SourceSpendingGroup | null,
+): Promise<void> {
   const db = await getDatabase();
-  await db.runAsync('UPDATE sources SET name = ? WHERE id = ?;', [name.trim(), id]);
+  const refs = await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM transactions WHERE source_id = ?;',
+    [id],
+  );
+  const trimmed = name.trim();
+  if (!canEditSourceSpendingGroup(refs?.count ?? 0)) {
+    await db.runAsync('UPDATE sources SET name = ? WHERE id = ?;', [trimmed, id]);
+    return;
+  }
+  await db.runAsync(
+    'UPDATE sources SET name = ?, spending_group = ? WHERE id = ?;',
+    [trimmed, normalizeSourceSpendingGroup(spendingGroup), id],
+  );
 }
 
-/** Xoá nguồn chi — gỡ liên kết giao dịch trước */
+export async function setSourceActive(id: number, active: boolean): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync('UPDATE sources SET is_active = ? WHERE id = ?;', [active ? 1 : 0, id]);
+}
+
+/** Nguồn chi kèm số giao dịch tham chiếu (Settings — quyết định Xóa vs Lưu trữ) */
+export interface SourceWithRefs extends Source {
+  reference_count: number;
+}
+
+export async function getSourcesWithReferenceCounts(): Promise<SourceWithRefs[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<SourceWithRefs>(
+    `SELECT s.id, s.name, s.is_active, s.spending_group, COUNT(t.id) as reference_count
+     FROM sources s
+     LEFT JOIN transactions t ON t.source_id = s.id
+     GROUP BY s.id, s.name, s.is_active, s.spending_group
+     ORDER BY s.id;`,
+  );
+  return rows.map((row) => ({
+    ...mapSourceRow(row),
+    reference_count: Number(row.reference_count) || 0,
+  }));
+}
+
+/** Xoá nguồn chi — chỉ khi không còn giao dịch tham chiếu; không cascade */
 export async function deleteSource(id: number): Promise<DeleteResult> {
   const db = await getDatabase();
   const count = await db.getFirstAsync<{ count: number }>(
@@ -99,7 +179,14 @@ export async function deleteSource(id: number): Promise<DeleteResult> {
   if ((count?.count ?? 0) <= 1) {
     return { ok: false, reason: 'Cần giữ ít nhất một nguồn chi.' };
   }
-  await db.runAsync('UPDATE transactions SET source_id = NULL WHERE source_id = ?;', [id]);
+
+  const refs = await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM transactions WHERE source_id = ?;',
+    [id],
+  );
+  const gate = sourceDeleteGuard(refs?.count ?? 0);
+  if (!gate.ok) return gate;
+
   await db.runAsync('DELETE FROM sources WHERE id = ?;', [id]);
   return { ok: true };
 }

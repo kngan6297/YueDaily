@@ -97,7 +97,11 @@ function FilterDropdown({
   return (
     <View style={styles.filterField}>
       <Text style={styles.filterLabel}>{label}</Text>
-      <TouchableOpacity style={styles.filterPill} onPress={() => setOpen(true)} activeOpacity={0.8}>
+      <TouchableOpacity
+        style={[styles.filterPill, open && styles.filterPillFocused]}
+        onPress={() => setOpen(true)}
+        activeOpacity={0.8}
+      >
         {selected?.icon ? <Text style={styles.filterPillIcon}>{selected.icon}</Text> : null}
         <Text style={styles.filterPillText} numberOfLines={1}>
           {selected?.shortLabel ?? 'Tất cả'}
@@ -349,6 +353,7 @@ export default function ReportsScreen() {
   const [sourceId, setSourceId] = useState<SourceFilter>('all');
   const [audience, setAudience] = useState<AudienceFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [transactions, setTransactions] = useState<TransactionWithMeta[]>([]);
   const [summary, setSummary] = useState<ExpenseSummary | null>(null);
@@ -567,12 +572,18 @@ export default function ReportsScreen() {
         {/* Điều hướng / chọn ngày */}
         {period === 'custom' ? (
           <View style={styles.customRangeRow}>
-            <TouchableOpacity style={styles.datePill} onPress={() => setDatePicker('from')}>
+            <TouchableOpacity
+              style={[styles.datePill, datePicker === 'from' && styles.fieldFocused]}
+              onPress={() => setDatePicker('from')}
+            >
               <Text style={styles.datePillLabel}>Từ</Text>
               <Text style={styles.datePillValue}>{formatDateVi(customRange.fromDate)}</Text>
             </TouchableOpacity>
             <Text style={styles.customRangeArrow}>→</Text>
-            <TouchableOpacity style={styles.datePill} onPress={() => setDatePicker('to')}>
+            <TouchableOpacity
+              style={[styles.datePill, datePicker === 'to' && styles.fieldFocused]}
+              onPress={() => setDatePicker('to')}
+            >
               <Text style={styles.datePillLabel}>Đến</Text>
               <Text style={styles.datePillValue}>{formatDateVi(customRange.toDate)}</Text>
             </TouchableOpacity>
@@ -600,7 +611,7 @@ export default function ReportsScreen() {
         )}
 
         {/* Search */}
-        <View style={styles.searchWrap}>
+        <View style={[styles.searchWrap, searchFocused && styles.fieldFocused]}>
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
             style={styles.searchInput}
@@ -608,6 +619,8 @@ export default function ReportsScreen() {
             placeholderTextColor={colors.neutral[400]}
             value={searchQuery}
             onChangeText={setSearchQuery}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
             returnKeyType="search"
             clearButtonMode="while-editing"
           />
@@ -872,7 +885,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     backgroundColor: colors.background.surface,
     borderRadius: BorderRadius.lg,
     borderWidth: 1,
-    borderColor: colors.metallic.platinum,
+    borderColor: colors.ui.fieldBorder,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     gap: 2,
@@ -894,9 +907,13 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     backgroundColor: colors.background.surface,
     borderRadius: BorderRadius.xl,
     borderWidth: 1,
-    borderColor: colors.metallic.platinum,
+    borderColor: colors.ui.fieldBorder,
     paddingHorizontal: Spacing.md,
     gap: Spacing.sm,
+  },
+  fieldFocused: {
+    borderColor: colors.action.selectedBorder,
+    backgroundColor: colors.action.selectedBackground,
   },
   searchIcon: { fontSize: 14 },
   searchInput: {
@@ -908,12 +925,12 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
 
   summaryCard: {
     borderRadius: BorderRadius.xl,
-    borderWidth: 1.5,
+    borderWidth: 1,
     ...shadows.soft,
   },
   summaryChi: {
-    backgroundColor: colors.pink[50],
-    borderColor: colors.pink[200],
+    backgroundColor: colors.background.surface,
+    borderColor: colors.ui.cardBorder,
     paddingHorizontal: Spacing.base,
     paddingVertical: Spacing.sm,
     gap: 2,
@@ -951,9 +968,13 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     paddingVertical: 6,
     borderRadius: BorderRadius.full,
     backgroundColor: colors.background.surface,
-    borderWidth: 1.5,
-    borderColor: colors.metallic.platinum,
+    borderWidth: 1,
+    borderColor: colors.ui.fieldBorder,
     ...shadows.soft,
+  },
+  filterPillFocused: {
+    borderColor: colors.action.selectedBorder,
+    backgroundColor: colors.action.selectedBackground,
   },
   filterPillIcon: { fontSize: 13 },
   filterPillText: {
@@ -983,10 +1004,17 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     alignItems: 'center',
     gap: Spacing.md,
     paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.neutral[100],
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
-  sheetOptionActive: { backgroundColor: colors.action.selectedBackground },
+  sheetOptionActive: {
+    backgroundColor: colors.action.selectedBackground,
+    borderColor: colors.action.selectedBorder,
+  },
   sheetOptionIcon: {
     width: 36, height: 36,
     borderRadius: BorderRadius.md,
@@ -1009,8 +1037,8 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
   chartCard: {
     backgroundColor: colors.background.surface,
     borderRadius: BorderRadius.xl,
-    borderWidth: 1.5,
-    borderColor: colors.neutral[200],
+    borderWidth: 1,
+    borderColor: colors.ui.cardBorder,
     padding: Spacing.md,
     gap: Spacing.sm,
     ...shadows.soft,
@@ -1029,8 +1057,8 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
   breakdownCard: {
     backgroundColor: colors.background.surface,
     borderRadius: BorderRadius.xl,
-    borderWidth: 1.5,
-    borderColor: colors.neutral[200],
+    borderWidth: 1,
+    borderColor: colors.ui.cardBorder,
     paddingHorizontal: Spacing.base,
     paddingVertical: Spacing.sm,
     gap: 4,
@@ -1086,8 +1114,8 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     backgroundColor: colors.background.surface,
     borderRadius: BorderRadius.xl,
     padding: Spacing.sm,
-    borderWidth: 1.5,
-    borderColor: colors.neutral[200],
+    borderWidth: 1,
+    borderColor: colors.ui.cardBorder,
     ...shadows.soft,
   },
   donutWrapStacked: {
@@ -1121,8 +1149,8 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
   catList: {
     backgroundColor: colors.background.surface,
     borderRadius: BorderRadius.xl,
-    borderWidth: 1.5,
-    borderColor: colors.neutral[200],
+    borderWidth: 1,
+    borderColor: colors.ui.cardBorder,
     overflow: 'hidden',
     ...shadows.soft,
   },
@@ -1167,8 +1195,8 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
   txnList: {
     backgroundColor: colors.background.surface,
     borderRadius: BorderRadius.xl,
-    borderWidth: 1.5,
-    borderColor: colors.neutral[200],
+    borderWidth: 1,
+    borderColor: colors.ui.cardBorder,
     overflow: 'hidden',
     ...shadows.soft,
   },

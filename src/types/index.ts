@@ -111,9 +111,40 @@ export interface Category {
 }
 
 /** Cấu trúc bảng nguồn chi (master data generic — không hardcode ngân hàng) */
+export type SourceSpendingGroup = 'personal_yue' | 'household';
+
+export const SOURCE_SPENDING_GROUP_LABELS: Record<SourceSpendingGroup, string> = {
+  personal_yue: 'Cá nhân Yue',
+  household: 'Quỹ chung',
+};
+
+export const UNCLASSIFIED_SPENDING_GROUP_LABEL = 'Chưa phân loại';
+
+export const SOURCE_SPENDING_GROUP_CHOICES: SourceSpendingGroup[] = [
+  'personal_yue',
+  'household',
+];
+
+export function isSourceSpendingGroup(value: unknown): value is SourceSpendingGroup {
+  return value === 'personal_yue' || value === 'household';
+}
+
+/** Giá trị lạ / thiếu → null (Chưa phân loại). Không suy từ tên. */
+export function normalizeSourceSpendingGroup(value: unknown): SourceSpendingGroup | null {
+  return isSourceSpendingGroup(value) ? value : null;
+}
+
+export function sourceSpendingGroupLabel(group: SourceSpendingGroup | null): string {
+  return group ? SOURCE_SPENDING_GROUP_LABELS[group] : UNCLASSIFIED_SPENDING_GROUP_LABEL;
+}
+
 export interface Source {
   id: number;
   name: string;
+  /** 1 = hiện trên form tạo mới; 0 = archived, giữ lịch sử */
+  is_active: number;
+  /** Home monitoring — thuộc Nguồn chi, không phải transaction */
+  spending_group: SourceSpendingGroup | null;
 }
 
 /** Cấu trúc bảng streak */

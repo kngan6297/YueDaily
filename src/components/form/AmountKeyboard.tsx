@@ -83,32 +83,32 @@ function createStyles(colors: ThemeColors) {
     key: {
       flex: 1,
       height: 52,
-      backgroundColor: colors.action.secondaryBackground,
+      backgroundColor: colors.ui.keyBackground,
       borderRadius: BorderRadius.md,
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: 1.5,
-      borderColor: colors.action.secondaryBorder,
+      borderWidth: 1,
+      borderColor: colors.ui.keyBorder,
     },
     keyDelete: {
-      backgroundColor: colors.action.secondaryBackground,
-      borderColor: colors.action.secondaryBorder,
+      backgroundColor: colors.ui.keyBackground,
+      borderColor: colors.ui.keyBorder,
     },
     keyPressed: {
-      backgroundColor: colors.action.secondaryPressed,
+      backgroundColor: colors.ui.keyPressed,
       transform: [{ scale: 0.95 }],
     },
     keyDeletePressed: {
-      backgroundColor: colors.action.secondaryPressed,
+      backgroundColor: colors.ui.keyPressed,
       transform: [{ scale: 0.95 }],
     },
     keyText: {
       fontSize: Typography.fontSize.lg,
       fontWeight: '600',
-      color: colors.action.secondaryText,
+      color: colors.ui.keyText,
     },
     keyDeleteText: {
-      color: colors.action.secondaryText,
+      color: colors.ui.keyText,
       fontSize: Typography.fontSize.xl,
     },
   });

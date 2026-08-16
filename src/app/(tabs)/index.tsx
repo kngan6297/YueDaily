@@ -17,8 +17,12 @@ import { useAppTheme } from '../../context/ThemeContext';
 import { BottomSheetModal } from '../../components/ui/BottomSheetModal';
 import { updateStreak } from '../../database/categories';
 import {
+  HOME_SPEND_VIEW_OPTIONS,
+  spendingGroupForHomeSpendView,
+  type HomeSpendView,
+} from '../../database/homeSpendView';
+import {
   deleteTransaction,
-  getMonthSummary,
   getTransactionsByMonth,
 } from '../../database/transactions';
 import { useStreak } from '../../hooks/useStreak';
@@ -58,23 +62,20 @@ export default function HomeScreen() {
   const [showDayModal, setShowDayModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [monthTxns, setMonthTxns] = useState<TxnWithMeta[]>([]);
-  const [monthSummary, setMonthSummary] = useState({ chi: 0 });
+  const [spendView, setSpendView] = useState<HomeSpendView>('all');
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [txns, summary] = await Promise.all([
-        getTransactionsByMonth(calYear, calMonth),
-        getMonthSummary(calYear, calMonth),
-      ]);
+      const group = spendingGroupForHomeSpendView(spendView);
+      const txns = await getTransactionsByMonth(calYear, calMonth, group);
       setMonthTxns(txns as TxnWithMeta[]);
-      setMonthSummary(summary);
     } catch (err) {
       console.error(err);
     } finally {
       setIsLoading(false);
     }
-  }, [calYear, calMonth]);
+  }, [calYear, calMonth, spendView]);
 
   const { streak, refreshStreak } = useStreak();
 
@@ -84,6 +85,10 @@ export default function HomeScreen() {
       refreshStreak();
     }, [loadData, refreshStreak])
   );
+
+  const monthSummary = useMemo(() => ({
+    chi: monthTxns.filter((t) => t.type === 'chi').reduce((s, t) => s + t.amount, 0),
+  }), [monthTxns]);
 
   // --- Calendar helpers ---
   const daysInMonth = new Date(calYear, calMonth, 0).getDate();
@@ -316,6 +321,27 @@ export default function HomeScreen() {
             <Text style={[styles.summaryCardAmt, styles.expenseText]}>{fmt(monthSummary.chi)}đ</Text>
           </View>
         </View>
+        <View style={styles.filterRow}>
+          {HOME_SPEND_VIEW_OPTIONS.map((opt) => {
+            const active = spendView === opt.id;
+            return (
+              <TouchableOpacity
+                key={opt.id}
+                style={[styles.filterTab, active && styles.filterTabActive]}
+                onPress={() => setSpendView(opt.id)}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[styles.filterTabText, active && styles.filterTabTextActive]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
@@ -481,7 +507,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
   summaryCardChi: {
     backgroundColor: colors.background.surface,
     borderWidth: 1,
-    borderColor: colors.metallic.platinum,
+    borderColor: colors.ui.cardBorder,
   },
   summaryCardLabel: {
     fontSize: Typography.fontSize.xs,
@@ -497,8 +523,6 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
   // Filter
   filterRow: {
     flexDirection: 'row',
-    marginHorizontal: Spacing.base,
-    marginBottom: Spacing.md,
     backgroundColor: colors.neutral[100],
     borderRadius: BorderRadius.xl,
     padding: 4,
@@ -539,7 +563,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.xs,
     borderWidth: 1,
-    borderColor: colors.metallic.platinum,
+    borderColor: colors.ui.cardBorder,
     marginBottom: Spacing.base,
   },
   calHeader: {
@@ -604,8 +628,8 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
   },
   dayCircleHasTxn: {
     backgroundColor: colors.background.card,
-    borderWidth: 1.5,
-    borderColor: colors.action.selectedBorder,
+    borderWidth: 1,
+    borderColor: colors.ui.cardBorder,
   },
   dayCircleSelected: {
     borderColor: colors.action.selectedBorder,
@@ -769,7 +793,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     backgroundColor: colors.background.surface,
     borderRadius: BorderRadius.xl,
     borderWidth: 1,
-    borderColor: colors.metallic.platinum,
+    borderColor: colors.ui.cardBorder,
     overflow: 'hidden',
   },
   txnRow: {
@@ -808,12 +832,14 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     paddingVertical: 7,
     borderRadius: BorderRadius.lg,
     alignItems: 'center',
-    backgroundColor: colors.neutral[100],
+    backgroundColor: colors.action.secondaryBackground,
+    borderWidth: 1,
+    borderColor: colors.action.secondaryBorder,
   },
   txnEditBtnText: {
     fontSize: Typography.fontSize.xs,
     fontWeight: '700',
-    color: colors.neutral[600],
+    color: colors.action.secondaryText,
   },
   txnDeleteBtn: {
     paddingVertical: 7,

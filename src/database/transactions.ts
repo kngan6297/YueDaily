@@ -4,7 +4,8 @@
 
 import { buildCreatedAt } from '../utils/date';
 import { getDatabase } from './initDb';
-import type { ExpenseAudience, Transaction, TransactionFormData } from '../types';
+import { spendingGroupEqualsClause } from './homeSpendView';
+import type { ExpenseAudience, SourceSpendingGroup, Transaction, TransactionFormData } from '../types';
 import {
   DEFAULT_EXPENSE_AUDIENCE,
   normalizeExpenseAudience,
@@ -68,13 +69,15 @@ export async function insertPendingTransaction(imageUri: string): Promise<number
   return result.lastInsertRowId;
 }
 
-/** Lấy giao dịch theo tháng */
+/** Lấy giao dịch theo tháng — optional filter sources.spending_group (Home monitoring) */
 export async function getTransactionsByMonth(
   year: number,
-  month: number
+  month: number,
+  spendingGroup?: SourceSpendingGroup | null,
 ): Promise<Transaction[]> {
   const db = await getDatabase();
   const monthStr = `${year}-${String(month).padStart(2, '0')}`;
+  const groupSql = spendingGroupEqualsClause(spendingGroup, 's.spending_group');
 
   const rows = await db.getAllAsync<Transaction>(
     `SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color,
@@ -84,8 +87,9 @@ export async function getTransactionsByMonth(
      LEFT JOIN sources s    ON t.source_id   = s.id
      WHERE t.status = '${TRANSACTION_STATUS_COMPLETE}'
        AND strftime('%Y-%m', t.created_at) = ?
+       ${groupSql.clause}
      ORDER BY t.created_at DESC;`,
-    [monthStr]
+    [monthStr, ...groupSql.params]
   );
   return rows.map(mapTransactionRow);
 }
@@ -157,20 +161,24 @@ export async function getTodaySummary(): Promise<{ chi: number; count: number }>
 /** Tổng chi theo tháng (month 1-based: 1=Jan … 12=Dec). Mặc định: tháng hiện tại theo local time. */
 export async function getMonthSummary(
   year?: number,
-  month?: number
+  month?: number,
+  spendingGroup?: SourceSpendingGroup | null,
 ): Promise<{ chi: number }> {
   const db = await getDatabase();
   const now = new Date();
   const y = year ?? now.getFullYear();
   const m = month ?? now.getMonth() + 1; // 1-based, khớp getTransactionsByMonth
   const monthStr = `${y}-${String(m).padStart(2, '0')}`;
+  const groupSql = spendingGroupEqualsClause(spendingGroup, 's.spending_group');
   const row = await db.getFirstAsync<{ total: number }>(
-    `SELECT COALESCE(SUM(amount), 0) as total
-     FROM transactions
-     WHERE status = '${TRANSACTION_STATUS_COMPLETE}'
-       AND type = 'chi'
-       AND strftime('%Y-%m', created_at) = ?;`,
-    [monthStr]
+    `SELECT COALESCE(SUM(t.amount), 0) as total
+     FROM transactions t
+     LEFT JOIN sources s ON s.id = t.source_id
+     WHERE t.status = '${TRANSACTION_STATUS_COMPLETE}'
+       AND t.type = 'chi'
+       AND strftime('%Y-%m', t.created_at) = ?
+       ${groupSql.clause};`,
+    [monthStr, ...groupSql.params]
   );
   return { chi: row?.total ?? 0 };
 }
