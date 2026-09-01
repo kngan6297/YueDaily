@@ -1,4 +1,3 @@
-import Constants from 'expo-constants';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState, useMemo } from 'react';
 import {
@@ -44,9 +43,6 @@ import {
   sourceSpendingGroupLabel,
 } from '../../types';
 
-function appVersion(): string {
-  return Constants.expoConfig?.version ?? '1.0.2';
-}
 
 type EditKind = 'source' | 'category';
 
@@ -260,14 +256,6 @@ export default function SettingsScreen() {
       ? edit.id ? 'Sửa nguồn chi' : 'Thêm nguồn chi'
       : edit?.id ? 'Sửa danh mục' : 'Thêm danh mục';
 
-  const version = appVersion();
-  const aboutRows = [
-    { label: 'Tên ứng dụng', value: 'YueDaily' },
-    { label: 'Phiên bản', value: version },
-    { label: 'Lưu trữ', value: 'Cục bộ trên thiết bị' },
-    { label: 'Tài khoản / ngân hàng', value: 'Không cần' },
-  ];
-
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
@@ -313,11 +301,6 @@ export default function SettingsScreen() {
             <Text style={styles.statEmoji}>🔒</Text>
             <Text style={styles.statValue}>100%</Text>
             <Text style={styles.statLabel}>Bảo mật</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statEmoji}>📱</Text>
-            <Text style={styles.statValue}>v{version}</Text>
-            <Text style={styles.statLabel}>Phiên bản</Text>
           </View>
         </View>
 
@@ -472,29 +455,6 @@ export default function SettingsScreen() {
                 <Text style={styles.backupBtnSub}>Khôi phục từ file JSON</Text>
               </View>
             </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* ── Về ứng dụng ── */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>ℹ️ Về ứng dụng</Text>
-          <View style={[styles.card, styles.cardPadded]}>
-            <Text style={styles.aboutBlurb}>
-              YueDaily giúp Yue ghi lại và theo dõi chi tiêu hằng ngày theo Danh mục, Nguồn chi và Chi cho ai.
-            </Text>
-            <Text style={styles.aboutBlurb}>
-              Dữ liệu lưu cục bộ trên thiết bị — không cần tài khoản, không đồng bộ ngân hàng. Sao lưu JSON khi cần. Giao diện sáng hoặc tối.
-            </Text>
-            {aboutRows.map((row, idx) => (
-              <View key={row.label}>
-                {idx === 0 ? <View style={styles.infoDivider} /> : null}
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>{row.label}</Text>
-                  <Text style={styles.infoValue}>{row.value}</Text>
-                </View>
-                {idx < aboutRows.length - 1 && <View style={styles.infoDivider} />}
-              </View>
-            ))}
           </View>
         </View>
 
@@ -795,27 +755,6 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
   },
   filterChipTextActive: { color: colors.action.selectedText },
 
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: Spacing.sm,
-  },
-  infoLabel: {
-    fontSize: Typography.fontSize.sm,
-    color: colors.neutral[500],
-    fontWeight: '500',
-  },
-  infoValue: {
-    fontSize: Typography.fontSize.sm,
-    fontWeight: '700',
-    color: colors.neutral[700],
-  },
-  infoDivider: {
-    height: 1,
-    backgroundColor: colors.neutral[100],
-  },
-
   statsRow: {
     flexDirection: 'row',
     gap: Spacing.sm,
@@ -847,11 +786,9 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     color: colors.neutral[500],
     lineHeight: 20,
   },
-  aboutBlurb: {
-    fontSize: Typography.fontSize.sm,
-    color: colors.neutral[500],
-    lineHeight: 20,
-    marginBottom: Spacing.sm,
+  infoDivider: {
+    height: 1,
+    backgroundColor: colors.neutral[100],
   },
   backupBtn: {
     flexDirection: 'row',
