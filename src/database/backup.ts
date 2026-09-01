@@ -7,16 +7,55 @@ import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
+import type * as SQLite from 'expo-sqlite';
+
 import { getDatabase, archiveExactLegacySeededSources, classifyTrustedExistingSources } from './initDb';
-import { normalizeExpenseAudience, normalizeSourceSpendingGroup, type ExpenseAudience, type SourceSpendingGroup } from '../types';
 import {
-  normalizeSourceIsActive,
+  markP16TrustedBackfillComplete,
+  runLegacyTrustedBackfillAfterRestore,
+} from './p16Migration';
+import {
+  CURRENT_BACKUP_VERSION,
+  validateBackupPayload,
+  type BackupVersion,
+  type ValidatedBackup,
+} from './backupValidation';
+import {
   shouldArchiveLegacySeedsAfterRestore,
   shouldClassifyTrustedSpendingGroupsAfterRestore,
 } from './sourceLifecycle';
 
-export type BackupVersion = '1' | '2' | '3';
-export const CURRENT_BACKUP_VERSION: BackupVersion = '3';
+export type { BackupVersion, ValidatedBackup } from './backupValidation';
+export { CURRENT_BACKUP_VERSION, validateBackupPayload } from './backupValidation';
+
+/** Legacy v1–v3 restore may still write streak rows; v4 restore leaves streak table untouched */
+async function ensureLegacyStreakTable(db: SQLite.SQLiteDatabase): Promise<void> {
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS streaks (
+      id               INTEGER PRIMARY KEY,
+      current_streak   INTEGER NOT NULL DEFAULT 0,
+      last_logged_date TEXT
+    );
+  `);
+}
+
+async function restoreLegacyStreak(
+  db: SQLite.SQLiteDatabase,
+  streak: ValidatedBackup['streak'],
+): Promise<void> {
+  await ensureLegacyStreakTable(db);
+  await db.execAsync('DELETE FROM streaks;');
+  if (streak) {
+    await db.runAsync(
+      'INSERT INTO streaks (id, current_streak, last_logged_date) VALUES (?, ?, ?);',
+      [streak.id, streak.current_streak, streak.last_logged_date],
+    );
+  } else {
+    await db.runAsync(
+      'INSERT INTO streaks (id, current_streak, last_logged_date) VALUES (1, 0, NULL);',
+    );
+  }
+}
 
 export interface BackupData {
   appVersion: string;
@@ -26,244 +65,9 @@ export interface BackupData {
   categories: Record<string, unknown>[];
   sources: Record<string, unknown>[];
   payers?: Record<string, unknown>[];
-  streak: Record<string, unknown> | null;
-}
-
-// ── Validated row shapes (runtime-checked) ───────────────────
-
-interface ValidCategory {
-  id: number;
-  name: string;
-  type: string;
-  icon: string;
-  color: string;
-}
-
-interface ValidSource {
-  id: number;
-  name: string;
-  is_active: number;
-  spending_group: SourceSpendingGroup | null;
-}
-
-interface ValidPayer {
-  id: number;
-  name: string;
-  icon: string;
-  color: string;
-}
-
-interface ValidTransaction {
-  id: number;
-  amount: number;
-  type: string;
-  category_id: number | null;
-  source_id: number | null;
-  payer: string;
-  expense_audience: ExpenseAudience;
-  image_uri: string | null;
-  location: string | null;
-  note: string | null;
-  status: string;
-  created_at: string;
-}
-
-interface ValidStreak {
-  id: number;
-  current_streak: number;
-  last_logged_date: string | null;
-}
-
-interface ValidatedBackup {
-  backupVersion: BackupVersion;
-  transactions: ValidTransaction[];
-  categories: ValidCategory[];
-  sources: ValidSource[];
-  payers: ValidPayer[] | null;
-  streak: ValidStreak | null;
-}
-
-// ── Validation helpers ───────────────────────────────────────
-
-const CREATED_AT_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
-const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
-const TX_TYPES = new Set(['thu', 'chi']);
-const CAT_TYPES = new Set(['thu', 'chi', 'both']);
-const TX_STATUSES = new Set(['complete', 'pending']);
-
-function fail(path: string): never {
-  throw new Error(`Backup không hợp lệ: ${path}`);
-}
-
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return v !== null && typeof v === 'object' && !Array.isArray(v);
-}
-
-function assertFiniteNumber(v: unknown, path: string): number {
-  if (typeof v !== 'number' || !Number.isFinite(v)) fail(path);
-  return v;
-}
-
-function assertIntegerId(v: unknown, path: string): number {
-  if (typeof v !== 'number' || !Number.isInteger(v) || v < 1) fail(path);
-  return v;
-}
-
-function assertString(v: unknown, path: string): string {
-  if (typeof v !== 'string') fail(path);
-  return v;
-}
-
-function assertNullableString(v: unknown, path: string): string | null {
-  if (v === null) return null;
-  if (typeof v !== 'string') fail(path);
-  return v;
-}
-
-function assertNullableId(v: unknown, path: string): number | null {
-  if (v === null || v === undefined) return null;
-  if (typeof v !== 'number' || !Number.isInteger(v) || v < 1) fail(path);
-  return v;
-}
-
-function assertUniqueIds(ids: number[], collection: string): void {
-  const seen = new Set<number>();
-  for (let i = 0; i < ids.length; i++) {
-    if (seen.has(ids[i])) fail(`${collection}[${i}].id`);
-    seen.add(ids[i]);
-  }
-}
-
-function validateCategory(row: unknown, index: number): ValidCategory {
-  const p = `categories[${index}]`;
-  if (!isPlainObject(row)) fail(p);
-  const type = assertString(row.type, `${p}.type`);
-  if (!CAT_TYPES.has(type)) fail(`${p}.type`);
-  return {
-    id: assertIntegerId(row.id, `${p}.id`),
-    name: assertString(row.name, `${p}.name`),
-    type,
-    icon: assertString(row.icon, `${p}.icon`),
-    color: assertString(row.color, `${p}.color`),
-  };
-}
-
-function validateSource(row: unknown, index: number): ValidSource {
-  const p = `sources[${index}]`;
-  if (!isPlainObject(row)) fail(p);
-  return {
-    id: assertIntegerId(row.id, `${p}.id`),
-    name: assertString(row.name, `${p}.name`),
-    is_active: normalizeSourceIsActive(row.is_active),
-    spending_group: normalizeSourceSpendingGroup(row.spending_group),
-  };
-}
-
-function validatePayer(row: unknown, index: number): ValidPayer {
-  const p = `payers[${index}]`;
-  if (!isPlainObject(row)) fail(p);
-  return {
-    id: assertIntegerId(row.id, `${p}.id`),
-    name: assertString(row.name, `${p}.name`),
-    icon: assertString(row.icon, `${p}.icon`),
-    color: assertString(row.color, `${p}.color`),
-  };
-}
-
-function validateTransaction(row: unknown, index: number): ValidTransaction {
-  const p = `transactions[${index}]`;
-  if (!isPlainObject(row)) fail(p);
-
-  const amount = assertFiniteNumber(row.amount, `${p}.amount`);
-  // Nghiệp vụ: số tiền lưu INTEGER ≥ 0 (pending = 0 được phép)
-  if (!Number.isInteger(amount) || amount < 0) fail(`${p}.amount`);
-
-  const type = assertString(row.type, `${p}.type`);
-  if (!TX_TYPES.has(type)) fail(`${p}.type`);
-
-  const status = assertString(row.status, `${p}.status`);
-  if (!TX_STATUSES.has(status)) fail(`${p}.status`);
-
-  const createdAt = assertString(row.created_at, `${p}.created_at`);
-  if (!CREATED_AT_RE.test(createdAt)) fail(`${p}.created_at`);
-
-  // Backup cũ thiếu field → unspecified (không crash)
-  let expenseAudience: ExpenseAudience = 'unspecified';
-  if (row.expense_audience !== undefined && row.expense_audience !== null) {
-    const rawAudience = assertString(row.expense_audience, `${p}.expense_audience`);
-    expenseAudience = normalizeExpenseAudience(rawAudience);
-    if (rawAudience !== expenseAudience) fail(`${p}.expense_audience`);
-  }
-
-  return {
-    id: assertIntegerId(row.id, `${p}.id`),
-    amount,
-    type,
-    category_id: assertNullableId(row.category_id, `${p}.category_id`),
-    source_id: assertNullableId(row.source_id, `${p}.source_id`),
-    payer: assertString(row.payer, `${p}.payer`),
-    expense_audience: expenseAudience,
-    image_uri: assertNullableString(row.image_uri, `${p}.image_uri`),
-    location: assertNullableString(row.location, `${p}.location`),
-    note: assertNullableString(row.note, `${p}.note`),
-    status,
-    created_at: createdAt,
-  };
-}
-
-function validateStreak(row: unknown): ValidStreak {
-  if (!isPlainObject(row)) fail('streak');
-  const current = assertFiniteNumber(row.current_streak, 'streak.current_streak');
-  if (!Number.isInteger(current) || current < 0) fail('streak.current_streak');
-
-  let lastLogged: string | null = null;
-  if (row.last_logged_date !== null && row.last_logged_date !== undefined) {
-    lastLogged = assertString(row.last_logged_date, 'streak.last_logged_date');
-    if (!DATE_ONLY_RE.test(lastLogged)) fail('streak.last_logged_date');
-  }
-
-  return {
-    id: assertIntegerId(row.id ?? 1, 'streak.id'),
-    current_streak: current,
-    last_logged_date: lastLogged,
-  };
-}
-
-/** Validate toàn bộ backup — throw trước khi chạm database */
-function assertValidBackup(raw: unknown): ValidatedBackup {
-  if (!isPlainObject(raw)) fail('root');
-
-  if (raw.backupVersion !== '1' && raw.backupVersion !== '2' && raw.backupVersion !== '3') fail('backupVersion');
-  const backupVersion = raw.backupVersion;
-
-  if (!Array.isArray(raw.transactions)) fail('transactions');
-  if (!Array.isArray(raw.categories)) fail('categories');
-  if (!Array.isArray(raw.sources)) fail('sources');
-
-  if (raw.payers !== undefined && raw.payers !== null && !Array.isArray(raw.payers)) {
-    fail('payers');
-  }
-
-  const categories = raw.categories.map(validateCategory);
-  const sources = raw.sources.map(validateSource);
-  const transactions = raw.transactions.map(validateTransaction);
-
-  assertUniqueIds(categories.map((c) => c.id), 'categories');
-  assertUniqueIds(sources.map((s) => s.id), 'sources');
-  assertUniqueIds(transactions.map((t) => t.id), 'transactions');
-
-  let payers: ValidPayer[] | null = null;
-  if (Array.isArray(raw.payers) && raw.payers.length > 0) {
-    payers = raw.payers.map(validatePayer);
-    assertUniqueIds(payers.map((p) => p.id), 'payers');
-  }
-
-  let streak: ValidStreak | null = null;
-  if (raw.streak != null) {
-    streak = validateStreak(raw.streak);
-  }
-
-  return { backupVersion, transactions, categories, sources, payers, streak };
+  budget_periods?: Record<string, unknown>[];
+  /** v1–v3 legacy; v4 export omits product streak state */
+  streak?: Record<string, unknown> | null;
 }
 
 // ── Xuất backup ──────────────────────────────────────────────
@@ -283,8 +87,8 @@ export async function exportBackup(): Promise<void> {
   const payers = await db.getAllAsync<Record<string, unknown>>(
     'SELECT * FROM payers ORDER BY id;'
   );
-  const streak = await db.getFirstAsync<Record<string, unknown>>(
-    'SELECT * FROM streaks WHERE id = 1;'
+  const budget_periods = await db.getAllAsync<Record<string, unknown>>(
+    'SELECT * FROM budget_periods ORDER BY id;'
   );
 
   const backup: BackupData = {
@@ -295,7 +99,7 @@ export async function exportBackup(): Promise<void> {
     categories,
     sources,
     payers,
-    streak: streak ?? null,
+    budget_periods,
   };
 
   const json = JSON.stringify(backup, null, 2);
@@ -314,6 +118,100 @@ export async function exportBackup(): Promise<void> {
     mimeType: 'application/json',
     dialogTitle: 'Lưu file backup Yozakura',
     UTI: 'public.json',
+  });
+}
+
+export async function applyValidatedBackupRestore(
+  db: SQLite.SQLiteDatabase,
+  backup: ValidatedBackup,
+): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    await db.execAsync('DELETE FROM transactions;');
+    await db.execAsync('DELETE FROM categories;');
+    await db.execAsync('DELETE FROM sources;');
+    await db.execAsync('DELETE FROM payers;');
+    await db.execAsync('DELETE FROM budget_periods;');
+
+    if (backup.backupVersion !== '4') {
+      await restoreLegacyStreak(db, backup.streak);
+    }
+
+    for (const cat of backup.categories) {
+      await db.runAsync(
+        'INSERT INTO categories (id, name, type, icon, color, budget_group) VALUES (?, ?, ?, ?, ?, ?);',
+        [cat.id, cat.name, cat.type, cat.icon, cat.color, cat.budget_group],
+      );
+    }
+
+    for (const src of backup.sources) {
+      await db.runAsync(
+        'INSERT INTO sources (id, name, is_active, spending_group) VALUES (?, ?, ?, ?);',
+        [src.id, src.name, src.is_active, src.spending_group],
+      );
+    }
+
+    if (backup.payers && backup.payers.length > 0) {
+      for (const p of backup.payers) {
+        await db.runAsync(
+          'INSERT INTO payers (id, name, icon, color) VALUES (?, ?, ?, ?);',
+          [p.id, p.name, p.icon, p.color],
+        );
+      }
+    } else {
+      await db.runAsync(
+        'INSERT INTO payers (name, icon, color) VALUES (?, ?, ?), (?, ?, ?);',
+        ['Vợ', '👩‍🦰', '#FF8FAB', 'Chồng', '👨‍🦱', '#4BBFA0'],
+      );
+    }
+
+    for (const period of backup.budget_periods) {
+      await db.runAsync(
+        `INSERT INTO budget_periods
+           (id, budget_key, period_start, period_end, limit_amount, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?);`,
+        [
+          period.id,
+          period.budget_key,
+          period.period_start,
+          period.period_end,
+          period.limit_amount,
+          period.created_at,
+          period.updated_at,
+        ],
+      );
+    }
+
+    for (const tx of backup.transactions) {
+      await db.runAsync(
+        `INSERT INTO transactions
+           (id, amount, type, category_id, source_id, payer, expense_audience,
+            image_uri, location, note, status, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+        [
+          tx.id,
+          tx.amount,
+          tx.type,
+          tx.category_id,
+          tx.source_id,
+          tx.payer,
+          tx.expense_audience,
+          tx.image_uri,
+          tx.location,
+          tx.note,
+          tx.status,
+          tx.created_at,
+        ],
+      );
+    }
+
+    if (shouldArchiveLegacySeedsAfterRestore(backup.backupVersion)) {
+      await archiveExactLegacySeededSources(db);
+    }
+    if (shouldClassifyTrustedSpendingGroupsAfterRestore(backup.backupVersion)) {
+      await classifyTrustedExistingSources(db);
+    }
+    await runLegacyTrustedBackfillAfterRestore(db, backup.backupVersion);
+    await markP16TrustedBackfillComplete(db);
   });
 }
 
@@ -360,7 +258,7 @@ export async function importBackup(): Promise<RestoreResult> {
   // Validate toàn bộ trước khi chạm database
   let backup: ValidatedBackup;
   try {
-    backup = assertValidBackup(raw);
+    backup = validateBackupPayload(raw);
   } catch (err) {
     return {
       success: false,
@@ -371,86 +269,7 @@ export async function importBackup(): Promise<RestoreResult> {
   const db = await getDatabase();
 
   try {
-    await db.withTransactionAsync(async () => {
-      await db.execAsync('DELETE FROM transactions;');
-      await db.execAsync('DELETE FROM categories;');
-      await db.execAsync('DELETE FROM sources;');
-      await db.execAsync('DELETE FROM payers;');
-      await db.execAsync('DELETE FROM streaks;');
-
-      for (const cat of backup.categories) {
-        await db.runAsync(
-          'INSERT INTO categories (id, name, type, icon, color) VALUES (?, ?, ?, ?, ?);',
-          [cat.id, cat.name, cat.type, cat.icon, cat.color]
-        );
-      }
-
-      for (const src of backup.sources) {
-        await db.runAsync(
-          'INSERT INTO sources (id, name, is_active, spending_group) VALUES (?, ?, ?, ?);',
-          [src.id, src.name, src.is_active, src.spending_group]
-        );
-      }
-
-      if (backup.payers && backup.payers.length > 0) {
-        for (const p of backup.payers) {
-          await db.runAsync(
-            'INSERT INTO payers (id, name, icon, color) VALUES (?, ?, ?, ?);',
-            [p.id, p.name, p.icon, p.color]
-          );
-        }
-      } else {
-        await db.runAsync(
-          'INSERT INTO payers (name, icon, color) VALUES (?, ?, ?), (?, ?, ?);',
-          ['Vợ', '👩‍🦰', '#FF8FAB', 'Chồng', '👨‍🦱', '#4BBFA0']
-        );
-      }
-
-      for (const tx of backup.transactions) {
-        await db.runAsync(
-          `INSERT INTO transactions
-             (id, amount, type, category_id, source_id, payer, expense_audience,
-              image_uri, location, note, status, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-          [
-            tx.id,
-            tx.amount,
-            tx.type,
-            tx.category_id,
-            tx.source_id,
-            tx.payer,
-            tx.expense_audience,
-            tx.image_uri,
-            tx.location,
-            tx.note,
-            tx.status,
-            tx.created_at,
-          ]
-        );
-      }
-
-      if (backup.streak) {
-        await db.runAsync(
-          'INSERT INTO streaks (id, current_streak, last_logged_date) VALUES (?, ?, ?);',
-          [
-            backup.streak.id,
-            backup.streak.current_streak,
-            backup.streak.last_logged_date,
-          ]
-        );
-      } else {
-        await db.runAsync(
-          'INSERT INTO streaks (id, current_streak, last_logged_date) VALUES (1, 0, NULL);'
-        );
-      }
-
-      if (shouldArchiveLegacySeedsAfterRestore(backup.backupVersion)) {
-        await archiveExactLegacySeededSources(db);
-      }
-      if (shouldClassifyTrustedSpendingGroupsAfterRestore(backup.backupVersion)) {
-        await classifyTrustedExistingSources(db);
-      }
-    });
+    await applyValidatedBackupRestore(db, backup);
 
     return {
       success: true,

@@ -37,7 +37,6 @@ import {
   type SourceWithRefs,
 } from '../../database/categories';
 import { canEditSourceSpendingGroup, isSourceActive, sourceHasTransactionRefs } from '../../database/sourceLifecycle';
-import { useStreak } from '../../hooks/useStreak';
 import type { Category, SourceSpendingGroup } from '../../types';
 import {
   SOURCE_SPENDING_GROUP_CHOICES,
@@ -81,7 +80,6 @@ function emptyEdit(kind: EditKind): EditState {
 export default function SettingsScreen() {
   const { colors, shadows, appearanceMode, setAppearanceMode } = useAppTheme();
   const styles = useMemo(() => createStyles(colors, shadows), [colors, shadows]);
-  const { streak } = useStreak();
   const [categories, setCategories] = useState<Category[]>([]);
   const [sources, setSources] = useState<SourceWithRefs[]>([]);
   const [loading, setLoading] = useState(true);
@@ -262,7 +260,6 @@ export default function SettingsScreen() {
       ? edit.id ? 'Sửa nguồn chi' : 'Thêm nguồn chi'
       : edit?.id ? 'Sửa danh mục' : 'Thêm danh mục';
 
-  const streakCount = streak?.current_streak ?? 0;
   const version = appVersion();
   const aboutRows = [
     { label: 'Tên ứng dụng', value: 'YueDaily' },
@@ -312,11 +309,6 @@ export default function SettingsScreen() {
 
         {/* ── Tóm tắt nhanh ── */}
         <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statEmoji}>🔥</Text>
-            <Text style={styles.statValue}>{streakCount}</Text>
-            <Text style={styles.statLabel}>Streak</Text>
-          </View>
           <View style={styles.statCard}>
             <Text style={styles.statEmoji}>🔒</Text>
             <Text style={styles.statValue}>100%</Text>

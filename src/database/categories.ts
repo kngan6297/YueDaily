@@ -5,47 +5,57 @@
 import { getDatabase } from './initDb';
 import { CATEGORY_USAGE_JOIN } from './categoryUsage';
 import { canEditSourceSpendingGroup, sourceDeleteGuard } from './sourceLifecycle';
-import type { Category, PayerRecord, Source, SourceSpendingGroup, Streak } from '../types';
-import { normalizeSourceSpendingGroup, TRANSACTION_STATUS_COMPLETE } from '../types';
+import type { Category, PayerRecord, Source, SourceSpendingGroup } from '../types';
+import { normalizeBudgetGroup, normalizeSourceSpendingGroup, TRANSACTION_STATUS_COMPLETE } from '../types';
 
 type DeleteResult = { ok: true } | { ok: false; reason: string };
+
+function mapCategoryRow(row: Category): Category {
+  return {
+    ...row,
+    budget_group: normalizeBudgetGroup(row.budget_group),
+  };
+}
 
 /** Lấy tất cả danh mục */
 export async function getAllCategories(): Promise<Category[]> {
   const db = await getDatabase();
-  return await db.getAllAsync<Category>(
+  const rows = await db.getAllAsync<Category>(
     'SELECT * FROM categories ORDER BY type, name;'
   );
+  return rows.map(mapCategoryRow);
 }
 
 /** Lấy danh mục chi tiêu (chi + both; loại thu legacy) — alphabetical, Settings */
 export async function getExpenseCategories(): Promise<Category[]> {
   const db = await getDatabase();
-  return await db.getAllAsync<Category>(
+  const rows = await db.getAllAsync<Category>(
     `SELECT * FROM categories WHERE type = 'chi' OR type = 'both' ORDER BY name;`,
   );
+  return rows.map(mapCategoryRow);
 }
 
 /** Form picker: completed expense usage DESC, then name ASC. Zero-use last. */
 export async function getExpenseCategoriesByUsage(): Promise<Category[]> {
   const db = await getDatabase();
   return await db.getAllAsync<Category>(
-    `SELECT c.id, c.name, c.type, c.icon, c.color
+    `SELECT c.id, c.name, c.type, c.icon, c.color, c.budget_group
      FROM categories c
      ${CATEGORY_USAGE_JOIN}
      WHERE c.type = 'chi' OR c.type = 'both'
-     GROUP BY c.id, c.name, c.type, c.icon, c.color
+     GROUP BY c.id, c.name, c.type, c.icon, c.color, c.budget_group
      ORDER BY COUNT(t.id) DESC, c.name ASC;`,
-  );
+  ).then((rows) => rows.map(mapCategoryRow));
 }
 
 /** Lấy danh mục theo loại giao dịch */
 export async function getCategoriesByType(type: 'thu' | 'chi'): Promise<Category[]> {
   const db = await getDatabase();
-  return await db.getAllAsync<Category>(
+  const rows = await db.getAllAsync<Category>(
     `SELECT * FROM categories WHERE type = ? OR type = 'both' ORDER BY name;`,
     [type]
   );
+  return rows.map(mapCategoryRow);
 }
 
 /** Thêm danh mục mới */
@@ -57,7 +67,7 @@ export async function insertCategory(
 ): Promise<number> {
   const db = await getDatabase();
   const result = await db.runAsync(
-    'INSERT INTO categories (name, type, icon, color) VALUES (?, ?, ?, ?);',
+    'INSERT INTO categories (name, type, icon, color, budget_group) VALUES (?, ?, ?, ?, NULL);',
     [name, type, icon, color]
   );
   return result.lastInsertRowId;
@@ -256,64 +266,3 @@ export async function deletePayer(id: number): Promise<DeleteResult> {
   return { ok: true };
 }
 
-/** Lấy và cập nhật streak */
-export async function getStreak(): Promise<Streak | null> {
-  const db = await getDatabase();
-  return await db.getFirstAsync<Streak>('SELECT * FROM streaks WHERE id = 1;');
-}
-
-function formatLocalDate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-/** Tính lại streak từ các ngày đã ghi giao dịch — hỗ trợ nhập bù ngày cũ */
-export async function updateStreak(): Promise<void> {
-  const db = await getDatabase();
-
-  const rows = await db.getAllAsync<{ d: string }>(
-    `SELECT DISTINCT date(created_at) as d
-     FROM transactions
-     WHERE status = '${TRANSACTION_STATUS_COMPLETE}'
-       AND type = 'chi'
-     ORDER BY d DESC;`,
-  );
-
-  if (rows.length === 0) {
-    await db.runAsync(
-      'UPDATE streaks SET current_streak = 0, last_logged_date = NULL WHERE id = 1;',
-    );
-    return;
-  }
-
-  const loggedDates = new Set(rows.map((r) => r.d));
-  const lastLogged = rows[0].d;
-
-  const countFrom = (start: Date): number => {
-    let count = 0;
-    const cursor = new Date(start);
-    while (loggedDates.has(formatLocalDate(cursor))) {
-      count++;
-      cursor.setDate(cursor.getDate() - 1);
-    }
-    return count;
-  };
-
-  const today = new Date();
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  let streakCount = 0;
-  if (loggedDates.has(formatLocalDate(today))) {
-    streakCount = countFrom(today);
-  } else if (loggedDates.has(formatLocalDate(yesterday))) {
-    streakCount = countFrom(yesterday);
-  }
-
-  await db.runAsync(
-    'UPDATE streaks SET current_streak = ?, last_logged_date = ? WHERE id = 1;',
-    [streakCount, lastLogged],
-  );
-}

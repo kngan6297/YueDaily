@@ -20,8 +20,14 @@ import {
 import { BorderRadius, Spacing, ThemeColors, ThemeShadows, Typography } from '../../constants/theme';
 import { useAppTheme } from '../../context/ThemeContext';
 import { BottomSheetModal } from '../../components/ui/BottomSheetModal';
+import { HouseholdFoodBudgetCard } from '../../components/budget/HouseholdFoodBudgetCard';
+import { HouseholdFoodBudgetDetailSheet } from '../../components/budget/HouseholdFoodBudgetDetailSheet';
 import { useModalBottomInset } from '../../hooks/useModalBottomInset';
-import { updateStreak } from '../../database/categories';
+import {
+  ensureContinuingHouseholdFoodBudgetPeriod,
+  loadHouseholdFoodBudgetHomeCard,
+  type HouseholdFoodBudgetHomeCardData,
+} from '../../database/householdFoodBudgetRead';
 import {
   HOME_SPEND_VIEW_OPTIONS,
   spendingGroupForHomeSpendView,
@@ -31,10 +37,9 @@ import {
   deleteTransaction,
   getTransactionsByMonth,
 } from '../../database/transactions';
-import { useStreak } from '../../hooks/useStreak';
 import type { Transaction } from '../../types';
 import { EXPENSE_AUDIENCE_LABELS } from '../../types';
-import { formatDateVi } from '../../utils/date';
+import { formatDateVi, todayLocal } from '../../utils/date';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const CELL_SIZE = Math.floor((SCREEN_W - Spacing.base * 2 - Spacing.xs * 6) / 7);
@@ -87,6 +92,25 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [monthTxns, setMonthTxns] = useState<TxnWithMeta[]>([]);
   const [spendView, setSpendView] = useState<HomeSpendView>('all');
+  const [budgetCard, setBudgetCard] = useState<HouseholdFoodBudgetHomeCardData | null>(null);
+  const [budgetLoading, setBudgetLoading] = useState(true);
+  const [budgetDetailVisible, setBudgetDetailVisible] = useState(false);
+  const [budgetDetailPeriodId, setBudgetDetailPeriodId] = useState<number | null>(null);
+
+  const loadBudgetCard = useCallback(async () => {
+    setBudgetLoading(true);
+    try {
+      const referenceDate = todayLocal();
+      await ensureContinuingHouseholdFoodBudgetPeriod(referenceDate);
+      const card = await loadHouseholdFoodBudgetHomeCard(referenceDate);
+      setBudgetCard(card);
+    } catch (err) {
+      console.error(err);
+      setBudgetCard(null);
+    } finally {
+      setBudgetLoading(false);
+    }
+  }, []);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -101,14 +125,19 @@ export default function HomeScreen() {
     }
   }, [calYear, calMonth, spendView]);
 
-  const { streak, refreshStreak } = useStreak();
-
   useFocusEffect(
     useCallback(() => {
       loadData();
-      refreshStreak();
-    }, [loadData, refreshStreak])
+      loadBudgetCard();
+    }, [loadData, loadBudgetCard])
   );
+
+  const openBudgetDetail = useCallback(() => {
+    const periodId = budgetCard?.period?.id ?? budgetCard?.upcomingPeriod?.id ?? null;
+    if (!periodId) return;
+    setBudgetDetailPeriodId(periodId);
+    setBudgetDetailVisible(true);
+  }, [budgetCard]);
 
   const monthSummary = useMemo(() => ({
     chi: monthTxns.filter((t) => t.type === 'chi').reduce((s, t) => s + t.amount, 0),
@@ -194,14 +223,13 @@ export default function HomeScreen() {
           style: 'destructive',
           onPress: async () => {
             await deleteTransaction(id);
-            await updateStreak();
             await loadData();
-            refreshStreak();
+            await loadBudgetCard();
           },
         },
       ]
     );
-  }, [loadData, refreshStreak]);
+  }, [loadData, loadBudgetCard]);
 
   // Build calendar cells array
   const calCells: (number | null)[] = [
@@ -333,11 +361,6 @@ export default function HomeScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>{getGreeting()}</Text>
-          {(streak?.current_streak ?? 0) > 0 && (
-            <View style={styles.streakBadge}>
-              <Text style={styles.streakText}>🔥 {streak?.current_streak} ngày liên tiếp</Text>
-            </View>
-          )}
         </View>
         <View style={styles.summaryCards}>
           <View style={[styles.summaryCard, styles.summaryCardChi]}>
@@ -345,6 +368,13 @@ export default function HomeScreen() {
             <Text style={[styles.summaryCardAmt, styles.expenseText]}>{fmt(monthSummary.chi)}đ</Text>
           </View>
         </View>
+        <HouseholdFoodBudgetCard
+          data={budgetCard}
+          loading={budgetLoading}
+          onPress={
+            budgetCard?.period || budgetCard?.upcomingPeriod ? openBudgetDetail : undefined
+          }
+        />
         <View style={styles.filterRow}>
           {HOME_SPEND_VIEW_OPTIONS.map((opt) => {
             const active = spendView === opt.id;
@@ -497,6 +527,13 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
       </BottomSheetModal>
+
+      <HouseholdFoodBudgetDetailSheet
+        visible={budgetDetailVisible}
+        periodId={budgetDetailPeriodId}
+        onClose={() => setBudgetDetailVisible(false)}
+        onUpdated={loadBudgetCard}
+      />
     </SafeAreaView>
   );
 }
@@ -516,21 +553,6 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     fontSize: Typography.fontSize.lg,
     fontWeight: '800',
     color: colors.neutral[700],
-  },
-  streakBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.yellow[100],
-    borderRadius: BorderRadius.full,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 3,
-    borderWidth: 1,
-    borderColor: colors.yellow[300],
-    marginTop: 4,
-  },
-  streakText: {
-    fontSize: Typography.fontSize.xs,
-    fontWeight: '700',
-    color: colors.neutral[600],
   },
   summaryCards: {
     marginTop: Spacing.xs,

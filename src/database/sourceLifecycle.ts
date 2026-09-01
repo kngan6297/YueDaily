@@ -74,6 +74,21 @@ export function shouldClassifyTrustedSpendingGroupsAfterRestore(backupVersion: s
   return backupVersion === '1' || backupVersion === '2';
 }
 
+/** v1–v3: one-time VCB Shop NULL → household after restore */
+export function shouldMigrateVcbShopAfterRestore(backupVersion: string): boolean {
+  return backupVersion === '1' || backupVersion === '2' || backupVersion === '3';
+}
+
+/** v1–v3: classify trusted category budget_group after restore */
+export function shouldClassifyCategoryBudgetGroupsAfterRestore(backupVersion: string): boolean {
+  return backupVersion === '1' || backupVersion === '2' || backupVersion === '3';
+}
+
+/** v1–v3: no stored budget periods — init first/current period after restore */
+export function shouldEnsureInitialBudgetPeriodAfterRestore(backupVersion: string): boolean {
+  return backupVersion === '1' || backupVersion === '2' || backupVersion === '3';
+}
+
 export type SourceDeleteGuard = { ok: true } | { ok: false; reason: string };
 
 /**

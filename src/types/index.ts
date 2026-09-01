@@ -102,12 +102,37 @@ export interface Transaction {
 }
 
 /** Cấu trúc bảng danh mục */
+export type BudgetGroup = 'household_food';
+
+export function isBudgetGroup(value: unknown): value is BudgetGroup {
+  return value === 'household_food';
+}
+
+/** NULL / unknown → null. Runtime reads persisted column — no category-name branching. */
+export function normalizeBudgetGroup(value: unknown): BudgetGroup | null {
+  return isBudgetGroup(value) ? value : null;
+}
+
+export type BudgetKey = 'household_food';
+
 export interface Category {
   id: number;
   name: string;
   type: TransactionType | 'both';
   icon: string;     // tên emoji hoặc icon
   color: string;    // mã màu HEX
+  budget_group: BudgetGroup | null;
+}
+
+/** Persisted household food budget period (payday cycle 05→04) */
+export interface BudgetPeriod {
+  id: number;
+  budget_key: BudgetKey;
+  period_start: string; // YYYY-MM-DD local
+  period_end: string;
+  limit_amount: number;
+  created_at: string;
+  updated_at: string;
 }
 
 /** Cấu trúc bảng nguồn chi (master data generic — không hardcode ngân hàng) */

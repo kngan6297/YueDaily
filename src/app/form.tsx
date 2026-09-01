@@ -22,7 +22,7 @@ import { AmountKeyboard, formatAmount } from '../components/form/AmountKeyboard'
 import { BottomSheetModal } from '../components/ui/BottomSheetModal';
 import { BorderRadius, Spacing, ThemeColors, ThemeShadows, Typography } from '../constants/theme';
 import { useAppTheme } from '../context/ThemeContext';
-import { getAllSources, getExpenseCategoriesByUsage, updateStreak } from '../database/categories';
+import { getAllSources, getExpenseCategoriesByUsage } from '../database/categories';
 import { pickerSources, resolveCreateSourceId } from '../database/sourceLifecycle';
 import {
   getTransactionById,
@@ -387,7 +387,6 @@ export default function TransactionForm() {
         if (formData.source_id != null) {
           await setLastSelectedSourceId(formData.source_id);
         }
-        await updateStreak();
         router.dismissAll();
         return;
       }
@@ -397,7 +396,6 @@ export default function TransactionForm() {
       if (formData.source_id != null) {
         await setLastSelectedSourceId(formData.source_id);
       }
-      await updateStreak();
       router.dismissAll();
     } catch {
       Alert.alert('Lỗi', 'Không thể lưu. Thử lại nhé!');

@@ -6,6 +6,8 @@
 import * as SQLite from 'expo-sqlite';
 import { sourceIdsToArchiveOnUpgrade } from './sourceLifecycle';
 import { classifyTrustedSourceNames, missingSourceSeeds } from './sourceSeed';
+import { runP16TrustedBackfillIfNeeded } from './p16Migration';
+import type { BudgetGroup } from '../types';
 
 let db: SQLite.SQLiteDatabase | null = null;
 
@@ -27,7 +29,25 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
 /** Khởi tạo toàn bộ schema database */
 export async function initializeDatabase(): Promise<void> {
   const database = await getDatabase();
+  await initializeDatabaseOn(database);
+}
 
+/** Schema migrations + P1.6 backfill without default seed (verification / isolated DB) */
+export async function runSchemaMigrationsOn(database: SQLite.SQLiteDatabase): Promise<void> {
+  await migrateTransactionsSchema(database);
+  await migrateSourcesSchema(database);
+  await migrateCategoriesBudgetGroupSchema(database);
+  await migrateBudgetPeriodsSchema(database);
+  await runP16TrustedBackfillIfNeeded(database);
+  await database.execAsync(`
+    CREATE INDEX IF NOT EXISTS idx_transactions_created_at
+      ON transactions (created_at);
+    CREATE INDEX IF NOT EXISTS idx_transactions_status
+      ON transactions (status);
+  `);
+}
+
+export async function initializeDatabaseOn(database: SQLite.SQLiteDatabase): Promise<void> {
   // Bật WAL mode để tăng hiệu suất đọc/ghi
   await database.execAsync('PRAGMA journal_mode = WAL;');
   await database.execAsync('PRAGMA foreign_keys = ON;');
@@ -86,6 +106,11 @@ export async function initializeDatabase(): Promise<void> {
   // Migration an toàn cho DB cũ (expense_audience / is_active / spending_group)
   await migrateTransactionsSchema(database);
   await migrateSourcesSchema(database);
+  await migrateCategoriesBudgetGroupSchema(database);
+  await migrateBudgetPeriodsSchema(database);
+
+  // P1.6A one-time trusted backfill for pre-P1.6 DB lineage (marker-guarded)
+  await runP16TrustedBackfillIfNeeded(database);
 
   // Tạo index để tăng tốc truy vấn theo ngày và loại
   await database.execAsync(`
@@ -93,15 +118,6 @@ export async function initializeDatabase(): Promise<void> {
       ON transactions (created_at);
     CREATE INDEX IF NOT EXISTS idx_transactions_status
       ON transactions (status);
-  `);
-
-  // Tạo bảng streaks (ngày ghi chép liên tiếp)
-  await database.execAsync(`
-    CREATE TABLE IF NOT EXISTS streaks (
-      id               INTEGER PRIMARY KEY,
-      current_streak   INTEGER NOT NULL DEFAULT 0,
-      last_logged_date TEXT
-    );
   `);
 
   // Chèn dữ liệu mặc định nếu chưa có
@@ -148,6 +164,31 @@ async function migrateSourcesSchema(database: SQLite.SQLiteDatabase): Promise<vo
   }
 }
 
+async function migrateCategoriesBudgetGroupSchema(
+  database: SQLite.SQLiteDatabase,
+): Promise<void> {
+  const cols = await database.getAllAsync<{ name: string }>(
+    'PRAGMA table_info(categories);',
+  );
+  if (cols.some((c) => c.name === 'budget_group')) return;
+  await database.execAsync(`ALTER TABLE categories ADD COLUMN budget_group TEXT;`);
+}
+
+async function migrateBudgetPeriodsSchema(database: SQLite.SQLiteDatabase): Promise<void> {
+  await database.execAsync(`
+    CREATE TABLE IF NOT EXISTS budget_periods (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      budget_key   TEXT    NOT NULL,
+      period_start TEXT    NOT NULL,
+      period_end   TEXT    NOT NULL,
+      limit_amount INTEGER NOT NULL,
+      created_at   TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+      updated_at   TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+      UNIQUE (budget_key, period_start)
+    );
+  `);
+}
+
 /** Exact-name spending_group for known current sources. Safe after v1/v2 restore. */
 export async function classifyTrustedExistingSources(
   database: SQLite.SQLiteDatabase,
@@ -188,25 +229,31 @@ async function seedDefaultData(database: SQLite.SQLiteDatabase): Promise<void> {
 
   if (!catCount || catCount.count === 0) {
     // Danh mục chi tiêu mặc định
-    const defaultCategories = [
-      { name: 'Ăn uống',     type: 'chi',  icon: '🍜', color: '#FF8FAB' },
-      { name: 'Trà & Cà phê', type: 'chi', icon: '🧋', color: '#FBBAD3' },
-      { name: 'Mua sắm',     type: 'chi',  icon: '🛍️', color: '#B882FF' },
-      { name: 'Di chuyển',   type: 'chi',  icon: '🛵', color: '#82C0FF' },
-      { name: 'Làm đẹp',    type: 'chi',   icon: '💄', color: '#F990B6' },
-      { name: 'Sức khoẻ',   type: 'chi',   icon: '💊', color: '#6FCBA0' },
-      { name: 'Giải trí',   type: 'chi',   icon: '🎮', color: '#FFD966' },
-      { name: 'Giáo dục',   type: 'chi',   icon: '📚', color: '#FFAA75' },
-      { name: 'Gia đình',   type: 'chi',   icon: '🏠', color: '#A8E6D3' },
-      { name: 'Điện - Nước', type: 'chi',  icon: '💡', color: '#FFE9A0' },
-      { name: 'Thú cưng',   type: 'chi',   icon: '🐱', color: '#D4AEFF' },
-      { name: 'Khác',       type: 'chi',   icon: '✨', color: '#EBD9FF' },
+    const defaultCategories: {
+      name: string;
+      type: 'chi';
+      icon: string;
+      color: string;
+      budget_group: BudgetGroup | null;
+    }[] = [
+      { name: 'Ăn uống', type: 'chi', icon: '🍜', color: '#FF8FAB', budget_group: 'household_food' },
+      { name: 'Trà & Cà phê', type: 'chi', icon: '🧋', color: '#FBBAD3', budget_group: 'household_food' },
+      { name: 'Mua sắm', type: 'chi', icon: '🛍️', color: '#B882FF', budget_group: null },
+      { name: 'Di chuyển', type: 'chi', icon: '🛵', color: '#82C0FF', budget_group: null },
+      { name: 'Làm đẹp', type: 'chi', icon: '💄', color: '#F990B6', budget_group: null },
+      { name: 'Sức khoẻ', type: 'chi', icon: '💊', color: '#6FCBA0', budget_group: null },
+      { name: 'Giải trí', type: 'chi', icon: '🎮', color: '#FFD966', budget_group: null },
+      { name: 'Giáo dục', type: 'chi', icon: '📚', color: '#FFAA75', budget_group: null },
+      { name: 'Gia đình', type: 'chi', icon: '🏠', color: '#A8E6D3', budget_group: null },
+      { name: 'Điện - Nước', type: 'chi', icon: '💡', color: '#FFE9A0', budget_group: null },
+      { name: 'Thú cưng', type: 'chi', icon: '🐱', color: '#D4AEFF', budget_group: null },
+      { name: 'Khác', type: 'chi', icon: '✨', color: '#EBD9FF', budget_group: null },
     ];
 
     for (const cat of defaultCategories) {
       await database.runAsync(
-        'INSERT INTO categories (name, type, icon, color) VALUES (?, ?, ?, ?);',
-        [cat.name, cat.type, cat.icon, cat.color]
+        'INSERT INTO categories (name, type, icon, color, budget_group) VALUES (?, ?, ?, ?, ?);',
+        [cat.name, cat.type, cat.icon, cat.color, cat.budget_group],
       );
     }
   }
@@ -240,14 +287,4 @@ async function seedDefaultData(database: SQLite.SQLiteDatabase): Promise<void> {
     }
   }
 
-  // Khởi tạo streak nếu chưa có
-  const streakCount = await database.getFirstAsync<{ count: number }>(
-    'SELECT COUNT(*) as count FROM streaks;'
-  );
-
-  if (!streakCount || streakCount.count === 0) {
-    await database.runAsync(
-      'INSERT INTO streaks (id, current_streak, last_logged_date) VALUES (1, 0, NULL);'
-    );
-  }
 }
