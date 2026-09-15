@@ -2,18 +2,18 @@
   "expo": {
     "name": "YueDaily",
     "slug": "Yozakura",
-    "platforms": ["android"],
+    "platforms": [
+      "android"
+    ],
     "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "yuedaily",
-
     "android": {
       "icon": "./assets/icon.png",
       "versionCode": 3,
       "predictiveBackGestureEnabled": false,
-      "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "android.permission.CAMERA",
@@ -29,7 +29,6 @@
       ],
       "package": "com.kngan6297.Yozakura"
     },
-
     "plugins": [
       [
         "expo-router",
@@ -69,9 +68,10 @@
           "resizeMode": "contain"
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-sharing",
+      "expo-status-bar"
     ],
-
     "extra": {
       "router": {
         "headers": {
@@ -83,7 +83,6 @@
         "projectId": "ab0bb11f-354f-4cac-a8e2-617d5f98a3b9"
       }
     },
-
     "owner": "kn.yue97"
   }
 }
