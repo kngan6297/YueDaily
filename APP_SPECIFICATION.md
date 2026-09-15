@@ -3,7 +3,7 @@
 > **Loại tài liệu:** Product Requirements Document  
 > **Phiên bản:** 1.6.0 · **Cập nhật:** 2026-09-01  
 > **Trạng thái:** Đang phát triển (Expo SDK 54, React Native 0.81, React 19)  
-> **Phase hiện tại:** P1.6 — Household Food Budget (**Implemented / verified**)
+> **Phase hiện tại:** P1.7A — AI Receipt Scan Reliability (**Implemented / verified**)
 
 **Đọc tài liệu này khi cần biết app *là gì*, *cho ai*, *làm gì* và *làm như thế nào ở mức sản phẩm*.**  
 Chi tiết kỹ thuật (cài đặt, build, schema DB, kiến trúc code) → [`README.md`](./README.md).
@@ -977,9 +977,24 @@ Restore **preserve period boundaries exactly** — không regenerate start/end t
 | Ảnh món/SP | AI không tự suy số tiền; amount mặc định 0, người dùng nhập tay |
 | Yêu cầu mạng | Có; nếu mất mạng thì bỏ qua AI, người dùng nhập tay |
 | API key | Cấu hình Groq / Gemini qua `.env` hoặc biến môi trường build (EAS); không có màn quản lý key cho người dùng |
-| Hành vi lỗi | Nếu key sai / hết quota / timeout, hiển thị thông báo ngắn gọn, cho phép nhập tay |
+| Hành vi lỗi | Phân loại lỗi rõ ràng (thiếu key, auth, model, quota, mạng, timeout); luôn cho phép nhập tay |
 
-Chain provider (chi tiết kỹ thuật ở `README.md`): Groq → Gemini Flash‑Lite → Gemini Flash, có cơ chế skip provider khi lỗi 4xx/5xx, timeout, payload quá lớn.
+**P1.7A — AI Receipt Scan Reliability**
+
+| Khía cạnh | Mô tả |
+|-----------|-------|
+| Thứ tự provider | **Gemini 2.5 Flash‑Lite → Gemini 2.5 Flash** (primary chain) |
+| Groq | **Tắt** cho quét ảnh hoá đơn — tài khoản hiện không có model vision/image phù hợp (`qwen/qwen3.6-27b` trả 404) |
+| Env | `EXPO_PUBLIC_GEMINI_API_KEY` (bắt buộc cho quét); `EXPO_PUBLIC_GROQ_API_KEY` (optional, không dùng receipt scan P1.7A) |
+| Expo Go | `EXPO_PUBLIC_*` được inline khi Metro bundle; đổi `.env` **phải** restart Metro (`npx expo start --clear`) |
+| Fallback | Model unavailable / rate limit / 5xx / timeout → thử model Gemini kế tiếp |
+| Lỗi auth | 401 → key không hợp lệ; 403 → từ chối quyền (không gom mọi lỗi thành “key sai”) |
+| Lỗi không phải auth | 404 model, 429/quota, mạng — **không** hiển thị “API key không hợp lệ” |
+| Manual entry | AI lỗi không chặn lưu giao dịch |
+| Bảo mật key | Key client-side (`EXPO_PUBLIC_*`) — không phải secret thật; backend proxy **deferred** |
+| Receipt archive | **Deferred P1.7B** — P1.7A không đổi `transactions.image_uri` / persistence |
+
+Implementation: `src/services/receiptAi/*`, hook `src/hooks/useGemini.ts`.
 
 AI **chỉ** gợi ý:
 
@@ -1085,11 +1100,25 @@ Token màu cụ thể được định nghĩa tại `src/constants/theme.ts`.
 
 **Trạng thái:** Implemented / verified (PRD v1.6.0; Expo Go + expo-sqlite).
 
+### Implemented / verified — P1.7A AI Receipt Scan Reliability
+
+| Hạng mục | Ghi chú |
+|----------|---------|
+| Provider order | Gemini Flash-Lite → Gemini Flash |
+| Groq receipt vision | Disabled — no verified image model on account |
+| Error classification | missing_key, auth, permission, model, quota, network, timeout |
+| False key-error fix | 404/rate limit/network no longer labeled as key invalid |
+| Expo Go env | Metro restart required after `.env` change |
+| Receipt persistence | Unchanged — deferred **P1.7B** |
+
+**Trạng thái:** Implemented / verified (PRD v1.7A; Expo Go).
+
 ### Tương lai — P1.7+
 
 | Ưu tiên | Hạng mục | Ghi chú |
 |---------|----------|---------|
-| **P1.7** | Spending Insights | Food vs drinks/snacks, big spend, one-off / recurring (`expense_nature`), weekday/weekend patterns, baseline lifestyle. |
+| **P1.7B** | Receipt image archive | Persistent receipt storage, viewer, backup media — sau P1.7A. |
+| **P1.7C** | Spending Insights | Food vs drinks/snacks, big spend, one-off / recurring (`expense_nature`), weekday/weekend patterns, baseline lifestyle. |
 | P2 | Widget / shortcut chụp nhanh | Phụ thuộc nền tảng |
 
 Các hạng mục **không** nằm trong lộ trình sản phẩm cốt lõi: UI API key Cài đặt, repeat transaction, export CSV, pending inbox, thu nhập / cash-flow / opening balance, shop accounting / profit / owner draw, Family Savings balance, reimbursement / internal transfer, actual contribution ledger, bank sync, streak/gamification.
