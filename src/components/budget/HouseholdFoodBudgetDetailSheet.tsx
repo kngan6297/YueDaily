@@ -157,6 +157,19 @@ export function HouseholdFoodBudgetDetailSheet({
                 <Text style={styles.summaryValue}>{fmtVnd(detail.period.limit_amount)}đ</Text>
               </View>
               <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Dư đầu kỳ</Text>
+                <Text style={[styles.summaryValue, styles.carryoverText]}>
+                  {detail.period.carryover_amount > 0 ? '+' : ''}
+                  {fmtVnd(detail.period.carryover_amount)}đ
+                </Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Tổng khả dụng</Text>
+                <Text style={styles.summaryValue}>
+                  {fmtVnd(amounts?.availableAmount ?? detail.period.limit_amount)}đ
+                </Text>
+              </View>
+              <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Đã dùng</Text>
                 <Text style={[styles.summaryValue, styles.spentText]}>
                   {fmtVnd(amounts?.spentAmount ?? 0)}đ
@@ -359,6 +372,7 @@ function createStyles(colors: ThemeColors) {
       color: colors.neutral[800],
     },
     spentText: { color: colors.pink[500] },
+    carryoverText: { color: colors.info },
     remainingText: { color: colors.success },
     overText: { color: colors.danger },
     progressTrack: {

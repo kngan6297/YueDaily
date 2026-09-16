@@ -117,6 +117,7 @@ describe('P1.5.2 source archive', () => {
 
   it('unused source may be deleted; referenced source must archive', () => {
     assert.equal(sourceDeleteGuard(0).ok, true);
+    assert.equal(sourceDeleteGuard(0, 0).ok, true);
     assert.equal(sourceHasTransactionRefs(0), false);
     const blocked = sourceDeleteGuard(3);
     assert.equal(blocked.ok, false);
@@ -126,5 +127,19 @@ describe('P1.5.2 source archive', () => {
     assert.equal(sourceHasTransactionRefs(1), true);
     assert.equal(canEditSourceSpendingGroup(0), true);
     assert.equal(canEditSourceSpendingGroup(1), false);
+  });
+
+  it('source with zero transactions but budget envelope ref cannot be deleted', () => {
+    const blocked = sourceDeleteGuard(0, 1);
+    assert.equal(blocked.ok, false);
+    if (!blocked.ok) {
+      assert.match(blocked.reason, /Quỹ ăn|ngân sách/i);
+    }
+    // Transaction refs still take precedence in messaging when both present
+    const txBlocked = sourceDeleteGuard(2, 1);
+    assert.equal(txBlocked.ok, false);
+    if (!txBlocked.ok) {
+      assert.match(txBlocked.reason, /lưu trữ/i);
+    }
   });
 });

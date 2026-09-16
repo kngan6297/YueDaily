@@ -89,17 +89,39 @@ export function shouldEnsureInitialBudgetPeriodAfterRestore(backupVersion: strin
   return backupVersion === '1' || backupVersion === '2' || backupVersion === '3';
 }
 
+/** v1–v4: may apply one-time first-period carryover + envelope_source_id seeds. v5 is authoritative. */
+export function shouldRunFirstPeriodBudgetSeedsAfterRestore(backupVersion: string): boolean {
+  return (
+    backupVersion === '1' ||
+    backupVersion === '2' ||
+    backupVersion === '3' ||
+    backupVersion === '4'
+  );
+}
+
 export type SourceDeleteGuard = { ok: true } | { ok: false; reason: string };
 
 /**
- * Hard-delete chỉ khi không còn giao dịch tham chiếu `source_id`.
- * Nguồn đã dùng trong lịch sử → Lưu trữ, không xoá (giữ attribution).
+ * Hard-delete chỉ khi không còn:
+ * - giao dịch tham chiếu `source_id`, và
+ * - kỳ ngân sách tham chiếu `budget_periods.envelope_source_id`
+ * Nguồn đã dùng trong lịch sử / gắn envelope → Lưu trữ hoặc giữ, không xoá.
+ * Rename / archive vẫn được phép (không đi qua guard này).
  */
-export function sourceDeleteGuard(referenceCount: number): SourceDeleteGuard {
-  if (referenceCount > 0) {
+export function sourceDeleteGuard(
+  transactionReferenceCount: number,
+  budgetPeriodReferenceCount = 0,
+): SourceDeleteGuard {
+  if (transactionReferenceCount > 0) {
     return {
       ok: false,
       reason: 'Nguồn chi này đã có giao dịch nên chỉ có thể lưu trữ.',
+    };
+  }
+  if (budgetPeriodReferenceCount > 0) {
+    return {
+      ok: false,
+      reason: 'Nguồn chi này đang gắn ngân sách Quỹ ăn nên không thể xoá.',
     };
   }
   return { ok: true };

@@ -20,6 +20,8 @@ type PeriodRow = {
   period_start: string;
   period_end: string;
   limit_amount: number;
+  carryover_amount: number;
+  envelope_source_id: number | null;
 };
 
 function applyLegacyCategoryBackfill(categories: CategoryRow[]): CategoryRow[] {
@@ -63,6 +65,8 @@ function simulateLegacyRestoreBackfill(
       period_start: FIRST_HOUSEHOLD_FOOD_PERIOD.period_start,
       period_end: FIRST_HOUSEHOLD_FOOD_PERIOD.period_end,
       limit_amount: FIRST_HOUSEHOLD_FOOD_PERIOD.limit_amount,
+      carryover_amount: FIRST_HOUSEHOLD_FOOD_PERIOD.carryover_amount,
+      envelope_source_id: null,
     });
   }
   return { categories: nextCategories, sources: nextSources, periods: nextPeriods };
@@ -91,6 +95,8 @@ function simulateStartupAfterMarker(
       period_start: FIRST_HOUSEHOLD_FOOD_PERIOD.period_start,
       period_end: FIRST_HOUSEHOLD_FOOD_PERIOD.period_end,
       limit_amount: FIRST_HOUSEHOLD_FOOD_PERIOD.limit_amount,
+      carryover_amount: FIRST_HOUSEHOLD_FOOD_PERIOD.carryover_amount,
+      envelope_source_id: null,
     });
   }
   return { categories: nextCategories, sources: nextSources, periods: nextPeriods };
@@ -142,6 +148,8 @@ describe('P1.6 migration lifecycle (pure restore + restart semantics)', () => {
         period_start: '2026-10-05',
         period_end: '2026-11-04',
         limit_amount: 8_000_000,
+        carryover_amount: 0,
+        envelope_source_id: 7,
       },
     ];
     const afterRestore = simulateLegacyRestoreBackfill('4', [], [], periods);
@@ -158,10 +166,14 @@ describe('P1.6 migration lifecycle (pure restore + restart semantics)', () => {
         period_start: FIRST_HOUSEHOLD_FOOD_PERIOD.period_start,
         period_end: FIRST_HOUSEHOLD_FOOD_PERIOD.period_end,
         limit_amount: 8_000_000,
+        carryover_amount: 100_000,
+        envelope_source_id: 7,
       },
     ];
     const afterRestart = simulateStartupAfterMarker(true, [], [], periods);
     assert.equal(afterRestart.periods[0].limit_amount, 8_000_000);
+    assert.equal(afterRestart.periods[0].carryover_amount, 100_000);
+    assert.equal(afterRestart.periods[0].envelope_source_id, 7);
   });
 
   it('7. repeated normal init does not mutate after first P1.6 migration marker', () => {

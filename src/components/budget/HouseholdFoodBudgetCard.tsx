@@ -72,8 +72,20 @@ export function HouseholdFoodBudgetCard({ data, loading, onPress }: HouseholdFoo
       </View>
 
       <Text style={styles.limitLine}>
-        {fmtVnd(period.limit_amount)}đ ngân sách
+        Ngân sách: {fmtVnd(period.limit_amount)}đ
       </Text>
+      {period.carryover_amount > 0 ? (
+        <Text style={styles.carryoverLine}>
+          Dư đầu kỳ: +{fmtVnd(period.carryover_amount)}đ
+        </Text>
+      ) : null}
+      {amounts || period.carryover_amount > 0 ? (
+        <Text style={styles.availableLine}>
+          Tổng khả dụng: {fmtVnd(
+            amounts?.availableAmount ?? period.limit_amount + period.carryover_amount,
+          )}đ
+        </Text>
+      ) : null}
 
       {isUpcoming ? (
         <Text style={styles.upcomingText}>
@@ -190,6 +202,16 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     },
     limitLine: {
       fontSize: Typography.fontSize.lg,
+      fontWeight: '800',
+      color: colors.neutral[800],
+    },
+    carryoverLine: {
+      fontSize: Typography.fontSize.sm,
+      fontWeight: '700',
+      color: colors.neutral[600],
+    },
+    availableLine: {
+      fontSize: Typography.fontSize.base,
       fontWeight: '800',
       color: colors.neutral[800],
     },

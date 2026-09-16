@@ -180,7 +180,7 @@ export async function getSourcesWithReferenceCounts(): Promise<SourceWithRefs[]>
   }));
 }
 
-/** Xoá nguồn chi — chỉ khi không còn giao dịch tham chiếu; không cascade */
+/** Xoá nguồn chi — chỉ khi không còn giao dịch / budget envelope tham chiếu; không cascade */
 export async function deleteSource(id: number): Promise<DeleteResult> {
   const db = await getDatabase();
   const count = await db.getFirstAsync<{ count: number }>(
@@ -194,7 +194,11 @@ export async function deleteSource(id: number): Promise<DeleteResult> {
     'SELECT COUNT(*) as count FROM transactions WHERE source_id = ?;',
     [id],
   );
-  const gate = sourceDeleteGuard(refs?.count ?? 0);
+  const budgetRefs = await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM budget_periods WHERE envelope_source_id = ?;',
+    [id],
+  );
+  const gate = sourceDeleteGuard(refs?.count ?? 0, budgetRefs?.count ?? 0);
   if (!gate.ok) return gate;
 
   await db.runAsync('DELETE FROM sources WHERE id = ?;', [id]);

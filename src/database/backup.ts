@@ -15,6 +15,10 @@ import {
   runLegacyTrustedBackfillAfterRestore,
 } from './p16Migration';
 import {
+  markFirstPeriodBudgetSeedsComplete,
+  runFirstPeriodBudgetSeedsIfNeeded,
+} from './budgetPeriods';
+import {
   CURRENT_BACKUP_VERSION,
   validateBackupPayload,
   type BackupVersion,
@@ -23,6 +27,7 @@ import {
 import {
   shouldArchiveLegacySeedsAfterRestore,
   shouldClassifyTrustedSpendingGroupsAfterRestore,
+  shouldRunFirstPeriodBudgetSeedsAfterRestore,
 } from './sourceLifecycle';
 
 export type { BackupVersion, ValidatedBackup } from './backupValidation';
@@ -132,7 +137,7 @@ export async function applyValidatedBackupRestore(
     await db.execAsync('DELETE FROM payers;');
     await db.execAsync('DELETE FROM budget_periods;');
 
-    if (backup.backupVersion !== '4') {
+    if (backup.backupVersion !== '4' && backup.backupVersion !== '5') {
       await restoreLegacyStreak(db, backup.streak);
     }
 
@@ -167,14 +172,17 @@ export async function applyValidatedBackupRestore(
     for (const period of backup.budget_periods) {
       await db.runAsync(
         `INSERT INTO budget_periods
-           (id, budget_key, period_start, period_end, limit_amount, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?);`,
+           (id, budget_key, period_start, period_end, limit_amount, carryover_amount,
+            envelope_source_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
         [
           period.id,
           period.budget_key,
           period.period_start,
           period.period_end,
           period.limit_amount,
+          period.carryover_amount,
+          period.envelope_source_id,
           period.created_at,
           period.updated_at,
         ],
@@ -212,6 +220,14 @@ export async function applyValidatedBackupRestore(
     }
     await runLegacyTrustedBackfillAfterRestore(db, backup.backupVersion);
     await markP16TrustedBackfillComplete(db);
+
+    if (shouldRunFirstPeriodBudgetSeedsAfterRestore(backup.backupVersion)) {
+      // v1–v4: may apply one-time carryover + envelope_source_id for 2026-09-05
+      await runFirstPeriodBudgetSeedsIfNeeded(db);
+    } else if (backup.backupVersion === '5') {
+      // v5 authoritative — never let startup seeds overwrite restored values
+      await markFirstPeriodBudgetSeedsComplete(db);
+    }
   });
 }
 

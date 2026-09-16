@@ -5,11 +5,25 @@
 
 import type { SourceSpendingGroup } from '../types';
 
+/**
+ * Persisted seed name for the Woori food-fund envelope.
+ * Used ONLY during one-time migration to resolve sources.id → budget_periods.envelope_source_id.
+ * Runtime membership must NEVER compare source names.
+ */
+export const HOUSEHOLD_FOOD_ENVELOPE_SOURCE_NAME = 'Woori · Quỹ ăn' as const;
+
+/** @deprecated Prefer envelope_source_id membership; kept for migration helpers/tests */
+export function isHouseholdFoodEnvelopeSourceName(
+  name: string | null | undefined,
+): boolean {
+  return (name ?? '').trim() === HOUSEHOLD_FOOD_ENVELOPE_SOURCE_NAME;
+}
+
 export const DEFAULT_SOURCE_SEEDS: readonly {
   name: string;
   spending_group: SourceSpendingGroup;
 }[] = [
-  { name: 'Woori · Quỹ ăn', spending_group: 'household' },
+  { name: HOUSEHOLD_FOOD_ENVELOPE_SOURCE_NAME, spending_group: 'household' },
   { name: 'VPBank', spending_group: 'personal_yue' },
   { name: 'Tiền mặt Yue', spending_group: 'personal_yue' },
   { name: 'Tiền mặt Kai', spending_group: 'household' },
@@ -25,7 +39,7 @@ export const DEFAULT_SOURCE_SEED_NAMES = DEFAULT_SOURCE_SEEDS.map((s) => s.name)
 export const TRUSTED_SOURCE_SPENDING_GROUPS: Readonly<Record<string, SourceSpendingGroup>> = {
   VPBank: 'personal_yue',
   'Tiền mặt Yue': 'personal_yue',
-  'Woori · Quỹ ăn': 'household',
+  [HOUSEHOLD_FOOD_ENVELOPE_SOURCE_NAME]: 'household',
   'Tiền mặt Kai': 'household',
 };
 

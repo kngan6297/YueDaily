@@ -130,7 +130,15 @@ export interface BudgetPeriod {
   budget_key: BudgetKey;
   period_start: string; // YYYY-MM-DD local
   period_end: string;
+  /** Planned monthly contribution for the period (e.g. 7_500_000) */
   limit_amount: number;
+  /** Opening surplus carried into the period; default 0 */
+  carryover_amount: number;
+  /**
+   * Persisted Woori envelope source id for membership.
+   * Resolved once from seed name at migration; never compared by name at runtime.
+   */
+  envelope_source_id: number | null;
   created_at: string;
   updated_at: string;
 }

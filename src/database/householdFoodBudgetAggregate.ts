@@ -1,9 +1,8 @@
 // ============================================================
-// Household Food Budget — pure aggregate helpers for tests + consistency
+// Household Food Budget — pure aggregate helpers
 // ============================================================
 
 import { isHouseholdFoodBudgetTransaction } from './householdFoodBudget';
-import type { BudgetGroup, SourceSpendingGroup } from '../types';
 
 export interface BudgetQualifyingTransactionInput {
   id: number;
@@ -12,21 +11,24 @@ export interface BudgetQualifyingTransactionInput {
   status: string;
   category_id: number;
   category_name: string;
-  category_budget_group: BudgetGroup | null;
-  source_spending_group: SourceSpendingGroup | null;
+  source_id: number | null;
   transaction_date: string;
 }
 
 export function filterQualifyingHouseholdFoodBudgetTransactions(
-  period: { period_start: string; period_end: string },
+  period: {
+    period_start: string;
+    period_end: string;
+    envelope_source_id: number | null;
+  },
   rows: readonly BudgetQualifyingTransactionInput[],
 ): BudgetQualifyingTransactionInput[] {
   return rows.filter((row) =>
     isHouseholdFoodBudgetTransaction({
       type: row.type,
       status: row.status,
-      category_budget_group: row.category_budget_group,
-      source_spending_group: row.source_spending_group,
+      source_id: row.source_id,
+      envelope_source_id: period.envelope_source_id,
       transaction_date: row.transaction_date,
       period,
     }),
@@ -34,7 +36,11 @@ export function filterQualifyingHouseholdFoodBudgetTransactions(
 }
 
 export function sumQualifyingHouseholdFoodBudgetTransactions(
-  period: { period_start: string; period_end: string },
+  period: {
+    period_start: string;
+    period_end: string;
+    envelope_source_id: number | null;
+  },
   rows: readonly BudgetQualifyingTransactionInput[],
 ): number {
   return filterQualifyingHouseholdFoodBudgetTransactions(period, rows).reduce(
@@ -44,7 +50,11 @@ export function sumQualifyingHouseholdFoodBudgetTransactions(
 }
 
 export function breakdownQualifyingHouseholdFoodBudgetTransactions(
-  period: { period_start: string; period_end: string },
+  period: {
+    period_start: string;
+    period_end: string;
+    envelope_source_id: number | null;
+  },
   rows: readonly BudgetQualifyingTransactionInput[],
 ): Array<{ category_id: number; category_name: string; amount: number }> {
   const qualifying = filterQualifyingHouseholdFoodBudgetTransactions(period, rows);
@@ -61,5 +71,7 @@ export function breakdownQualifyingHouseholdFoodBudgetTransactions(
       });
     }
   }
-  return [...map.values()].sort((a, b) => b.amount - a.amount || a.category_name.localeCompare(b.category_name));
+  return [...map.values()].sort(
+    (a, b) => b.amount - a.amount || a.category_name.localeCompare(b.category_name),
+  );
 }

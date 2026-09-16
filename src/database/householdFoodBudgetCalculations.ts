@@ -1,11 +1,14 @@
 // ============================================================
-// Household Food Budget — pure amount / status calculations (P1.6B)
+// Household Food Budget — pure amount / status calculations
+// available = limit_amount + carryover_amount; contribution uses limit only
 // ============================================================
 
 export type BudgetDisplayStatus = 'normal' | 'attention' | 'near_limit' | 'over';
 
 export interface BudgetAmountSummary {
   limitAmount: number;
+  carryoverAmount: number;
+  availableAmount: number;
   spentAmount: number;
   remainingAmount: number;
   overAmount: number;
@@ -14,20 +17,34 @@ export interface BudgetAmountSummary {
   status: BudgetDisplayStatus;
 }
 
+export function computeAvailableAmount(
+  limitAmount: number,
+  carryoverAmount = 0,
+): number {
+  const safeLimit = Number.isInteger(limitAmount) && limitAmount >= 0 ? limitAmount : 0;
+  const safeCarry =
+    Number.isInteger(carryoverAmount) && carryoverAmount >= 0 ? carryoverAmount : 0;
+  return safeLimit + safeCarry;
+}
+
 export function computeBudgetAmountSummary(
   limitAmount: number,
   spentAmount: number,
+  carryoverAmount = 0,
 ): BudgetAmountSummary {
   const safeLimit = Number.isInteger(limitAmount) && limitAmount >= 0 ? limitAmount : 0;
+  const safeCarry =
+    Number.isInteger(carryoverAmount) && carryoverAmount >= 0 ? carryoverAmount : 0;
+  const availableAmount = safeLimit + safeCarry;
   const safeSpent = Number.isInteger(spentAmount) && spentAmount >= 0 ? spentAmount : 0;
-  const delta = safeLimit - safeSpent;
+  const delta = availableAmount - safeSpent;
 
   const remainingAmount = delta >= 0 ? delta : 0;
   const overAmount = delta < 0 ? Math.abs(delta) : 0;
 
   let progressRatio = 0;
-  if (safeLimit > 0) {
-    progressRatio = safeSpent / safeLimit;
+  if (availableAmount > 0) {
+    progressRatio = safeSpent / availableAmount;
   } else if (safeSpent > 0) {
     progressRatio = Number.POSITIVE_INFINITY;
   }
@@ -39,20 +56,25 @@ export function computeBudgetAmountSummary(
 
   return {
     limitAmount: safeLimit,
+    carryoverAmount: safeCarry,
+    availableAmount,
     spentAmount: safeSpent,
     remainingAmount,
     overAmount,
     progressRatio,
     progressPercent,
-    status: budgetDisplayStatus(safeLimit, safeSpent),
+    status: budgetDisplayStatus(availableAmount, safeSpent),
   };
 }
 
-export function budgetDisplayStatus(limitAmount: number, spentAmount: number): BudgetDisplayStatus {
-  if (limitAmount <= 0 && spentAmount > 0) return 'over';
-  if (limitAmount <= 0) return 'normal';
+export function budgetDisplayStatus(
+  availableAmount: number,
+  spentAmount: number,
+): BudgetDisplayStatus {
+  if (availableAmount <= 0 && spentAmount > 0) return 'over';
+  if (availableAmount <= 0) return 'normal';
 
-  const ratio = spentAmount / limitAmount;
+  const ratio = spentAmount / availableAmount;
   if (ratio >= 1) return 'over';
   if (ratio >= 0.9) return 'near_limit';
   if (ratio >= 0.7) return 'attention';

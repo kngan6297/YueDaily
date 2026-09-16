@@ -13,6 +13,8 @@ export const FIRST_HOUSEHOLD_FOOD_PERIOD = {
   period_start: '2026-09-05',
   period_end: '2026-10-04',
   limit_amount: 7_500_000,
+  /** Opening surplus into this period — not part of planned monthly contribution */
+  carryover_amount: 223_550,
 } as const;
 
 /** Planned contribution ratios — display only; no ledger in P1.6A */

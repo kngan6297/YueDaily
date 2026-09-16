@@ -66,15 +66,20 @@ export interface HouseholdFoodBudgetHomeCardData {
 
 const membership = householdFoodBudgetMembershipWhere();
 
+function membershipParams(period: BudgetPeriod): number[] | string[] | (number | string)[] {
+  return [period.envelope_source_id as number, period.period_start, period.period_end];
+}
+
 async function sumSpentForStoredPeriod(period: BudgetPeriod): Promise<number> {
+  if (period.envelope_source_id == null) return 0;
   const db = await getDatabase();
   const row = await db.getFirstAsync<{ total: number }>(
     `SELECT COALESCE(SUM(t.amount), 0) AS total
      FROM transactions t
-     INNER JOIN categories c ON c.id = t.category_id
+     LEFT JOIN categories c ON c.id = t.category_id
      LEFT JOIN sources s ON s.id = t.source_id
      WHERE ${membership};`,
-    [period.period_start, period.period_end],
+    membershipParams(period),
   );
   return row?.total ?? 0;
 }
@@ -87,7 +92,11 @@ export async function getHouseholdFoodBudgetSummaryForPeriod(
   const spentAmount = await sumSpentForStoredPeriod(period);
   return {
     period,
-    amounts: computeBudgetAmountSummary(period.limit_amount, spentAmount),
+    amounts: computeBudgetAmountSummary(
+      period.limit_amount,
+      spentAmount,
+      period.carryover_amount,
+    ),
   };
 }
 
@@ -95,7 +104,7 @@ export async function getHouseholdFoodBudgetBreakdownForPeriod(
   periodId: number,
 ): Promise<HouseholdFoodBudgetCategoryBreakdownRow[]> {
   const period = await getBudgetPeriodById(periodId);
-  if (!period) return [];
+  if (!period || period.envelope_source_id == null) return [];
 
   const db = await getDatabase();
   const rows = await db.getAllAsync<{
@@ -104,17 +113,17 @@ export async function getHouseholdFoodBudgetBreakdownForPeriod(
     category_icon: string;
     total: number;
   }>(
-    `SELECT c.id AS category_id,
-            c.name AS category_name,
-            c.icon AS category_icon,
+    `SELECT COALESCE(c.id, 0) AS category_id,
+            COALESCE(c.name, 'Không rõ') AS category_name,
+            COALESCE(c.icon, '💰') AS category_icon,
             COALESCE(SUM(t.amount), 0) AS total
      FROM transactions t
-     INNER JOIN categories c ON c.id = t.category_id
+     LEFT JOIN categories c ON c.id = t.category_id
      LEFT JOIN sources s ON s.id = t.source_id
      WHERE ${membership}
      GROUP BY c.id, c.name, c.icon
-     ORDER BY total DESC, c.name ASC;`,
-    [period.period_start, period.period_end],
+     ORDER BY total DESC, category_name ASC;`,
+    membershipParams(period),
   );
 
   const spentTotal = rows.reduce((sum, row) => sum + row.total, 0);
@@ -131,7 +140,7 @@ export async function getHouseholdFoodBudgetTransactionsForPeriod(
   periodId: number,
 ): Promise<HouseholdFoodBudgetTransactionRow[]> {
   const period = await getBudgetPeriodById(periodId);
-  if (!period) return [];
+  if (!period || period.envelope_source_id == null) return [];
 
   const db = await getDatabase();
   const rows = await db.getAllAsync<{
@@ -153,11 +162,11 @@ export async function getHouseholdFoodBudgetTransactionsForPeriod(
             t.expense_audience,
             t.note
      FROM transactions t
-     INNER JOIN categories c ON c.id = t.category_id
+     LEFT JOIN categories c ON c.id = t.category_id
      LEFT JOIN sources s ON s.id = t.source_id
      WHERE ${membership}
      ORDER BY t.created_at DESC, t.id DESC;`,
-    [period.period_start, period.period_end],
+    membershipParams(period),
   );
 
   return rows.map((row) => ({
@@ -238,7 +247,11 @@ export async function loadHouseholdFoodBudgetHomeCard(
 
   if (activePeriod) {
     const spentAmount = await sumSpentForStoredPeriod(activePeriod);
-    const amounts = computeBudgetAmountSummary(activePeriod.limit_amount, spentAmount);
+    const amounts = computeBudgetAmountSummary(
+      activePeriod.limit_amount,
+      spentAmount,
+      activePeriod.carryover_amount,
+    );
     return {
       referenceDate,
       phase: resolveBudgetCardPhase(referenceDate, activePeriod, null, amounts),

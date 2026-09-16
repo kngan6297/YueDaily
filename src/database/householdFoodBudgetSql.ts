@@ -1,6 +1,6 @@
 // ============================================================
 // Household Food Budget — shared SQL membership predicate
-// Uses persisted category.budget_group + source.spending_group only
+// Matches t.source_id to budget_periods.envelope_source_id
 // ============================================================
 
 import { TRANSACTION_STATUS_COMPLETE } from '../types';
@@ -9,18 +9,19 @@ import { TRANSACTION_STATUS_COMPLETE } from '../types';
 export const HOUSEHOLD_FOOD_TX_TYPE = 'chi' as const;
 
 /**
- * Parameterized membership filter — always pair with stored period_start/end bounds.
- * Does NOT filter expense_audience, payer, source name, category name, or is_active.
+ * Parameterized membership filter.
+ * Bind order: envelope_source_id, period_start, period_end.
+ * Does NOT filter by source name, category, audience, payer, or is_active.
  */
 export function householdFoodBudgetMembershipWhere(
+  envelopeSourceIdParam = '?',
   periodStartParam = '?',
   periodEndParam = '?',
 ): string {
   return `
       t.type = '${HOUSEHOLD_FOOD_TX_TYPE}'
       AND t.status = '${TRANSACTION_STATUS_COMPLETE}'
-      AND c.budget_group = 'household_food'
-      AND s.spending_group = 'household'
+      AND t.source_id = ${envelopeSourceIdParam}
       AND substr(t.created_at, 1, 10) >= ${periodStartParam}
       AND substr(t.created_at, 1, 10) <= ${periodEndParam}
     `;

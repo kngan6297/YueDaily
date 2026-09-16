@@ -7,24 +7,11 @@ import * as SQLite from 'expo-sqlite';
 import { sourceIdsToArchiveOnUpgrade } from './sourceLifecycle';
 import { classifyTrustedSourceNames, missingSourceSeeds } from './sourceSeed';
 import { runP16TrustedBackfillIfNeeded } from './p16Migration';
+import { runFirstPeriodBudgetSeedsIfNeeded } from './budgetPeriods';
+import { getDatabase } from './db';
 import type { BudgetGroup } from '../types';
 
-let db: SQLite.SQLiteDatabase | null = null;
-
-/** Lấy instance database (singleton, tự phục hồi nếu native object bị giải phóng) */
-export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
-  if (db) {
-    try {
-      await db.getFirstAsync('SELECT 1;');
-      return db;
-    } catch {
-      // Native object đã bị giải phóng (hot reload / process restart) — mở lại
-      db = null;
-    }
-  }
-  db = await SQLite.openDatabaseAsync('yozakura.db');
-  return db;
-}
+export { getDatabase } from './db';
 
 /** Khởi tạo toàn bộ schema database */
 export async function initializeDatabase(): Promise<void> {
@@ -39,6 +26,7 @@ export async function runSchemaMigrationsOn(database: SQLite.SQLiteDatabase): Pr
   await migrateCategoriesBudgetGroupSchema(database);
   await migrateBudgetPeriodsSchema(database);
   await runP16TrustedBackfillIfNeeded(database);
+  await runFirstPeriodBudgetSeedsIfNeeded(database);
   await database.execAsync(`
     CREATE INDEX IF NOT EXISTS idx_transactions_created_at
       ON transactions (created_at);
@@ -111,6 +99,8 @@ export async function initializeDatabaseOn(database: SQLite.SQLiteDatabase): Pro
 
   // P1.6A one-time trusted backfill for pre-P1.6 DB lineage (marker-guarded)
   await runP16TrustedBackfillIfNeeded(database);
+  // One-time first-period carryover + envelope_source_id seeds (marker-guarded)
+  await runFirstPeriodBudgetSeedsIfNeeded(database);
 
   // Tạo index để tăng tốc truy vấn theo ngày và loại
   await database.execAsync(`
@@ -177,16 +167,32 @@ async function migrateCategoriesBudgetGroupSchema(
 async function migrateBudgetPeriodsSchema(database: SQLite.SQLiteDatabase): Promise<void> {
   await database.execAsync(`
     CREATE TABLE IF NOT EXISTS budget_periods (
-      id           INTEGER PRIMARY KEY AUTOINCREMENT,
-      budget_key   TEXT    NOT NULL,
-      period_start TEXT    NOT NULL,
-      period_end   TEXT    NOT NULL,
-      limit_amount INTEGER NOT NULL,
-      created_at   TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
-      updated_at   TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      budget_key         TEXT    NOT NULL,
+      period_start       TEXT    NOT NULL,
+      period_end         TEXT    NOT NULL,
+      limit_amount       INTEGER NOT NULL,
+      carryover_amount   INTEGER NOT NULL DEFAULT 0,
+      envelope_source_id INTEGER,
+      created_at         TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+      updated_at         TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
       UNIQUE (budget_key, period_start)
     );
   `);
+
+  const cols = await database.getAllAsync<{ name: string }>(
+    'PRAGMA table_info(budget_periods);',
+  );
+  if (!cols.some((c) => c.name === 'carryover_amount')) {
+    await database.execAsync(
+      `ALTER TABLE budget_periods ADD COLUMN carryover_amount INTEGER NOT NULL DEFAULT 0;`,
+    );
+  }
+  if (!cols.some((c) => c.name === 'envelope_source_id')) {
+    await database.execAsync(
+      `ALTER TABLE budget_periods ADD COLUMN envelope_source_id INTEGER;`,
+    );
+  }
 }
 
 /** Exact-name spending_group for known current sources. Safe after v1/v2 restore. */

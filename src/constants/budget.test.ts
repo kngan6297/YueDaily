@@ -12,11 +12,16 @@ describe('budget constants', () => {
     assert.equal(HOUSEHOLD_FOOD_CYCLE_START_DAY, 5);
   });
 
-  it('planned contribution amounts for 7.5m', () => {
+  it('planned contribution amounts for 7.5m (limit only, not carryover)', () => {
     const amounts = plannedContributionAmounts(FIRST_HOUSEHOLD_FOOD_PERIOD.limit_amount);
     assert.equal(amounts.kai, 6_000_000);
     assert.equal(amounts.yue, 1_500_000);
     assert.equal(amounts.kai + amounts.yue, FIRST_HOUSEHOLD_FOOD_PERIOD.limit_amount);
+    assert.equal(FIRST_HOUSEHOLD_FOOD_PERIOD.carryover_amount, 223_550);
+    assert.notEqual(
+      amounts.kai + amounts.yue,
+      FIRST_HOUSEHOLD_FOOD_PERIOD.limit_amount + FIRST_HOUSEHOLD_FOOD_PERIOD.carryover_amount,
+    );
     assert.equal(PLANNED_CONTRIBUTION_RATIOS.kai, 0.8);
     assert.equal(PLANNED_CONTRIBUTION_RATIOS.yue, 0.2);
   });

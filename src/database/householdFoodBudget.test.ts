@@ -8,72 +8,74 @@ const period = {
   period_end: FIRST_HOUSEHOLD_FOOD_PERIOD.period_end,
 };
 
-describe('Household Food Budget membership (source-based, no audience)', () => {
-  it('includes household source + household_food in period', () => {
+const WOORI_ID = 7;
+
+function membership(
+  overrides: Partial<{
+    type: string;
+    status: string;
+    source_id: number | null;
+    envelope_source_id: number | null;
+    transaction_date: string;
+  }> = {},
+) {
+  return isHouseholdFoodBudgetTransaction({
+    type: 'chi',
+    status: 'complete',
+    source_id: WOORI_ID,
+    envelope_source_id: WOORI_ID,
+    transaction_date: '2026-09-10',
+    period,
+    ...overrides,
+  });
+}
+
+describe('Household Food Budget membership (envelope_source_id)', () => {
+  it('Woori source ID + any category counts (category not an input)', () => {
+    assert.equal(membership(), true);
+  });
+
+  it('source rename does not affect membership — only source_id vs envelope_source_id', () => {
+    // Membership never reads source name; rename cannot change this predicate
+    assert.equal(membership({ source_id: WOORI_ID, envelope_source_id: WOORI_ID }), true);
+    // Simulate rename: name changed elsewhere, IDs unchanged → still counts
     assert.equal(
       isHouseholdFoodBudgetTransaction({
         type: 'chi',
         status: 'complete',
-        category_budget_group: 'household_food',
-        source_spending_group: 'household',
-        transaction_date: '2026-09-10',
+        source_id: WOORI_ID,
+        envelope_source_id: WOORI_ID,
+        transaction_date: '2026-09-20',
         period,
       }),
       true,
     );
   });
 
-  it('excludes VPBank + Yue+Kai semantic (personal source)', () => {
-    assert.equal(
-      isHouseholdFoodBudgetTransaction({
-        type: 'chi',
-        status: 'complete',
-        category_budget_group: 'household_food',
-        source_spending_group: 'personal_yue',
-        transaction_date: '2026-09-10',
-        period,
-      }),
-      false,
-    );
+  it('archive (is_active) does not break membership — activity is not an input', () => {
+    // Historical/current txs keep matching envelope_source_id regardless of archive flag
+    assert.equal(membership({ source_id: WOORI_ID, envelope_source_id: WOORI_ID }), true);
   });
 
-  it('excludes dates before first configured period even if household food', () => {
-    assert.equal(
-      isHouseholdFoodBudgetTransaction({
-        type: 'chi',
-        status: 'complete',
-        category_budget_group: 'household_food',
-        source_spending_group: 'household',
-        transaction_date: '2026-09-04',
-        period,
-      }),
-      false,
-    );
+  it('another source id does not count even if it would share a similar name', () => {
+    assert.equal(membership({ source_id: 99, envelope_source_id: WOORI_ID }), false);
   });
 
-  it('excludes non-food category on household source', () => {
-    assert.equal(
-      isHouseholdFoodBudgetTransaction({
-        type: 'chi',
-        status: 'complete',
-        category_budget_group: null,
-        source_spending_group: 'household',
-        transaction_date: '2026-09-10',
-        period,
-      }),
-      false,
-    );
+  it('null envelope_source_id excludes all', () => {
+    assert.equal(membership({ envelope_source_id: null }), false);
   });
 
-  it('audience changes alone do not affect membership rule (no audience field)', () => {
-    const base = {
-      type: 'chi',
-      status: 'complete',
-      category_budget_group: 'household_food' as const,
-      source_spending_group: 'personal_yue' as const,
-      transaction_date: '2026-09-10',
-      period,
-    };
-    assert.equal(isHouseholdFoodBudgetTransaction(base), false);
+  it('excludes dates before first configured period', () => {
+    assert.equal(membership({ transaction_date: '2026-09-04' }), false);
+  });
+
+  it('audience is not an input — predicate ignores it entirely', () => {
+    assert.equal(membership(), true);
+    assert.equal(membership({ source_id: 3 }), false);
+  });
+
+  it('excludes draft / thu', () => {
+    assert.equal(membership({ status: 'draft' }), false);
+    assert.equal(membership({ type: 'thu' }), false);
   });
 });

@@ -98,14 +98,14 @@ App **không** kết luận “ai bỏ tiền riêng” từ người physically
 
 - Chu kỳ **05/MM → 04/(MM+1)** và **`cycle_start_day = 5`** áp dụng **CHỈ** cho `budget_key = household_food` (Household Food Budget). **Không** migrate/refactor/reinterpret báo cáo chi tiêu chung quanh ngày 5.
 - Mọi báo cáo chi tiêu chung vẫn theo **tháng dương lịch** (01→cuối tháng): Home tổng tháng, Home Cá nhân Yue, Home Quỹ chung, Statistics, báo cáo danh mục / nguồn chi / chi cho ai.
-- Ngân sách ăn uống gia đình theo **kỳ quỹ 05/MM → 04/(MM+1)**: **7.500.000đ/kỳ**; phạm vi danh mục **Ăn uống** + **Trà & Cà phê** (all-in).
+- Ngân sách quỹ ăn Woori theo **kỳ quỹ 05/MM → 04/(MM+1)**: **limit 7.500.000đ/kỳ** + optional `carryover_amount`; phạm vi = chi từ nguồn **Woori · Quỹ ăn** (mọi danh mục).
 - Kai nhận lương ngày 5 → quỹ ăn nạp ngày 5 — dùng **chỉ** để định nghĩa kỳ budget food; **không** đổi kỳ báo cáo Home/Statistics.
 - Planned contribution: Kai **80%** (6.000.000đ), Yue **20%** (1.500.000đ) — display only, không ledger thực nạp.
-- Budget membership: `source.spending_group = household` + `category.budget_group = household_food` + **transaction date trong kỳ**; **`expense_audience` không quyết định**.
+- Budget membership: `t.source_id = budget_periods.envelope_source_id` + **transaction date trong kỳ**; **category và `expense_audience` không quyết định**. Rename nguồn không đổi membership.
 - Home card **Quỹ ăn kỳ** + Budget Detail; hiển thị theo **active budget period** (chứa ngày hiện tại / ngày được chọn), **không** theo tháng lịch Home.
 - **Household Food Budget ≠ Woori balance**; không track số dư tài khoản.
 - VCB Shop → `household` (one-time trusted migration).
-- Category `budget_group`; bảng **`budget_periods`**; backup `backupVersion = 4`.
+- Category `budget_group`; bảng **`budget_periods`** (`limit_amount`, `carryover_amount`, `envelope_source_id`); backup `backupVersion = 5`.
 - Kỳ P1.6 đầu tiên được cấu hình: **05/09/2026 → 04/10/2026**; **01–04/09** = transition days (không tiêu kỳ mới).
 - **Loại bỏ Streak**; budget monitoring only — không block Save khi vượt ngân sách.
 
@@ -224,15 +224,16 @@ Không overload Home. Giữ:
     Household Food Budget active period
     → 05/09 – 04/10
     ```
-  - Hiển thị: khoảng ngày kỳ, ngân sách, đã dùng, còn lại (hoặc vượt), progress, percentage, over-budget state.
+  - Hiển thị: khoảng ngày kỳ, ngân sách (`limit`), dư đầu kỳ (`carryover`), tổng khả dụng, đã dùng, còn lại (hoặc vượt), progress.
   - Ví dụ copy:
 
     ```text
     QUỸ ĂN
     05/09 – 04/10
 
-    Ngân sách
-    7.500.000đ
+    Ngân sách: 7.500.000đ
+    Dư đầu kỳ: +223.550đ
+    Tổng khả dụng: 7.723.550đ
 
     Đã dùng
     x.xxx.xxxđ
@@ -240,16 +241,16 @@ Không overload Home. Giữ:
     Còn lại
     x.xxx.xxxđ
 
-    Kai  6.000.000đ · 80%
+    Kai  6.000.000đ · 80%   ← trên limit 7.5m only
     Yue  1.500.000đ · 20%
     ```
 
-  - Planned contribution **informational only** — **không** hiển thị *Kai đã nạp* / *Yue đã nạp* (P1.6 không có contribution ledger).
+  - Planned contribution **informational only** trên `limit_amount` — **không** gồm carryover; **không** hiển thị *Kai đã nạp* / *Yue đã nạp*.
   - **Không** label kiểu *Woori còn …* — đây không phải số dư tài khoản.
   - Chạm card → Budget Detail (§7.6).
 - **Home Quỹ chung vs Household Food Budget:**
   - Home **Quỹ chung** = mọi chi từ `source.spending_group = household` trong **tháng dương lịch** đang xem (01→cuối tháng).
-  - **Household Food Budget** = Quỹ chung **và** `category.budget_group = household_food` (Ăn uống + Trà & Cà phê) **và** ngày giao dịch nằm trong **kỳ quỹ 05→04** active/relevant.
+  - **Household Food Budget (Quỹ ăn kỳ)** = chi từ nguồn envelope **Woori · Quỹ ăn** với ngày giao dịch nằm trong **kỳ quỹ 05→04** active/relevant — **không** lọc theo category / audience. Category chỉ dùng cho breakdown.
   - Ví dụ: Tiền mặt Kai + Mua sắm → Home Quỹ chung (tháng 10): Yes nếu trong 01–31/10; Household Food Budget (kỳ 05/09–04/10): No.
 - Lịch tháng:
   - Ô ngày hiển thị: emoji danh mục chính, thumbnail ảnh (nếu có), badge số giao dịch.
@@ -421,7 +422,7 @@ CRUD **Người trả / Người thanh toán không còn trên Settings.** Cột
   - Giữ nguyên `source_id` lịch sử; Thống kê / Tài khoản / backup vẫn report đúng tên.
   - Sửa giao dịch cũ: source archived hiện tại vẫn representable; không migrate VCB Shop → Woori.
   - Last-selected source nếu đã archived thì không preselect cho giao dịch mới.
-- `spending_group` là metadata của **Nguồn chi** (`personal_yue` | `household` | NULL) — dùng cho Home monitoring và Household Food Budget membership, **không** phải transaction scope / `expense_audience`.
+- `spending_group` là metadata của **Nguồn chi** (`personal_yue` | `household` | NULL) — dùng cho Home monitoring tabs; **Household Food Budget membership** dùng persisted Woori envelope source identity (**không** mọi nguồn `household`).
   - **Trusted classification (seed / one-time migration):**
 
     | Nguồn chi (exact name) | `spending_group` |
@@ -517,7 +518,9 @@ Restore:
   → v1–v3: ignore legacy streak; exact-name classify trusted household-food categories;
        preserve all transaction/source IDs; preserve source lifecycle;
        apply trusted source classification including VCB Shop → household (one-time policy on restore/migration)
-  → v4: preserve budget_group + budget_periods (period_start, period_end, limit_amount)
+  → v5: preserve budget_group + budget_periods (period_start, period_end, limit_amount, carryover_amount, envelope_source_id)
+  → v5 restore is authoritative — no migration seed may overwrite carryover/envelope_source_id
+  → v1–v4 restore may apply one-time first-period carryover + envelope_source_id seeds
   → Giữ nguyên source_id lịch sử
        KHÔNG merge Tiền mặt Yue + Tiền mặt Kai
        KHÔNG migrate VCB Shop → Woori
@@ -608,7 +611,7 @@ Trường hợp thứ ba **không** report thành “Kai bỏ tiền cá nhân�
 - Migration DB cũ (trước khi có cột audience): mặc định `unspecified` cho bản ghi sẵn có (không tự gán `couple`).
 - P1.5 **không** tự migrate `wife` → `wife_and_sister`.
 - Một transaction = đúng một `expense_audience`. Không chia tiền theo từng người. Không beneficiary allocation. Không split bill.
-- **`expense_audience` chỉ trả lời *Chi cho ai?*** — **không** quyết định transaction có tính vào Household Food Budget hay không. Budget membership do `source.spending_group` + `category.budget_group` quyết định.
+- **`expense_audience` chỉ trả lời *Chi cho ai?*** — **không** quyết định transaction có tính vào Household Food Budget hay không. Budget membership do persisted **Woori · Quỹ ăn** source identity + date in period quyết định.
 
 **Ví dụ quan trọng — Yue + Kai qua VPBank:**
 
@@ -650,7 +653,7 @@ Ba chiều tách nhau:
 
 - `expense_audience` = **Chi cho ai**
 - `source_id` = **Lấy tiền từ đâu**
-- `sources.spending_group` = phân loại Home monitoring **và** Household Food Budget membership trên Nguồn chi (`personal_yue` / `household` / chưa phân loại) — **không** phải field trên transaction, **không** phải `expense_scope`.
+- `sources.spending_group` = phân loại Home monitoring trên Nguồn chi (`personal_yue` / `household` / chưa phân loại) — **không** phải field trên transaction, **không** phải `expense_scope`. Household Food Budget membership = Woori envelope source.
 
 Home tabs Tất cả / Cá nhân Yue / Quỹ chung đọc `spending_group`. Thống kê vẫn lọc Chi cho ai bình thường.
 
@@ -683,7 +686,7 @@ Home tabs Tất cả / Cá nhân Yue / Quỹ chung đọc `spending_group`. Th�
 **Tiền mặt Kai**
 
 - Tiền mặt Kai; `spending_group = household`.
-- Chi household food từ Tiền mặt Kai **tính** Household Food Budget khi category thuộc `household_food`.
+- Chi từ Tiền mặt Kai **không** tính Household Food Budget (chỉ nguồn Woori envelope).
 - Không track cash balance hay provenance từng tờ tiền.
 
 **VCB Shop — household source**
@@ -717,14 +720,16 @@ Chi tiết schema SQL xem ở `README.md` → *Data Model (SQLite)*. README / Da
 
 ### 7.6 Household Food Budget (P1.6)
 
-> **Nguyên tắc sản phẩm:** **Nguồn chi** determines whether the money is personal or household. **Household Food Budget** là subset chi từ nguồn `household` thuộc danh mục `household_food`. `expense_audience` ghi ai hưởng — **không** đổi budget membership.
+> **Nguyên tắc sản phẩm:** **Household Food Budget** là envelope theo dõi chi từ nguồn **Woori · Quỹ ăn** trong kỳ payday 05→04. `limit_amount` = planned monthly contribution (7.500.000đ). `carryover_amount` = dư đầu kỳ (persisted). `expense_audience` và category **không** đổi budget membership — category chỉ phục vụ breakdown.
 
 #### 7.6.1 Mục tiêu
 
-Yue theo dõi mỗi **kỳ quỹ ăn** (payday-aligned) gia đình đã dùng bao nhiêu trong ngân sách và còn bao nhiêu.
+Yue theo dõi mỗi **kỳ quỹ ăn** (payday-aligned) gia đình đã dùng bao nhiêu trong ngân sách Woori và còn bao nhiêu.
 
-- Limit mỗi kỳ: **7.500.000đ**.
-- Budget scope categories: **Ăn uống** + **Trà & Cà phê** (all-in).
+- Limit mỗi kỳ (planned contribution): **7.500.000đ**.
+- Carry-over (kỳ 05/09–04/10): **223.550đ** → **Tổng khả dụng = 7.723.550đ**.
+- Budget scope: **mọi chi complete từ nguồn Woori · Quỹ ăn** trong kỳ (Ăn uống, Trà & Cà phê, Mua sắm, Di chuyển, …).
+- **Không** tính: Tiền mặt Kai, VCB Shop, VPBank, Tiền mặt Yue, …
 - **Household Food Budget Period** = chu kỳ **05/MM → 04/(MM+1)**, vì quỹ ăn gia đình nạp **ngày 5** (Kai nhận lương ngày 5).
 - **`cycle_start_day = 5`** — thuộc **duy nhất** `budget_key = household_food`. P1.6 **không** generic recurring-budget engine; **không** multiple budget types; **không** áp dụng cho báo cáo chi tiêu chung.
 
@@ -767,10 +772,10 @@ P1.6 **không** migrate, refactor, hay reinterpret general reporting quanh ngày
 
 #### 7.6.2 Planned contribution (display only)
 
-Total planned fund **mỗi kỳ**: **7.500.000đ**
+Total planned fund **mỗi kỳ**: **`limit_amount`** (mặc định **7.500.000đ**) — **không** gồm `carryover_amount`.
 
-| Thành viên | Tỷ lệ | Planned contribution |
-|------------|-------|----------------------|
+| Thành viên | Tỷ lệ | Planned contribution (trên 7.500.000đ) |
+|------------|-------|----------------------------------------|
 | Kai | 80% | 6.000.000đ |
 | Yue | 20% | 1.500.000đ |
 
@@ -778,15 +783,9 @@ Total planned fund **mỗi kỳ**: **7.500.000đ**
 
 #### 7.6.3 Category metadata — `budget_group`
 
-Không hardcode category names tại runtime trong implementation. Dùng metadata persisted:
+`budget_group` vẫn tồn tại cho báo cáo / metadata danh mục. **Không** dùng để quyết định Household Food Budget membership.
 
-```text
-budget_group:
-  household_food
-  NULL
-```
-
-Trusted initial mapping (one-time migration exact name):
+Trusted initial mapping (one-time migration exact name) giữ nguyên cho Home/reporting metadata:
 
 | Danh mục | `budget_group` |
 |----------|----------------|
@@ -794,7 +793,7 @@ Trusted initial mapping (one-time migration exact name):
 | Trà & Cà phê | `household_food` |
 | Tất cả danh mục khác | NULL |
 
-Sau migration, runtime đọc `categories.budget_group` — **không** category-name branching.
+Sau migration, runtime đọc `categories.budget_group` — **không** category-name branching. Breakdown Budget Detail group theo category thực tế của giao dịch Woori.
 
 #### 7.6.4 Budget membership rule
 
@@ -803,8 +802,7 @@ Một transaction tính vào **một Household Food Budget period** cụ thể k
 ```text
 type = chi
 AND status = complete
-AND category.budget_group = household_food
-AND source.spending_group = household
+AND t.source_id = budget_period.envelope_source_id
 AND period_start <= transaction_date <= period_end
 ```
 
@@ -814,20 +812,24 @@ Pseudo-spec:
 isBudgetTransaction =
   transaction.type === 'chi' &&
   transaction.status === 'complete' &&
-  category.budget_group === 'household_food' &&
-  source.spending_group === 'household' &&
+  transaction.source_id === period.envelope_source_id &&
   transaction.date is inside budget period;
 ```
 
-**DO NOT** dùng `expense_audience` cho budget membership. Rule sai (đã loại khỏi spec):
+**DO NOT** compare source names at runtime. `envelope_source_id` is resolved **once** from seed name `Woori · Quỹ ăn` during migration and persisted. Renaming the source must not change membership.
 
-```text
-source household OR audience contains Kai   ← SAI
-```
+**DO NOT** dùng `expense_audience` hay `category.budget_group` cho budget membership.
 
-Archived household source + food category + date in period → **included** (theo `spending_group` đã gắn).
+| Source | Counts? |
+|--------|--------:|
+| Woori · Quỹ ăn + bất kỳ category | **Yes** |
+| Tiền mặt Kai | No |
+| VCB Shop | No |
+| VPBank / Tiền mặt Yue | No |
 
-**Transition days 01–04/09/2026:** giao dịch household food vẫn là chi household semantically (Home / Statistics) nhưng **không** tiêu kỳ **05/09–04/10** — *before first configured budget period*. Không cần field đặc biệt trên transaction.
+Archived Woori source (same persisted name) + date in period → **included**.
+
+**Transition days 01–04/09/2026:** giao dịch Woori vẫn là chi thực tế (Home / Statistics) nhưng **không** tiêu kỳ **05/09–04/10** — *before first configured budget period*.
 
 #### 7.6.5 Acceptance matrix
 
@@ -837,18 +839,20 @@ Archived household source + food category + date in period → **included** (the
 | Kai · Woori · Ăn uống | Yes |
 | Yue + Kai + Meo · Woori · Ăn uống | Yes |
 | Yue · Woori · Ăn uống | Yes |
+| Woori · Trà & Cà phê | Yes |
+| Woori · Mua sắm | **Yes** |
+| Woori · Di chuyển | **Yes** |
 | Yue + Meo · VPBank · Ăn uống | No |
 | Yue · VPBank · Trà & Cà phê | No |
-| Yue + Kai · VPBank · Ăn uống | **No — Yue mời Kai** |
-| Yue + Kai · VCB Shop · Ăn uống | Yes |
-| Kai · Tiền mặt Kai · Ăn uống | Yes |
+| Yue + Kai · VPBank · Ăn uống | No |
+| Yue + Kai · VCB Shop · Ăn uống | **No** |
+| Kai · Tiền mặt Kai · Ăn uống | **No** |
 | Yue + Kai · VCB Shop · Mua sắm | No |
-| Woori · Di chuyển | No |
-| archived household source · Ăn uống | Yes historically |
+| archived Woori · any category | Yes historically |
 
 #### 7.6.6 Budget period model — `budget_periods`
 
-Persisted limit only — **không** persist calculated fields. **Không** dùng `month = '2026-09'` làm period key.
+Persisted limit + carryover — **không** persist calculated spent/remaining.
 
 ```text
 budget_periods
@@ -857,27 +861,36 @@ id
 budget_key
 period_start      -- e.g. 2026-09-05
 period_end        -- e.g. 2026-10-04
-limit_amount
+limit_amount      -- planned monthly contribution (e.g. 7500000)
+carryover_amount  -- dư đầu kỳ (default 0; first period seed 223550 once)
+envelope_source_id -- persisted Woori sources.id (membership)
 created_at
 updated_at
 ```
 
-P1.6 supported: `budget_key = household_food`.
-
-**First explicitly configured P1.6 period:**
+**Budget math:**
 
 ```text
-budget_key   = household_food
-period_start = 2026-09-05
-period_end   = 2026-10-04
-limit_amount = 7500000
+available = limit_amount + carryover_amount
+spent     = SUM(transactions where source_id = envelope_source_id in period)
+remaining = available - spent
 ```
 
-Enforce one `household_food` period per `period_start` / non-overlapping cycles (implementation design).
+**First explicitly configured period:**
 
-**Không** persist: `spent`, `remaining`, `percentage`, `over_amount` — derived từ transactions trong `[period_start, period_end]`.
+```text
+budget_key         = household_food
+period_start       = 2026-09-05
+period_end         = 2026-10-04
+limit_amount       = 7500000
+carryover_amount   = 223550
+envelope_source_id = <resolved Woori sources.id>
+available          = 7723550
+```
 
-**Không** fabricate historical periods for August or 05/08–04/09. Test data 16–31/08 informed the 7,5m limit choice — not a formal budget period.
+Future periods inherit `envelope_source_id` + latest `limit_amount`; **`carryover_amount = 0`** (never inherit 223550).
+
+**Không** đổi `limit_amount` thành 7.723.550 — planned contribution vẫn 7.500.000.
 
 #### 7.6.7 Budget ≠ account balance
 
@@ -888,50 +901,49 @@ Household Food Budget ≠ Woori bank balance
 **Operating flow (conceptual):**
 
 - **Ngày 5:** planned household food funding = **7,5m** (Kai 6m + Yue 1,5m planned share).
-- **Woori** là nguồn chi chính cho quỹ ăn.
-- **Tiền mặt Kai**, **VCB Shop** vẫn có thể trả qualifying household food — **cùng tiêu active kỳ 05→04**.
+- **Woori** là nguồn chi (envelope) cho quỹ ăn — membership theo source identity này.
+- **Tiền mặt Kai**, **VCB Shop** là Quỹ chung trên Home nhưng **không** tiêu Quỹ ăn kỳ.
 - P1.6 **không** track số dư Woori/VPBank/VCB/cash thực tế, top-up ledger, bank sync, salary/income ledger.
-
-Biết Kai nhận lương ngày 5 chỉ để **định nghĩa chu kỳ budget** — P1.6 **không** thành payroll tracker.
 
 #### 7.6.8 Period lifecycle
 
-- Budget **period records** = payday cycles `05/MM → 04/(MM+1)` — **không** dùng calendar month làm period key. (General expense reporting vẫn calendar-month — xem §7.6.1a.)
-- **Không** rollover unused amount. Ví dụ kỳ 05/09–04/10: limit 7,5m, spent 7,1m, unused 0,4m → kỳ 05/10–04/11 limit vẫn **7,5m** (NOT 7,9m), trừ khi Yue đổi limit kỳ mới.
-- **Ngày 05/MM:** nếu chưa có period mới, tạo kỳ tiếp theo inherit **latest previous configured limit** (ví dụ 7,5m).
-- **Chỉnh ngân sách kỳ này** (ví dụ đổi 05/10–04/11 → 8m) **chỉ** sửa period đó — **không** mutate 05/09–04/10.
-- Historical period limits **không** đổi retroactively.
-- Sau transition 01–04/09, các kỳ recurring liên tục: 05/09–04/10, 05/10–04/11, 05/11–04/12, …
+- Budget **period records** = payday cycles `05/MM → 04/(MM+1)`.
+- **`carryover_amount`** is an explicit persisted field (seeded once for 05/09–04/10). **Không** auto-roll unused remaining vào kỳ sau.
+- Ví dụ: kỳ 05/09–04/10 limit 7,5m + carryover 223.550; kỳ 05/10–04/11 inherit **limit** 7,5m với **carryover 0** trừ khi Yue set thủ công / seed khác.
+- **Ngày 05/MM:** nếu chưa có period mới, tạo kỳ tiếp theo inherit **latest previous configured limit** + **`envelope_source_id`**, với **`carryover_amount = 0`**.
+- **Chỉnh ngân sách kỳ này** chỉ sửa `limit_amount` của period đó — **không** mutate kỳ trước; **không** reset `carryover_amount` khi restart.
+- Historical period limits / carryover **không** đổi retroactively sau khi đã seed/edit.
 
 #### 7.6.9 Budget Detail
 
 Màn hình / bottom sheet khi chạm card Quỹ ăn kỳ. Resolve period chứa ngày relevant/selected. Tối thiểu:
 
-- Period range (`05/09 – 04/10`), limit, Spent, Remaining / Over, Progress
-- Breakdown **Ăn uống** / **Trà & Cà phê**
+- Period range (`05/09 – 04/10`)
+- **Ngân sách** (`limit_amount`), **Dư đầu kỳ** (`carryover_amount`), **Tổng khả dụng**, Đã dùng, Còn lại / Vượt, Progress
+- Breakdown theo danh mục (mọi category của giao dịch Woori trong kỳ)
 - Danh sách giao dịch matching rule **và** nằm trong period
 - Mỗi row: amount, category, description, date, **Chi cho ai**, **Nguồn chi**
-- Planned contribution Kai 80% / Yue 20% (informational; không *đã nạp*)
+- Planned contribution Kai 80% / Yue 20% trên **`limit_amount` only** (informational; không *đã nạp*)
 
-Statistics (§5.5) và mọi general reporting giữ **calendar-month** (và ngày / khoảng tùy chỉnh) — Budget Detail là **duy nhất** lens payday-cycle 05→04.
+Statistics (§5.5) và mọi general reporting giữ **calendar-month** — Budget Detail là **duy nhất** lens payday-cycle 05→04.
 
 #### 7.6.10 Over-budget behavior
 
-Budget là **monitoring**, không **enforcement**. Nếu `spent > limit` → hiển thị *Vượt xxx.xxxđ*.
+Budget là **monitoring**, không **enforcement**. Nếu `spent > available` → hiển thị *Vượt xxx.xxxđ*.
 
 **Không:** block transaction, block Save, block household sources, auto-switch source, require approval, prevent going out to eat.
 
 #### 7.6.11 Edit / delete recalculation
 
-Budget derived — mọi thay đổi qualifying transaction cập nhật spent:
+Budget derived — mọi thay đổi qualifying Woori transaction cập nhật spent:
 
 | Thay đổi | Budget effect |
 |----------|---------------|
-| create qualifying transaction | spent ↑ |
+| create qualifying Woori transaction | spent ↑ |
 | delete | spent ↓ |
 | edit amount | recalculate |
-| category in/out `household_food` | recalculate |
-| source household ↔ personal | recalculate |
+| change category (still Woori) | breakdown only; membership unchanged |
+| source Woori ↔ non-Woori | recalculate membership |
 | move date across **period boundaries** | subtract old period, add new period |
 | move date 04/10 → 05/10 | leaves 05/09–04/10; enters 05/10–04/11 |
 | **audience only** | **no change** |
@@ -961,7 +973,7 @@ Legacy DB: leave streak table/data inert; fresh install không tạo streak stor
 
 #### 7.6.14 Backup v4
 
-`backupVersion = 4` adds: `categories.budget_group`, **`budget_periods`** (`budget_key`, `period_start`, `period_end`, `limit_amount`). v4 không export product streak state.
+`backupVersion = 5` adds/preserves: `categories.budget_group`, **`budget_periods`** (`budget_key`, `period_start`, `period_end`, `limit_amount`, `carryover_amount`, `envelope_source_id`). v5 restore is authoritative for those fields. v4 remains readable; v1–v4 restore may run one-time first-period seeds.
 
 Restore **preserve period boundaries exactly** — không regenerate start/end từ calendar month. v1–v3: no budget periods; restore **không** fabricate historical limits; sau restore, P1.6 init có thể tạo first/current period theo normal rules. Legacy streak ignored/inert (xem §6.5).
 
@@ -993,8 +1005,11 @@ Restore **preserve period boundaries exactly** — không regenerate start/end t
 | Manual entry | AI lỗi không chặn lưu giao dịch |
 | Bảo mật key | Key client-side (`EXPO_PUBLIC_*`) — không phải secret thật; backend proxy **deferred** |
 | Receipt archive | **Deferred P1.7B** — P1.7A không đổi `transactions.image_uri` / persistence |
+| Image preprocess | Trước AI: copy TEMP vào cache ASCII-safe → resize width ~1024 → JPEG 0.7 → base64. Lỗi decode bitmap ≠ lỗi API key. **Không** archive persistent. |
 
 Implementation: `src/services/receiptAi/*`, hook `src/hooks/useGemini.ts`.
+
+> **Trạng thái runtime P1.7A:** code fix image preprocess đã có; **chưa** đánh dấu verified cho đến khi Expo Go scan thật pass.
 
 AI **chỉ** gợi ý:
 
@@ -1090,8 +1105,8 @@ Token màu cụ thể được định nghĩa tại `src/constants/theme.ts`.
 
 | Hạng mục | Ghi chú |
 |----------|---------|
-| Payday food budget limit | 7.500.000đ/kỳ (05→04); Ăn uống + Trà & Cà phê |
-| Budget membership | `household` source + `household_food` category + date in period |
+| Payday food budget limit | 7.500.000đ/kỳ (05→04) + carryover; Woori envelope (any category) |
+| Budget membership | Woori envelope source + date in period (any category; audience ignored) |
 | Planned contribution | Kai 80% / Yue 20% (display only) |
 | Home budget card + Detail | Active period by date; independent of Home tab + calendar month |
 | VCB Shop → household | One-time trusted migration |
@@ -1298,17 +1313,18 @@ Critical test cases (future implementation):
 
 | Case | Expected budget membership |
 |------|---------------------------|
-| Woori + food | included |
-| Cash Kai + food | included |
-| VCB Shop + food | included |
+| Woori + Ăn uống | included |
+| Woori + Trà & Cà phê | included |
+| Woori + Mua sắm | included |
+| Woori + Di chuyển | included |
+| Cash Kai + food | **excluded** |
+| VCB Shop + food | **excluded** |
 | VPBank + Yue + food | excluded |
 | VPBank + Yue+Meo + food | excluded |
-| VPBank + Yue+Kai + food | excluded (*Yue mời Kai*) |
-| Woori + Yue + food | included |
+| VPBank + Yue+Kai + food | excluded |
+| Woori + Yue + any category | included |
 | VCB Shop + Shopping | excluded |
-| household source + Coffee (Trà & Cà phê) | included |
-| personal source + Coffee | excluded |
-| archived household source + food | included historically |
+| archived Woori + any category | included historically |
 
 **Must explicitly test:** changing **only** `expense_audience` does **not** change budget membership.
 
@@ -1381,10 +1397,10 @@ Cập nhật 2026-08-16 · phiên bản **1.5.4** · **Home monitoring theo Ngu�
 Cập nhật 2026-09-01 · phiên bản **1.6.0** · **P1.6 Household Food Budget** (specified; ready for implementation).
 
 - **Payday cycle scope:** `cycle_start_day = 5` và 05→04 **chỉ** cho `budget_key = household_food`; general reporting (Home, Statistics, category/source/audience) **giữ tháng dương lịch**.
-- **Household Food Budget:** ngân sách **7.500.000đ/kỳ** cho **Ăn uống** + **Trà & Cà phê**; kỳ **payday-aligned 05/MM → 04/(MM+1)**; spent/remaining derived.
+- **Household Food Budget:** ngân sách **7.500.000đ/kỳ** (Woori envelope, mọi danh mục) + `carryover_amount`; kỳ **payday-aligned 05/MM → 04/(MM+1)**; available = limit + carryover; spent/remaining derived.
 - **First configured period:** 05/09/2026 → 04/10/2026; **01–04/09** transition days; không fake August periods.
 - **Planned contribution:** Kai 80% (6.000.000đ) / Yue 20% (1.500.000đ) — display only.
-- **Budget membership:** `household` source + `household_food` category + **date in period**; **`expense_audience` không quyết định**.
+- **Budget membership:** Woori envelope source + **date in period** (any category); **`expense_audience` không quyết định**.
 - **VCB Shop → `household`:** one-time migration; không phải Woori balance.
 - **`budget_periods`:** `period_start` / `period_end` / `limit_amount` — không calendar `monthly_budgets`.
 - **Home:** card Quỹ ăn kỳ (05/09 – 04/10); active period by date; **Statistics và Home monitoring giữ tháng dương lịch** (§7.6.1a).
