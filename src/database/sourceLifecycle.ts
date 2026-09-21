@@ -89,7 +89,7 @@ export function shouldEnsureInitialBudgetPeriodAfterRestore(backupVersion: strin
   return backupVersion === '1' || backupVersion === '2' || backupVersion === '3';
 }
 
-/** v1–v4: may apply one-time first-period carryover + envelope_source_id seeds. v5 is authoritative. */
+/** v1–v4: may apply one-time first-period carryover + envelope_source_id seeds. v5/v6 are authoritative. */
 export function shouldRunFirstPeriodBudgetSeedsAfterRestore(backupVersion: string): boolean {
   return (
     backupVersion === '1' ||

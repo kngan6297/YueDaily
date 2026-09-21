@@ -1,6 +1,6 @@
 // ============================================================
 // Household Food Budget — pure amount / status calculations
-// available = limit_amount + carryover_amount; contribution uses limit only
+// available = limit + carryover + adjustment; contribution uses limit only
 // ============================================================
 
 export type BudgetDisplayStatus = 'normal' | 'attention' | 'near_limit' | 'over';
@@ -8,6 +8,7 @@ export type BudgetDisplayStatus = 'normal' | 'attention' | 'near_limit' | 'over'
 export interface BudgetAmountSummary {
   limitAmount: number;
   carryoverAmount: number;
+  adjustmentAmount: number;
   availableAmount: number;
   spentAmount: number;
   remainingAmount: number;
@@ -17,26 +18,50 @@ export interface BudgetAmountSummary {
   status: BudgetDisplayStatus;
 }
 
+function safeNonNegativeInt(value: number): number {
+  return Number.isInteger(value) && value >= 0 ? value : 0;
+}
+
+/** Signed integer adjustment (interest / correction). Invalid → 0. */
+function safeAdjustmentInt(value: number): number {
+  return Number.isInteger(value) ? value : 0;
+}
+
 export function computeAvailableAmount(
   limitAmount: number,
   carryoverAmount = 0,
+  adjustmentAmount = 0,
 ): number {
-  const safeLimit = Number.isInteger(limitAmount) && limitAmount >= 0 ? limitAmount : 0;
-  const safeCarry =
-    Number.isInteger(carryoverAmount) && carryoverAmount >= 0 ? carryoverAmount : 0;
-  return safeLimit + safeCarry;
+  return (
+    safeNonNegativeInt(limitAmount) +
+    safeNonNegativeInt(carryoverAmount) +
+    safeAdjustmentInt(adjustmentAmount)
+  );
+}
+
+/** Accumulate a signed delta onto the current adjustment (pure). */
+export function accumulateAdjustmentAmount(
+  currentAdjustment: number,
+  delta: number,
+): number {
+  const current = safeAdjustmentInt(currentAdjustment);
+  if (!Number.isInteger(delta)) {
+    throw new Error('adjustment delta must be an integer');
+  }
+  return current + delta;
 }
 
 export function computeBudgetAmountSummary(
   limitAmount: number,
   spentAmount: number,
   carryoverAmount = 0,
+  adjustmentAmount = 0,
 ): BudgetAmountSummary {
-  const safeLimit = Number.isInteger(limitAmount) && limitAmount >= 0 ? limitAmount : 0;
-  const safeCarry =
-    Number.isInteger(carryoverAmount) && carryoverAmount >= 0 ? carryoverAmount : 0;
-  const availableAmount = safeLimit + safeCarry;
-  const safeSpent = Number.isInteger(spentAmount) && spentAmount >= 0 ? spentAmount : 0;
+  const safeLimit = safeNonNegativeInt(limitAmount);
+  const safeCarry = safeNonNegativeInt(carryoverAmount);
+  const safeAdjust = safeAdjustmentInt(adjustmentAmount);
+  const availableAmount = safeLimit + safeCarry + safeAdjust;
+  const safeSpent = safeNonNegativeInt(spentAmount);
   const delta = availableAmount - safeSpent;
 
   const remainingAmount = delta >= 0 ? delta : 0;
@@ -57,6 +82,7 @@ export function computeBudgetAmountSummary(
   return {
     limitAmount: safeLimit,
     carryoverAmount: safeCarry,
+    adjustmentAmount: safeAdjust,
     availableAmount,
     spentAmount: safeSpent,
     remainingAmount,

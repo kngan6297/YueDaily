@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   computeBudgetAmountSummary,
   computeAvailableAmount,
+  accumulateAdjustmentAmount,
   budgetDisplayStatus,
   budgetProgressBarFill,
   formatBudgetProgressLabel,
@@ -13,13 +14,40 @@ import {
 } from '../constants/budget.ts';
 
 describe('Household Food Budget calculations', () => {
-  it('available = limit + carryover', () => {
-    assert.equal(computeAvailableAmount(7_500_000, 223_550), 7_723_550);
-    const s = computeBudgetAmountSummary(7_500_000, 0, 223_550);
-    assert.equal(s.availableAmount, 7_723_550);
-    assert.equal(s.remainingAmount, 7_723_550);
+  it('available = limit + carryover + adjustment', () => {
+    assert.equal(computeAvailableAmount(7_500_000, 223_550, 0), 7_723_550);
+    assert.equal(computeAvailableAmount(7_500_000, 223_550, 138), 7_723_688);
+    const s = computeBudgetAmountSummary(7_500_000, 0, 223_550, 138);
+    assert.equal(s.availableAmount, 7_723_688);
+    assert.equal(s.remainingAmount, 7_723_688);
     assert.equal(s.limitAmount, 7_500_000);
     assert.equal(s.carryoverAmount, 223_550);
+    assert.equal(s.adjustmentAmount, 138);
+  });
+
+  it('positive adjustment increases available', () => {
+    const s = computeBudgetAmountSummary(7_500_000, 100_000, 223_550, 138);
+    assert.equal(s.availableAmount, 7_723_688);
+    assert.equal(s.remainingAmount, 7_623_688);
+  });
+
+  it('negative adjustment decreases available', () => {
+    const s = computeBudgetAmountSummary(7_500_000, 0, 223_550, -500);
+    assert.equal(s.availableAmount, 7_723_050);
+    assert.equal(s.remainingAmount, 7_723_050);
+  });
+
+  it('multiple adjustments accumulate', () => {
+    assert.equal(accumulateAdjustmentAmount(0, 138), 138);
+    assert.equal(accumulateAdjustmentAmount(138, 50), 188);
+    assert.equal(accumulateAdjustmentAmount(188, -500), -312);
+  });
+
+  it('reset adjustment to 0 leaves carryover intact', () => {
+    const s = computeBudgetAmountSummary(7_500_000, 0, 223_550, 0);
+    assert.equal(s.adjustmentAmount, 0);
+    assert.equal(s.carryoverAmount, 223_550);
+    assert.equal(s.availableAmount, 7_723_550);
   });
 
   it('current first period constants: 7.5m + 223_550', () => {
@@ -73,7 +101,7 @@ describe('Household Food Budget calculations', () => {
     assert.equal(budgetProgressBarFill(s.progressRatio), 1);
   });
 
-  it('planned contribution uses limit only — ignores carryover', () => {
+  it('planned contribution uses limit only — ignores carryover and adjustment', () => {
     assert.deepEqual(plannedContributionAmounts(7_500_000), {
       kai: 6_000_000,
       yue: 1_500_000,
@@ -82,10 +110,14 @@ describe('Household Food Budget calculations', () => {
       plannedContributionAmounts(FIRST_HOUSEHOLD_FOOD_PERIOD.limit_amount),
       { kai: 6_000_000, yue: 1_500_000 },
     );
-    // Carryover must not inflate contribution base
+    // Carryover / adjustment must not inflate contribution base
     assert.notEqual(
       plannedContributionAmounts(7_500_000).kai + plannedContributionAmounts(7_500_000).yue,
       7_723_550,
+    );
+    assert.notEqual(
+      plannedContributionAmounts(7_500_000).kai + plannedContributionAmounts(7_500_000).yue,
+      7_723_688,
     );
   });
 

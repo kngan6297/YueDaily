@@ -137,7 +137,11 @@ export async function applyValidatedBackupRestore(
     await db.execAsync('DELETE FROM payers;');
     await db.execAsync('DELETE FROM budget_periods;');
 
-    if (backup.backupVersion !== '4' && backup.backupVersion !== '5') {
+    if (
+      backup.backupVersion !== '4' &&
+      backup.backupVersion !== '5' &&
+      backup.backupVersion !== '6'
+    ) {
       await restoreLegacyStreak(db, backup.streak);
     }
 
@@ -173,8 +177,8 @@ export async function applyValidatedBackupRestore(
       await db.runAsync(
         `INSERT INTO budget_periods
            (id, budget_key, period_start, period_end, limit_amount, carryover_amount,
-            envelope_source_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+            adjustment_amount, envelope_source_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
         [
           period.id,
           period.budget_key,
@@ -182,6 +186,7 @@ export async function applyValidatedBackupRestore(
           period.period_end,
           period.limit_amount,
           period.carryover_amount,
+          period.adjustment_amount,
           period.envelope_source_id,
           period.created_at,
           period.updated_at,
@@ -224,8 +229,8 @@ export async function applyValidatedBackupRestore(
     if (shouldRunFirstPeriodBudgetSeedsAfterRestore(backup.backupVersion)) {
       // v1–v4: may apply one-time carryover + envelope_source_id for 2026-09-05
       await runFirstPeriodBudgetSeedsIfNeeded(db);
-    } else if (backup.backupVersion === '5') {
-      // v5 authoritative — never let startup seeds overwrite restored values
+    } else if (backup.backupVersion === '5' || backup.backupVersion === '6') {
+      // v5/v6 authoritative — never let startup seeds overwrite restored values
       await markFirstPeriodBudgetSeedsComplete(db);
     }
   });

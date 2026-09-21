@@ -24,7 +24,7 @@ import { HOUSEHOLD_FOOD_ENVELOPE_SOURCE_NAME } from './sourceSeed';
 import type { BudgetKey, BudgetPeriod } from '../types';
 
 const BUDGET_PERIOD_COLUMNS =
-  'id, budget_key, period_start, period_end, limit_amount, carryover_amount, envelope_source_id, created_at, updated_at';
+  'id, budget_key, period_start, period_end, limit_amount, carryover_amount, adjustment_amount, envelope_source_id, created_at, updated_at';
 
 /** One-time seed markers — never re-apply after first successful run */
 export const FIRST_PERIOD_CARRYOVER_SEED_MARKER =
@@ -49,6 +49,7 @@ function mapBudgetPeriodRow(row: BudgetPeriod): BudgetPeriod {
     period_end: row.period_end,
     limit_amount: row.limit_amount,
     carryover_amount: row.carryover_amount ?? 0,
+    adjustment_amount: row.adjustment_amount ?? 0,
     envelope_source_id: row.envelope_source_id ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -168,6 +169,7 @@ export async function createBudgetPeriod(
     period_end: string;
     limit_amount: number;
     carryover_amount?: number;
+    adjustment_amount?: number;
     envelope_source_id?: number | null;
   },
   db?: SQLite.SQLiteDatabase,
@@ -178,6 +180,10 @@ export async function createBudgetPeriod(
   const carryover_amount = input.carryover_amount ?? 0;
   if (!Number.isInteger(carryover_amount) || carryover_amount < 0) {
     throw new Error('carryover_amount must be a non-negative integer');
+  }
+  const adjustment_amount = input.adjustment_amount ?? 0;
+  if (!Number.isInteger(adjustment_amount)) {
+    throw new Error('adjustment_amount must be an integer');
   }
   const envelope_source_id =
     input.envelope_source_id === undefined ? null : input.envelope_source_id;
@@ -204,14 +210,16 @@ export async function createBudgetPeriod(
 
   const result = await database.runAsync(
     `INSERT INTO budget_periods
-       (budget_key, period_start, period_end, limit_amount, carryover_amount, envelope_source_id)
-     VALUES (?, ?, ?, ?, ?, ?);`,
+       (budget_key, period_start, period_end, limit_amount, carryover_amount,
+        adjustment_amount, envelope_source_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?);`,
     [
       input.budget_key,
       input.period_start,
       input.period_end,
       input.limit_amount,
       carryover_amount,
+      adjustment_amount,
       envelope_source_id,
     ],
   );
@@ -232,6 +240,24 @@ export async function updateBudgetPeriodLimit(
      SET limit_amount = ?, updated_at = datetime('now', 'localtime')
      WHERE id = ?;`,
     [limitAmount, id],
+  );
+}
+
+/** Set absolute adjustment_amount (signed integer). */
+export async function setBudgetPeriodAdjustmentAmount(
+  id: number,
+  adjustmentAmount: number,
+  db?: SQLite.SQLiteDatabase,
+): Promise<void> {
+  if (!Number.isInteger(adjustmentAmount)) {
+    throw new Error('adjustment_amount must be an integer');
+  }
+  const database = db ?? (await getDatabase());
+  await database.runAsync(
+    `UPDATE budget_periods
+     SET adjustment_amount = ?, updated_at = datetime('now', 'localtime')
+     WHERE id = ?;`,
+    [adjustmentAmount, id],
   );
 }
 
@@ -437,6 +463,7 @@ export async function ensureHouseholdFoodPeriodForStart(
       period_end,
       limit_amount: defaults.limit_amount,
       carryover_amount: defaults.carryover_amount,
+      adjustment_amount: 0,
       envelope_source_id: defaults.envelope_source_id,
     },
     database,

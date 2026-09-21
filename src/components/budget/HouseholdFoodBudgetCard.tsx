@@ -79,10 +79,18 @@ export function HouseholdFoodBudgetCard({ data, loading, onPress }: HouseholdFoo
           Dư đầu kỳ: +{fmtVnd(period.carryover_amount)}đ
         </Text>
       ) : null}
-      {amounts || period.carryover_amount > 0 ? (
+      {period.adjustment_amount !== 0 ? (
+        <Text style={styles.adjustmentLine}>
+          Điều chỉnh:{' '}
+          {period.adjustment_amount > 0 ? '+' : '−'}
+          {fmtVnd(Math.abs(period.adjustment_amount))}đ
+        </Text>
+      ) : null}
+      {amounts || period.carryover_amount > 0 || period.adjustment_amount !== 0 ? (
         <Text style={styles.availableLine}>
           Tổng khả dụng: {fmtVnd(
-            amounts?.availableAmount ?? period.limit_amount + period.carryover_amount,
+            amounts?.availableAmount ??
+              period.limit_amount + period.carryover_amount + period.adjustment_amount,
           )}đ
         </Text>
       ) : null}
@@ -206,6 +214,11 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
       color: colors.neutral[800],
     },
     carryoverLine: {
+      fontSize: Typography.fontSize.sm,
+      fontWeight: '700',
+      color: colors.neutral[600],
+    },
+    adjustmentLine: {
       fontSize: Typography.fontSize.sm,
       fontWeight: '700',
       color: colors.neutral[600],

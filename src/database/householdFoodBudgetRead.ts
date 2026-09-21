@@ -21,8 +21,10 @@ import {
   getBudgetPeriodById,
   getBudgetPeriodByStart,
   getLatestConfiguredBudgetPeriod,
+  setBudgetPeriodAdjustmentAmount,
   updateBudgetPeriodLimit,
 } from './budgetPeriods';
+import { accumulateAdjustmentAmount } from './householdFoodBudgetCalculations';
 import { getDatabase } from './initDb';
 import type { BudgetPeriod } from '../types';
 import { EXPENSE_AUDIENCE_LABELS, type ExpenseAudience } from '../types';
@@ -96,6 +98,7 @@ export async function getHouseholdFoodBudgetSummaryForPeriod(
       period.limit_amount,
       spentAmount,
       period.carryover_amount,
+      period.adjustment_amount,
     ),
   };
 }
@@ -251,6 +254,7 @@ export async function loadHouseholdFoodBudgetHomeCard(
       activePeriod.limit_amount,
       spentAmount,
       activePeriod.carryover_amount,
+      activePeriod.adjustment_amount,
     );
     return {
       referenceDate,
@@ -293,5 +297,30 @@ export async function updateHouseholdFoodBudgetPeriodLimit(
   const existing = await getBudgetPeriodById(periodId);
   if (!existing) return null;
   await updateBudgetPeriodLimit(periodId, limitAmount);
+  return getBudgetPeriodById(periodId);
+}
+
+/** Add a signed delta to the period's adjustment_amount (does not replace). */
+export async function addHouseholdFoodBudgetPeriodAdjustment(
+  periodId: number,
+  delta: number,
+): Promise<BudgetPeriod | null> {
+  if (!Number.isInteger(delta) || delta === 0) {
+    throw new Error('adjustment delta must be a non-zero integer');
+  }
+  const existing = await getBudgetPeriodById(periodId);
+  if (!existing) return null;
+  const next = accumulateAdjustmentAmount(existing.adjustment_amount, delta);
+  await setBudgetPeriodAdjustmentAmount(periodId, next);
+  return getBudgetPeriodById(periodId);
+}
+
+/** Reset adjustment_amount to 0. */
+export async function resetHouseholdFoodBudgetPeriodAdjustment(
+  periodId: number,
+): Promise<BudgetPeriod | null> {
+  const existing = await getBudgetPeriodById(periodId);
+  if (!existing) return null;
+  await setBudgetPeriodAdjustmentAmount(periodId, 0);
   return getBudgetPeriodById(periodId);
 }

@@ -173,6 +173,7 @@ async function migrateBudgetPeriodsSchema(database: SQLite.SQLiteDatabase): Prom
       period_end         TEXT    NOT NULL,
       limit_amount       INTEGER NOT NULL,
       carryover_amount   INTEGER NOT NULL DEFAULT 0,
+      adjustment_amount  INTEGER NOT NULL DEFAULT 0,
       envelope_source_id INTEGER,
       created_at         TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
       updated_at         TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
@@ -186,6 +187,11 @@ async function migrateBudgetPeriodsSchema(database: SQLite.SQLiteDatabase): Prom
   if (!cols.some((c) => c.name === 'carryover_amount')) {
     await database.execAsync(
       `ALTER TABLE budget_periods ADD COLUMN carryover_amount INTEGER NOT NULL DEFAULT 0;`,
+    );
+  }
+  if (!cols.some((c) => c.name === 'adjustment_amount')) {
+    await database.execAsync(
+      `ALTER TABLE budget_periods ADD COLUMN adjustment_amount INTEGER NOT NULL DEFAULT 0;`,
     );
   }
   if (!cols.some((c) => c.name === 'envelope_source_id')) {

@@ -23,11 +23,19 @@ import {
   formatBudgetProgressLabel,
 } from '../../database/householdFoodBudgetCalculations';
 import {
+  addHouseholdFoodBudgetPeriodAdjustment,
   loadHouseholdFoodBudgetDetail,
+  resetHouseholdFoodBudgetPeriodAdjustment,
   updateHouseholdFoodBudgetPeriodLimit,
   type HouseholdFoodBudgetDetailData,
 } from '../../database/householdFoodBudgetRead';
 import { fmtVnd, formatPeriodRangeShort } from '../../database/householdFoodBudgetUi';
+
+function formatSignedVnd(amount: number): string {
+  if (amount > 0) return `+${fmtVnd(amount)}đ`;
+  if (amount < 0) return `-${fmtVnd(Math.abs(amount))}đ`;
+  return `${fmtVnd(0)}đ`;
+}
 
 interface HouseholdFoodBudgetDetailSheetProps {
   visible: boolean;
@@ -58,6 +66,9 @@ export function HouseholdFoodBudgetDetailSheet({
   const [detail, setDetail] = useState<HouseholdFoodBudgetDetailData | null>(null);
   const [showEdit, setShowEdit] = useState(false);
   const [editAmount, setEditAmount] = useState('');
+  const [showAdjust, setShowAdjust] = useState(false);
+  const [adjustDigits, setAdjustDigits] = useState('');
+  const [adjustSign, setAdjustSign] = useState<1 | -1>(1);
   const [saving, setSaving] = useState(false);
 
   const loadDetail = useCallback(async () => {
@@ -86,6 +97,9 @@ export function HouseholdFoodBudgetDetailSheet({
     }
     if (!visible) {
       setShowEdit(false);
+      setShowAdjust(false);
+      setAdjustDigits('');
+      setAdjustSign(1);
     }
   }, [visible, periodId, loadDetail]);
 
@@ -115,6 +129,57 @@ export function HouseholdFoodBudgetDetailSheet({
     }
   };
 
+  const handleSaveAdjustment = async () => {
+    if (!periodId) return;
+    const digits = adjustDigits.replace(/\D/g, '');
+    const magnitude = parseInt(digits, 10);
+    if (!Number.isInteger(magnitude) || magnitude <= 0) {
+      Alert.alert('Không hợp lệ', 'Nhập số tiền điều chỉnh (ví dụ 138). Dùng + / − để chọn dấu.');
+      return;
+    }
+    const delta = adjustSign * magnitude;
+    setSaving(true);
+    try {
+      await addHouseholdFoodBudgetPeriodAdjustment(periodId, delta);
+      setShowAdjust(false);
+      setAdjustDigits('');
+      setAdjustSign(1);
+      await loadDetail();
+      onUpdated?.();
+    } catch {
+      Alert.alert('Lỗi', 'Không thể lưu điều chỉnh. Hãy thử lại.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleResetAdjustment = () => {
+    if (!periodId || !detail) return;
+    Alert.alert(
+      'Đặt lại điều chỉnh?',
+      'Điều chỉnh quỹ sẽ về 0đ. Dư đầu kỳ và ngân sách không đổi.',
+      [
+        { text: 'Huỷ', style: 'cancel' },
+        {
+          text: 'Đặt lại',
+          style: 'destructive',
+          onPress: async () => {
+            setSaving(true);
+            try {
+              await resetHouseholdFoodBudgetPeriodAdjustment(periodId);
+              await loadDetail();
+              onUpdated?.();
+            } catch {
+              Alert.alert('Lỗi', 'Không thể đặt lại điều chỉnh.');
+            } finally {
+              setSaving(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const amounts = detail?.amounts;
   const progressFill = amounts ? budgetProgressBarFill(amounts.progressRatio) : 0;
   const statusColor =
@@ -128,7 +193,11 @@ export function HouseholdFoodBudgetDetailSheet({
 
   return (
     <>
-      <BottomSheetModal visible={visible && !showEdit} onClose={onClose} sheetStyle={sheetStyle}>
+      <BottomSheetModal
+        visible={visible && !showEdit && !showAdjust}
+        onClose={onClose}
+        sheetStyle={sheetStyle}
+      >
         <View
           onLayout={(e) => {
             headerH.current = e.nativeEvent.layout.height;
@@ -164,9 +233,27 @@ export function HouseholdFoodBudgetDetailSheet({
                 </Text>
               </View>
               <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Điều chỉnh</Text>
+                <Text
+                  style={[
+                    styles.summaryValue,
+                    detail.period.adjustment_amount !== 0
+                      ? styles.adjustmentText
+                      : undefined,
+                  ]}
+                >
+                  {formatSignedVnd(detail.period.adjustment_amount)}
+                </Text>
+              </View>
+              <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Tổng khả dụng</Text>
                 <Text style={styles.summaryValue}>
-                  {fmtVnd(amounts?.availableAmount ?? detail.period.limit_amount)}đ
+                  {fmtVnd(
+                    amounts?.availableAmount ??
+                      detail.period.limit_amount +
+                        detail.period.carryover_amount +
+                        detail.period.adjustment_amount,
+                  )}đ
                 </Text>
               </View>
               <View style={styles.summaryRow}>
@@ -272,10 +359,84 @@ export function HouseholdFoodBudgetDetailSheet({
           <TouchableOpacity
             style={[styles.editBtn, !detail && styles.editBtnDisabled]}
             disabled={!detail}
+            onPress={() => {
+              setAdjustDigits('');
+              setAdjustSign(1);
+              setShowAdjust(true);
+            }}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.editBtnText}>Điều chỉnh quỹ</Text>
+          </TouchableOpacity>
+          {detail && detail.period.adjustment_amount !== 0 ? (
+            <TouchableOpacity
+              style={[styles.resetAdjustBtn, saving && styles.editBtnDisabled]}
+              disabled={saving}
+              onPress={handleResetAdjustment}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.resetAdjustBtnText}>Đặt lại điều chỉnh</Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity
+            style={[styles.editBtnSecondary, !detail && styles.editBtnDisabled]}
+            disabled={!detail}
             onPress={() => setShowEdit(true)}
             activeOpacity={0.85}
           >
-            <Text style={styles.editBtnText}>Chỉnh ngân sách kỳ này</Text>
+            <Text style={styles.editBtnSecondaryText}>Chỉnh ngân sách kỳ này</Text>
+          </TouchableOpacity>
+        </View>
+      </BottomSheetModal>
+
+      <BottomSheetModal
+        visible={showAdjust}
+        onClose={() => setShowAdjust(false)}
+        keyboardAvoiding
+        sheetStyle={sheetStyle}
+      >
+        <View style={styles.handle} />
+        <Text style={styles.title}>Điều chỉnh quỹ</Text>
+        <Text style={styles.adjustHint}>
+          Cộng dồn vào điều chỉnh hiện tại ({formatSignedVnd(detail?.period.adjustment_amount ?? 0)}).
+          Ví dụ: lãi +138, sửa −500.
+        </Text>
+        <View style={styles.signRow}>
+          <TouchableOpacity
+            style={[styles.signBtn, adjustSign === 1 && styles.signBtnActivePlus]}
+            onPress={() => setAdjustSign(1)}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.signBtnText, adjustSign === 1 && styles.signBtnTextActive]}>+</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.signBtn, adjustSign === -1 && styles.signBtnActiveMinus]}
+            onPress={() => setAdjustSign(-1)}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.signBtnText, adjustSign === -1 && styles.signBtnTextActive]}>−</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.editPreview}>
+          {adjustSign < 0 ? '−' : '+'}
+          {formatAmount(adjustDigits) || '0'}đ
+        </Text>
+        <AmountKeyboard value={adjustDigits} onChange={setAdjustDigits} />
+        <View style={{ paddingBottom: Math.max(Spacing.sm, sheetBottomInset) }}>
+          <TouchableOpacity
+            style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
+            onPress={handleSaveAdjustment}
+            disabled={saving}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.saveBtnText}>{saving ? 'Đang lưu...' : 'Lưu'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.cancelBtn}
+            onPress={() => setShowAdjust(false)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.cancelBtnText}>Huỷ</Text>
           </TouchableOpacity>
         </View>
       </BottomSheetModal>
@@ -373,8 +534,75 @@ function createStyles(colors: ThemeColors) {
     },
     spentText: { color: colors.pink[500] },
     carryoverText: { color: colors.info },
+    adjustmentText: { color: colors.info },
     remainingText: { color: colors.success },
     overText: { color: colors.danger },
+    adjustHint: {
+      fontSize: Typography.fontSize.sm,
+      color: colors.neutral[500],
+      fontWeight: '600',
+      paddingHorizontal: Spacing.base,
+      marginBottom: Spacing.sm,
+      lineHeight: 20,
+    },
+    signRow: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: Spacing.sm,
+      paddingHorizontal: Spacing.base,
+      marginBottom: Spacing.xs,
+    },
+    signBtn: {
+      width: 56,
+      height: 44,
+      borderRadius: BorderRadius.lg,
+      borderWidth: 1.5,
+      borderColor: colors.neutral[200],
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.neutral[50],
+    },
+    signBtnActivePlus: {
+      borderColor: colors.success,
+      backgroundColor: colors.success + '18',
+    },
+    signBtnActiveMinus: {
+      borderColor: colors.danger,
+      backgroundColor: colors.danger + '18',
+    },
+    signBtnText: {
+      fontSize: Typography.fontSize.xl,
+      fontWeight: '800',
+      color: colors.neutral[500],
+    },
+    signBtnTextActive: {
+      color: colors.neutral[800],
+    },
+    editBtnSecondary: {
+      marginTop: Spacing.sm,
+      borderRadius: BorderRadius.xl,
+      paddingVertical: Spacing.md,
+      alignItems: 'center',
+      borderWidth: 1.5,
+      borderColor: colors.neutral[200],
+      backgroundColor: colors.neutral[50],
+    },
+    editBtnSecondaryText: {
+      color: colors.neutral[700],
+      fontWeight: '800',
+      fontSize: Typography.fontSize.base,
+    },
+    resetAdjustBtn: {
+      marginTop: Spacing.sm,
+      borderRadius: BorderRadius.xl,
+      paddingVertical: Spacing.md,
+      alignItems: 'center',
+    },
+    resetAdjustBtnText: {
+      color: colors.danger,
+      fontWeight: '700',
+      fontSize: Typography.fontSize.sm,
+    },
     progressTrack: {
       height: 8,
       borderRadius: BorderRadius.full,

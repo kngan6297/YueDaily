@@ -135,6 +135,11 @@ export interface BudgetPeriod {
   /** Opening surplus carried into the period; default 0 */
   carryover_amount: number;
   /**
+   * Manual corrections (interest / cashback / fixes). Signed integer; default 0.
+   * Does not change carryover_amount or planned contribution.
+   */
+  adjustment_amount: number;
+  /**
    * Persisted Woori envelope source id for membership.
    * Resolved once from seed name at migration; never compared by name at runtime.
    */

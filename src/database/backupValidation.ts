@@ -15,8 +15,8 @@ import {
 } from '../types';
 import { normalizeSourceIsActive } from './sourceLifecycle';
 
-export type BackupVersion = '1' | '2' | '3' | '4' | '5';
-export const CURRENT_BACKUP_VERSION: BackupVersion = '5';
+export type BackupVersion = '1' | '2' | '3' | '4' | '5' | '6';
+export const CURRENT_BACKUP_VERSION: BackupVersion = '6';
 
 interface ValidCategory {
   id: number;
@@ -34,6 +34,7 @@ interface ValidBudgetPeriod {
   period_end: string;
   limit_amount: number;
   carryover_amount: number;
+  adjustment_amount: number;
   envelope_source_id: number | null;
   created_at: string;
   updated_at: string;
@@ -140,7 +141,7 @@ function validateCategory(row: unknown, index: number, backupVersion: BackupVers
   if (!CAT_TYPES.has(type)) fail(`${p}.type`);
 
   let budget_group: BudgetGroup | null = null;
-  if (backupVersion === '4' || backupVersion === '5') {
+  if (backupVersion === '4' || backupVersion === '5' || backupVersion === '6') {
     if (!('budget_group' in row)) fail(`${p}.budget_group`);
     if (row.budget_group !== null && row.budget_group !== undefined) {
       budget_group = normalizeBudgetGroup(row.budget_group);
@@ -181,7 +182,7 @@ function validateBudgetPeriod(
   if (!Number.isInteger(limit_amount) || limit_amount < 0) fail(`${p}.limit_amount`);
 
   let carryover_amount = 0;
-  if (backupVersion === '5') {
+  if (backupVersion === '5' || backupVersion === '6') {
     if (!('carryover_amount' in row)) fail(`${p}.carryover_amount`);
     carryover_amount = assertFiniteNumber(row.carryover_amount, `${p}.carryover_amount`);
     if (!Number.isInteger(carryover_amount) || carryover_amount < 0) {
@@ -194,8 +195,16 @@ function validateBudgetPeriod(
     }
   }
 
+  let adjustment_amount = 0;
+  if (backupVersion === '6') {
+    if (!('adjustment_amount' in row)) fail(`${p}.adjustment_amount`);
+    adjustment_amount = assertFiniteNumber(row.adjustment_amount, `${p}.adjustment_amount`);
+    if (!Number.isInteger(adjustment_amount)) fail(`${p}.adjustment_amount`);
+  }
+  // v1–v5: always default adjustment_amount to 0 (ignore any stray field)
+
   let envelope_source_id: number | null = null;
-  if (backupVersion === '5') {
+  if (backupVersion === '5' || backupVersion === '6') {
     if (!('envelope_source_id' in row)) fail(`${p}.envelope_source_id`);
     if (row.envelope_source_id !== null && row.envelope_source_id !== undefined) {
       envelope_source_id = assertFiniteNumber(row.envelope_source_id, `${p}.envelope_source_id`);
@@ -232,6 +241,7 @@ function validateBudgetPeriod(
     period_end,
     limit_amount,
     carryover_amount,
+    adjustment_amount,
     envelope_source_id,
     created_at,
     updated_at,
@@ -326,7 +336,8 @@ export function validateBackupPayload(raw: unknown): ValidatedBackup {
     raw.backupVersion !== '2' &&
     raw.backupVersion !== '3' &&
     raw.backupVersion !== '4' &&
-    raw.backupVersion !== '5'
+    raw.backupVersion !== '5' &&
+    raw.backupVersion !== '6'
   ) {
     fail('backupVersion');
   }
@@ -340,7 +351,7 @@ export function validateBackupPayload(raw: unknown): ValidatedBackup {
     fail('payers');
   }
 
-  if (backupVersion === '4' || backupVersion === '5') {
+  if (backupVersion === '4' || backupVersion === '5' || backupVersion === '6') {
     if (!Array.isArray(raw.budget_periods)) fail('budget_periods');
   } else if (raw.budget_periods !== undefined && raw.budget_periods !== null && !Array.isArray(raw.budget_periods)) {
     fail('budget_periods');
@@ -355,7 +366,7 @@ export function validateBackupPayload(raw: unknown): ValidatedBackup {
   assertUniqueIds(transactions.map((t) => t.id), 'transactions');
 
   let budget_periods: ValidBudgetPeriod[] = [];
-  if (backupVersion === '4' || backupVersion === '5') {
+  if (backupVersion === '4' || backupVersion === '5' || backupVersion === '6') {
     budget_periods = (raw.budget_periods as unknown[]).map((row, i) =>
       validateBudgetPeriod(row, i, backupVersion),
     );
