@@ -122,7 +122,7 @@ function createStyles(colors: ThemeColors) {
       justifyContent: 'flex-end',
     },
     backdrop: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       backgroundColor: colors.background.overlay,
     },
     sheet: {

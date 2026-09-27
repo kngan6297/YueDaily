@@ -131,7 +131,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
       shadowOpacity: 0,
     },
     tabBarBackground: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       backgroundColor: colors.background.surface,
       shadowColor: shadows.medium.shadowColor,
       shadowOffset: { width: 0, height: -4 },
