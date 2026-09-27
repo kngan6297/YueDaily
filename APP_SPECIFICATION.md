@@ -1,15 +1,16 @@
 # YueDaily — Đặc tả sản phẩm (PRD)
 
 > **Loại tài liệu:** Product Requirements Document  
-> **Phiên bản:** 1.6.0 · **Cập nhật:** 2026-09-01  
-> **Trạng thái:** Đang phát triển (Expo SDK 54, React Native 0.81, React 19)  
-> **Phase hiện tại:** P1.7A — AI Receipt Scan Reliability (**Implemented / verified**)
+> **Phiên bản:** 1.7A · **Cập nhật:** 2026-09-27  
+> **Trạng thái:** Đang phát triển (Expo SDK 57)  
+> **Phase hiện tại:** P1.7A — AI Receipt Scan Reliability (**CODE COMPLETE — APK VERIFICATION PENDING**)
 
 **Đọc tài liệu này khi cần biết app *là gì*, *cho ai*, *làm gì* và *làm như thế nào ở mức sản phẩm*.**  
 Chi tiết kỹ thuật (cài đặt, build, schema DB, kiến trúc code) → [`README.md`](./README.md).
 
 > README / Data Model cần cập nhật tương ứng sau khi PRD này được duyệt.  
-> P1.6 **đã triển khai và verified** trên Expo Go (expo-sqlite). P1.6 **không** triển khai account balance, contribution ledger, reimbursement, transfer hay bank sync.
+> P1.6 **đã triển khai và verified** trên Expo Go (expo-sqlite). P1.6 **không** triển khai account balance, contribution ledger, reimbursement, transfer hay bank sync.  
+> P1.7A **code complete** (Groq-first + Gemini fallback); runtime closure cần fresh preview APK verify Gallery + Camera.
 
 ---
 
@@ -991,25 +992,27 @@ Restore **preserve period boundaries exactly** — không regenerate start/end t
 | API key | Cấu hình Groq / Gemini qua `.env` hoặc biến môi trường build (EAS); không có màn quản lý key cho người dùng |
 | Hành vi lỗi | Phân loại lỗi rõ ràng (thiếu key, auth, model, quota, mạng, timeout); luôn cho phép nhập tay |
 
-**P1.7A — AI Receipt Scan Reliability**
+**P1.7A — AI Receipt Scan Reliability — DONE (code)**
 
 | Khía cạnh | Mô tả |
 |-----------|-------|
-| Thứ tự provider | **Gemini 2.5 Flash‑Lite → Gemini 2.5 Flash** (primary chain) |
-| Groq | **Tắt** cho quét ảnh hoá đơn — tài khoản hiện không có model vision/image phù hợp (`qwen/qwen3.6-27b` trả 404) |
-| Env | `EXPO_PUBLIC_GEMINI_API_KEY` (bắt buộc cho quét); `EXPO_PUBLIC_GROQ_API_KEY` (optional, không dùng receipt scan P1.7A) |
-| Expo Go | `EXPO_PUBLIC_*` được inline khi Metro bundle; đổi `.env` **phải** restart Metro (`npx expo start --clear`) |
-| Fallback | Model unavailable / rate limit / 5xx / timeout → thử model Gemini kế tiếp |
-| Lỗi auth | 401 → key không hợp lệ; 403 → từ chối quyền (không gom mọi lỗi thành “key sai”) |
-| Lỗi không phải auth | 404 model, 429/quota, mạng — **không** hiển thị “API key không hợp lệ” |
+| Thứ tự provider | **Groq `qwen/qwen3.8-27b` → Gemini `gemini-2.5-flash-lite` → Gemini `gemini-2.5-flash`** |
+| Groq | Primary vision; `reasoning_effort: none`, `response_format: json_object`, temp 0.1, max 128 tokens, timeout 8s |
+| Gemini | Compact prompt/schema; `thinkingBudget: 0`, temp 0, max 128 tokens, timeout 20s |
+| Fallback | Groq 400/401/403/404/429/5xx/timeout/network/malformed JSON → Gemini; success Groq stops chain; **no** full-chain second retry |
+| Env | Static only: `EXPO_PUBLIC_GROQ_API_KEY`, `EXPO_PUBLIC_GEMINI_API_KEY` (client keys — limitation documented; backend proxy deferred) |
+| EAS preview | `eas.json` preview profile `environment: "preview"` |
+| Expo Go / Metro | `EXPO_PUBLIC_*` inline khi bundle; đổi `.env` **phải** restart Metro (`npx expo start --clear`) |
 | Manual entry | AI lỗi không chặn lưu giao dịch |
-| Bảo mật key | Key client-side (`EXPO_PUBLIC_*`) — không phải secret thật; backend proxy **deferred** |
+| Image preprocess | TEMP AI-prep cache only: width 1024, JPEG 0.7, SDK57 File API + image manipulator. **Không** phải P1.7B receipt archive. |
+| Gallery + Camera | In-memory URI handoff (tránh router-param URI corruption) |
 | Receipt archive | **Deferred P1.7B** — P1.7A không đổi `transactions.image_uri` / persistence |
-| Image preprocess | Trước AI: copy TEMP vào cache ASCII-safe → resize width ~1024 → JPEG 0.7 → base64. Lỗi decode bitmap ≠ lỗi API key. **Không** archive persistent. |
+| Telemetry | `__DEV__` only: provider/model, success/failure kind, fallback, `aiMs`, `totalMs` — never log key/base64/URI contents |
 
 Implementation: `src/services/receiptAi/*`, hook `src/hooks/useGemini.ts`.
 
-> **Trạng thái runtime P1.7A:** code fix image preprocess đã có; **chưa** đánh dấu verified cho đến khi Expo Go scan thật pass.
+> **Trạng thái P1.7A:** **CODE COMPLETE — APK VERIFICATION PENDING.** Chưa claim runtime closure cho đến khi fresh preview APK verify Gallery + Camera với EAS preview env.  
+> File TEMP trong `receipt-ai-prep` cache **không** phải Persistent Receipt Archive (P1.7B).
 
 AI **chỉ** gợi ý:
 
@@ -1115,25 +1118,27 @@ Token màu cụ thể được định nghĩa tại `src/constants/theme.ts`.
 
 **Trạng thái:** Implemented / verified (PRD v1.6.0; Expo Go + expo-sqlite).
 
-### Implemented / verified — P1.7A AI Receipt Scan Reliability
+### P1.7A — AI Receipt Scan Reliability — DONE (code)
 
 | Hạng mục | Ghi chú |
 |----------|---------|
-| Provider order | Gemini Flash-Lite → Gemini Flash |
-| Groq receipt vision | Disabled — no verified image model on account |
-| Error classification | missing_key, auth, permission, model, quota, network, timeout |
-| False key-error fix | 404/rate limit/network no longer labeled as key invalid |
-| Expo Go env | Metro restart required after `.env` change |
-| Receipt persistence | Unchanged — deferred **P1.7B** |
+| Provider order | Groq `qwen/qwen3.8-27b` → Gemini Flash-Lite → Gemini Flash |
+| Groq receipt vision | Enabled (primary); failures fall through to Gemini |
+| Error classification | missing_key, auth, permission, model, quota, network, timeout, image_* |
+| Image preprocess | TEMP `receipt-ai-prep` cache only — **not** P1.7B archive |
+| Gallery + Camera | In-memory handoff; manual entry always available |
+| Client keys | `EXPO_PUBLIC_*` limitation documented; never log key values |
+| Timing metric | Provider-neutral `aiMs` (not `geminiMs`) |
 
-**Trạng thái:** Implemented / verified (PRD v1.7A; Expo Go).
+**Trạng thái:** CODE COMPLETE — APK VERIFICATION PENDING (PRD v1.7A; Expo SDK 57).
 
-### Tương lai — P1.7+
+### Deferred — P1.7B / P1.7C
 
 | Ưu tiên | Hạng mục | Ghi chú |
 |---------|----------|---------|
-| **P1.7B** | Receipt image archive | Persistent receipt storage, viewer, backup media — sau P1.7A. |
-| **P1.7C** | Spending Insights | Food vs drinks/snacks, big spend, one-off / recurring (`expense_nature`), weekday/weekend patterns, baseline lifestyle. |
+| **P1.7B — DEFERRED** | Persistent Receipt Archive | App document storage, persistent receipt URI, viewer/zoom, delete cleanup. **P1.7A TEMP AI-prep files are NOT this archive.** |
+| **P1.7C — DEFERRED** | Media-aware Backup | JSON + receipt media archive/ZIP; restore media across devices. |
+| P1.8+ | Spending Insights / other | Food vs drinks, `expense_nature`, weekday patterns — after P1.7A closed. |
 | P2 | Widget / shortcut chụp nhanh | Phụ thuộc nền tảng |
 
 Các hạng mục **không** nằm trong lộ trình sản phẩm cốt lõi: UI API key Cài đặt, repeat transaction, export CSV, pending inbox, thu nhập / cash-flow / opening balance, shop accounting / profit / owner draw, Family Savings balance, reimbursement / internal transfer, actual contribution ledger, bank sync, streak/gamification.

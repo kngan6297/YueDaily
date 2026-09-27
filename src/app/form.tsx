@@ -1,5 +1,4 @@
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import * as ImageManipulator from 'expo-image-manipulator';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
@@ -31,6 +30,15 @@ import {
 } from '../database/transactions';
 import { useGemini } from '../hooks/useGemini';
 import { useModalBottomInset } from '../hooks/useModalBottomInset';
+import { ReceiptAiError } from '../services/receiptAi/errors';
+import { preprocessReceiptImage } from '../services/receiptAi/preprocessReceiptImage';
+import {
+  receiptAiDevLog,
+  sanitizeErrorCategory,
+} from '../services/receiptAi/devLog';
+import {
+  consumePendingReceiptImage,
+} from '../services/receiptAi/pendingReceiptImage';
 import type {
   Category,
   ExpenseAudience,
@@ -142,16 +150,34 @@ export default function TransactionForm() {
   const styles = useMemo(() => createStyles(colors, shadows, resolvedColorScheme), [colors, shadows, resolvedColorScheme]);
   const router = useRouter();
   const params = useLocalSearchParams<{
-    imageUri?: string;
+    imageUri?: string | string[];
+    imageHandoff?: string | string[];
     transactionId?: string;
     isEdit?: string;
     transactionDate?: string;
   }>();
 
-  const imageUri = params.imageUri ?? null;
-  const transactionId = params.transactionId ? parseInt(params.transactionId, 10) : null;
-  const isEdit = params.isEdit === 'true';
-  const initialDate = params.transactionDate?.slice(0, 10) ?? formatLocalDate(new Date());
+  const paramImageUriRaw = params.imageUri;
+  const paramImageUri = Array.isArray(paramImageUriRaw)
+    ? paramImageUriRaw[0] ?? null
+    : paramImageUriRaw ?? null;
+
+  const [handoff] = useState(() => consumePendingReceiptImage());
+
+  const imageUri = handoff?.uri ?? paramImageUri;
+  const transactionId = params.transactionId
+    ? parseInt(
+        Array.isArray(params.transactionId)
+          ? params.transactionId[0]
+          : params.transactionId,
+        10,
+      )
+    : null;
+  const isEdit = (Array.isArray(params.isEdit) ? params.isEdit[0] : params.isEdit) === 'true';
+  const initialDateParam = Array.isArray(params.transactionDate)
+    ? params.transactionDate[0]
+    : params.transactionDate;
+  const initialDate = initialDateParam?.slice(0, 10) ?? formatLocalDate(new Date());
 
   type FormMode = 'create-complete' | 'edit-complete';
   const formMode: FormMode =
@@ -241,7 +267,7 @@ export default function TransactionForm() {
     };
   }, []);
 
-  // ── Web helper: blob URL → base64 ──
+  // ── Web helper kept only for preprocess dependency injection path ──
   const blobUriToBase64 = useCallback(async (uri: string): Promise<string> => {
     const response = await fetch(uri);
     const blob = await response.blob();
@@ -249,25 +275,12 @@ export default function TransactionForm() {
       const reader = new FileReader();
       reader.onloadend = () => {
         const dataUrl = reader.result as string;
-        // strip "data:image/...;base64," prefix
         resolve(dataUrl.split(',')[1] ?? '');
       };
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
   }, []);
-
-  const imageToBase64 = useCallback(async (uri: string): Promise<string> => {
-    if (Platform.OS === 'web') {
-      return blobUriToBase64(uri);
-    }
-    const compressed = await ImageManipulator.manipulateAsync(
-      uri,
-      [{ resize: { width: 1024 } }],
-      { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true },
-    );
-    return compressed.base64 ?? '';
-  }, [blobUriToBase64]);
 
   const findCategoryByName = useCallback((cats: Category[], categoryName: string) => {
     return cats.find((c) =>
@@ -328,19 +341,37 @@ export default function TransactionForm() {
   const handleAiScan = useCallback(async () => {
     if (!imageUri) { Alert.alert('Chưa có ảnh', 'Hãy chụp hoặc chọn ảnh trước!'); return; }
     const scanGeneration = ++scanGenerationRef.current;
+    const totalStarted = Date.now();
     try {
-      const base64 = await imageToBase64(imageUri);
-      const result = await analyze(base64);
+      const prepared = await preprocessReceiptImage(imageUri, {
+        blobToBase64: blobUriToBase64,
+      });
+      const aiStarted = Date.now();
+      const result = await analyze(prepared.base64);
+      const aiMs = Date.now() - aiStarted;
       await applyScanResult(result, scanGeneration);
+      receiptAiDevLog('scan_ok', {
+        aiMs,
+        totalMs: Date.now() - totalStarted,
+      });
     } catch (err) {
       if (scanGeneration !== scanGenerationRef.current) return;
+      receiptAiDevLog('scan_fail', {
+        totalMs: Date.now() - totalStarted,
+        ...sanitizeErrorCategory(err),
+      });
+      const isImageErr =
+        err instanceof ReceiptAiError &&
+        (err.kind === 'image_load_failed' ||
+          err.kind === 'image_decode_failed' ||
+          err.kind === 'image_processing_failed');
       const msg = err instanceof Error ? err.message : 'Không thể phân tích ảnh.';
       Alert.alert(
-        'Lỗi AI 🤖',
-        `${msg}\n\nBạn vẫn có thể nhập tay.`
+        isImageErr ? 'Lỗi ảnh 📷' : 'Lỗi AI 🤖',
+        `${msg}\n\nBạn vẫn có thể nhập tay.`,
       );
     }
-  }, [imageUri, analyze, imageToBase64, applyScanResult]);
+  }, [imageUri, analyze, blobUriToBase64, applyScanResult]);
 
   // Tự quét khi mở form với ảnh mới (không phải chỉnh sửa)
   useEffect(() => {
@@ -491,6 +522,10 @@ export default function TransactionForm() {
               </TouchableOpacity>
             ) : <View style={{ width: 34 }} />}
           </View>
+
+          {isAiLoading ? (
+            <Text style={styles.aiLoadingHint}>Đang đọc bill...</Text>
+          ) : null}
 
           {/* Amount */}
           <View style={styles.amountWrap}>
@@ -752,6 +787,12 @@ function createStyles(
     color: isDark ? colors.neutral[700] : '#fff',
     fontSize: 12,
     fontWeight: '700',
+  },
+  aiLoadingHint: {
+    textAlign: 'center',
+    fontSize: Typography.fontSize.sm,
+    color: colors.neutral[500],
+    marginBottom: Spacing.sm,
   },
 
   amountWrap: {

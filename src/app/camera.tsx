@@ -16,6 +16,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CaptureButton } from '../components/camera/CaptureButton';
 import { BorderRadius, Spacing, ThemeColors, Typography } from '../constants/theme';
 import { useAppTheme } from '../context/ThemeContext';
+import { copyReceiptUriToPrepCache } from '../services/receiptAi/normalizeReceiptUri';
+import {
+  setPendingReceiptImage,
+} from '../services/receiptAi/pendingReceiptImage';
+import { receiptAiDevLog } from '../services/receiptAi/devLog';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 const PREVIEW_W = SW - Spacing.base * 2;
@@ -196,8 +201,21 @@ function NativeCameraScreen() {
         shutterSound: false,
       });
       if (photo?.uri) {
-        setLastThumb(photo.uri);
-        router.push({ pathname: '/form', params: { imageUri: photo.uri, ...formParams } });
+        let navUri = photo.uri;
+        try {
+          const copied = await copyReceiptUriToPrepCache(photo.uri);
+          navUri = copied.uri;
+          setPendingReceiptImage({ uri: copied.uri, size: copied.size });
+          receiptAiDevLog('prep_ready', { source: 'camera' });
+        } catch (copyErr) {
+          receiptAiDevLog('prep_fail', { source: 'camera' });
+          console.warn('[ReceiptAI] camera prep copy failed; using source URI');
+        }
+        setLastThumb(navUri);
+        router.push({
+          pathname: '/form',
+          params: { imageUri: navUri, imageHandoff: '1', ...formParams },
+        });
       }
     } catch (err) {
       console.error('Lỗi chụp ảnh:', err);
@@ -215,9 +233,23 @@ function NativeCameraScreen() {
       allowsEditing: false,
     });
     if (!result.canceled && result.assets[0]) {
-      const uri = result.assets[0].uri;
-      setLastThumb(uri);
-      router.push({ pathname: '/form', params: { imageUri: uri, ...formParams } });
+      const asset = result.assets[0];
+      const uri = asset.uri;
+      let navUri = uri;
+      try {
+        const copied = await copyReceiptUriToPrepCache(uri);
+        navUri = copied.uri;
+        setPendingReceiptImage({ uri: copied.uri, size: copied.size });
+        receiptAiDevLog('prep_ready', { source: 'gallery' });
+      } catch {
+        receiptAiDevLog('prep_fail', { source: 'gallery' });
+        console.warn('[ReceiptAI] gallery prep copy failed; using source URI');
+      }
+      setLastThumb(navUri);
+      router.push({
+        pathname: '/form',
+        params: { imageUri: navUri, imageHandoff: '1', ...formParams },
+      });
     }
   }, [router, formParams]);
 

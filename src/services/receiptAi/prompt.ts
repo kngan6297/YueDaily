@@ -1,65 +1,25 @@
 import type { GeminiAnalysisResult } from '../../types';
+import { RECEIPT_AI_MAX_OUTPUT_TOKENS } from './config';
 
-export const SYSTEM_INSTRUCTION = `Bạn là trợ lý phân tích ảnh chi tiêu cho ứng dụng theo dõi chi tiêu gia đình Việt Nam.
+/**
+ * Extraction prompt — shared by Groq + Gemini.
+ * Category enum also enforced in Gemini responseSchema.
+ */
+export const SYSTEM_INSTRUCTION = `Đọc ảnh và chỉ trả JSON.
 
-Nhiệm vụ: Phân tích ảnh hoá đơn hoặc món ăn/sản phẩm chi tiêu. Trả về JSON thuần.
-
-Bước 1 — Xác định is_receipt:
-- is_receipt: true → Ảnh là hoá đơn/bill/receipt/màn hình chuyển khoản/biến động số dư (có dòng tiền, số tiền rõ ràng)
-- is_receipt: false → Ảnh chỉ là một món ăn, sản phẩm, đồ chơi, vật thể đơn thuần (KHÔNG phải hoá đơn, không có dòng tiền)
-
-Bước 2 — Trích xuất amount:
-- is_receipt = true: Tổng tiền giao dịch cuối cùng (sau thuế/giảm giá), đơn vị VNĐ, kiểu số nguyên.
-- is_receipt = false: amount = 0 (TUYỆT ĐỐI KHÔNG tự đoán giá tiền của vật thể nếu không có hóa đơn đi kèm).
-
-Bước 3 — Trường description (QUAN TRỌNG NHẤT):
-Một câu ngắn gọn, súc tích (dưới 50 ký tự), nội dung phải linh hoạt theo loại ảnh:
-
-- NẾU ảnh là màn hình CHUYỂN KHOẢN NGÂN HÀNG/MOMO thành công:
-  * Công thức: "[Chuyển khoản/Nhận tiền] [Nội dung chuyển khoản hoặc Tên người nhận/gửi]"
-  * Ví dụ: "Chuyển khoản tiền nhà", "Chuyển khoản cho Shipper", "Nhận tiền lương tháng 6".
-
-- NẾU ảnh là HOÁ ĐƠN mua sắm/ăn uống thông thường:
-  * Công thức: "[Hành động/Bữa ăn] tại [Tên thương hiệu/Cửa hàng]".
-  * Ví dụ: "Ăn tối tại Haidilao", "Uống cafe tại Highlands Coffee", "Mua sắm tại WinMart".
-  * CẤM nhầm nhãn "Phục vụ:" hoặc "Thu ngân:" thành tên quán. Cấm lấy tên combo (Combo Tâm Giao, Set Uyên Ương) làm tên quán.
-
-- NẾU is_receipt = false (Là món ăn/đồ vật/đồ chơi đơn thuần):
-  * Công thức: "[Hành động/Mua] [Tên mô tả ngắn của vật thể]". TUYỆT ĐỐI không bịa thêm chữ "tại [Tên quán]".
-  * Ví dụ: "Mua đồ chơi mô hình", "Uống trà sữa trân châu", "Ăn bánh ngọt".
-
-Bước 4 — Gán category (Suy từ hành động trong description):
-- Ăn sáng/trưa/tối/lẩu, buffet → "Ăn uống"
-- Uống cafe/trà sữa/nước → "Trà & Cà phê"
-- Siêu thị, bách hóa, mua đồ, đồ chơi, quần áo → "Mua sắm"
-- Grab/taxi/xe/xăng/gửi xe → "Di chuyển"
-- Spa/nail/salon/cắt tóc/mỹ phẩm → "Làm đẹp"
-- Thuốc/bệnh viện/phòng khám/vitamin → "Sức khoẻ"
-- Xem phim/rạp phim/game/vui chơi → "Giải trí"
-- Học phí/sách/khóa học → "Giáo dục"
-- Tiền điện/tiền nước/tiền mạng/chung cư/tã sữa cho con → "Gia đình"
-- Thú cưng, đồ ăn cho mèo/chó → "Thú cưng"
-- "Khác" chỉ khi thực sự không thể xếp vào đâu.
-
-Quy tắc bắt buộc:
-- Chỉ trả về duy nhất JSON thuần, KHÔNG có text hay markdown giải thích xung quanh.`;
+is_receipt: true nếu có giao dịch/số tiền, false nếu không.
+amount: số VNĐ thực trả/thực nhận cuối cùng; không lấy tạm tính, tiền đưa, tiền thừa, số dư; không đoán.
+description: ≤50 ký tự; tên người/quán và nội dung chuyển khoản chép nguyên văn, giữ đúng dấu, không tự sửa chính tả.
+category: chọn đúng 1 nhóm theo mục đích chính:
+Ăn uống; Trà & Cà phê; Mua sắm; Di chuyển; Làm đẹp; Sức khoẻ; Giải trí; Giáo dục; Gia đình; Thú cưng; Khác.
+Ưu tiên nhóm chuyên biệt; chỉ dùng Khác khi không đủ căn cứ.`;
 
 export const GEMINI_RESPONSE_SCHEMA = {
   type: 'object',
   properties: {
-    is_receipt: {
-      type: 'boolean',
-      description: 'true nếu là hoá đơn/bill, false nếu là món ăn/đồ chơi/sản phẩm đơn thuần',
-    },
-    amount: {
-      type: 'integer',
-      description: 'Tổng tiền VNĐ. Bắt buộc bằng 0 nếu is_receipt là false',
-    },
-    description: {
-      type: 'string',
-      description:
-        'Nếu là bill: "[Hành động] tại [Tên quán]". Nếu là đồ vật/đồ chơi/món ăn: "[Hành động/Mua] [Tên đồ vật]". Không bịa đặt tên quán.',
-    },
+    is_receipt: { type: 'boolean' },
+    amount: { type: 'integer' },
+    description: { type: 'string' },
     category: {
       type: 'string',
       enum: [
@@ -71,8 +31,23 @@ export const GEMINI_RESPONSE_SCHEMA = {
   required: ['is_receipt', 'amount', 'description', 'category'],
 } as const;
 
-export const USER_SCAN_PROMPT =
-  'Phân tích kỹ bức ảnh này. Xác định xem đây là hoá đơn (is_receipt=true) hay chỉ là hình ảnh món ăn/đồ vật/đồ chơi (is_receipt=false). Tuân thủ nghiêm ngặt công thức viết description và cách gán amount tương ứng cho từng loại ảnh. Tuyệt đối không bịa đặt thông tin nếu ảnh không có chữ.';
+/** Short user turn — details live in systemInstruction + schema. */
+export const USER_SCAN_PROMPT = 'Đọc ảnh và chỉ trả JSON.';
+
+/** Safe __DEV__ audit sizes (no secrets / no image). */
+export function receiptAiPromptAudit(): {
+  systemLen: number;
+  userLen: number;
+  schemaJsonLen: number;
+  maxOutputTokens: number;
+} {
+  return {
+    systemLen: SYSTEM_INSTRUCTION.length,
+    userLen: USER_SCAN_PROMPT.length,
+    schemaJsonLen: JSON.stringify(GEMINI_RESPONSE_SCHEMA).length,
+    maxOutputTokens: RECEIPT_AI_MAX_OUTPUT_TOKENS,
+  };
+}
 
 const VALID_CATEGORIES = [
   'Ăn uống', 'Trà & Cà phê', 'Mua sắm', 'Di chuyển', 'Làm đẹp',

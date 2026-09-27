@@ -11,7 +11,10 @@ export type ReceiptAiErrorKind =
   | 'network_error'
   | 'timeout'
   | 'invalid_response'
-  | 'all_providers_failed';
+  | 'all_providers_failed'
+  | 'image_load_failed'
+  | 'image_decode_failed'
+  | 'image_processing_failed';
 
 export interface ProviderAttemptFailure {
   provider: string;
@@ -32,6 +35,17 @@ export class ReceiptAiError extends Error {
 
 /** Recoverable failures allow trying the next provider/model. */
 export function isRecoverableFailure(kind: ReceiptAiErrorKind): boolean {
+  if (
+    kind === 'image_load_failed' ||
+    kind === 'image_decode_failed' ||
+    kind === 'image_processing_failed' ||
+    kind === 'missing_key' ||
+    // Same device network path — Flash will not help after Flash-Lite transport fail.
+    kind === 'network_error' ||
+    kind === 'timeout'
+  ) {
+    return false;
+  }
   return (
     kind === 'invalid_key' ||
     kind === 'permission_denied' ||
@@ -39,7 +53,6 @@ export function isRecoverableFailure(kind: ReceiptAiErrorKind): boolean {
     kind === 'rate_limited' ||
     kind === 'quota_or_billing' ||
     kind === 'server_error' ||
-    kind === 'timeout' ||
     kind === 'invalid_response'
   );
 }
@@ -102,6 +115,10 @@ export function userMessageForKind(
       return dev
         ? `Chưa cấu hình AI cho môi trường này.\n\n(Dev: ${METRO_ENV_RESTART_HINT})`
         : 'Chưa cấu hình AI cho môi trường này.';
+    case 'image_load_failed':
+    case 'image_decode_failed':
+    case 'image_processing_failed':
+      return 'Không đọc được ảnh bill này. Thử chọn lại ảnh hoặc chụp lại nhé.';
     case 'invalid_key':
       return 'API key AI không hợp lệ hoặc không còn quyền truy cập.';
     case 'permission_denied':

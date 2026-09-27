@@ -1,11 +1,15 @@
 // ============================================================
 // HOOK PHÂN TÍCH ẢNH AI — P1.7A receipt scan orchestration
-// Provider order: Gemini Flash-Lite → Gemini Flash
+// Provider order: Groq Qwen 3.8 → Gemini Flash-Lite → Gemini Flash
 // ============================================================
 
 import { useCallback, useState } from 'react';
 import { analyzeReceiptImage } from '../services/receiptAi/analyzeReceiptImage';
-import { hasAnyReceiptAiKey, loadReceiptAiEnvFromProcess } from '../services/receiptAi/env';
+import {
+  hasAnyReceiptAiKey,
+  loadReceiptAiEnvFromProcess,
+  logReceiptAiKeyPresence,
+} from '../services/receiptAi/env';
 import { finalFailureMessage, ReceiptAiError } from '../services/receiptAi/errors';
 import type { GeminiAnalysisResult } from '../types';
 
@@ -22,6 +26,7 @@ export function useGemini(): UseGeminiResult {
   const analyze = useCallback(async (imageBase64: string): Promise<GeminiAnalysisResult> => {
     const env = loadReceiptAiEnvFromProcess();
     const dev = typeof __DEV__ !== 'undefined' && __DEV__;
+    logReceiptAiKeyPresence(env);
 
     if (!hasAnyReceiptAiKey(env)) {
       const msg = finalFailureMessage(

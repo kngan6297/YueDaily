@@ -108,4 +108,15 @@ describe('isRecoverableFailure', () => {
   it('missing_key is not recoverable via fallback', () => {
     assert.equal(isRecoverableFailure('missing_key'), false);
   });
+
+  it('image_decode_failed is not recoverable and has image UX copy', () => {
+    assert.equal(isRecoverableFailure('image_decode_failed'), false);
+    assert.match(userMessageForKind('image_decode_failed'), /Không đọc được ảnh bill/i);
+    assert.doesNotMatch(userMessageForKind('image_decode_failed'), /API key/i);
+  });
+
+  it('network_error and timeout are not model-fallback recoverable', () => {
+    assert.equal(isRecoverableFailure('network_error'), false);
+    assert.equal(isRecoverableFailure('timeout'), false);
+  });
 });
