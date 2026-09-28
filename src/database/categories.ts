@@ -198,7 +198,15 @@ export async function deleteSource(id: number): Promise<DeleteResult> {
     'SELECT COUNT(*) as count FROM budget_periods WHERE envelope_source_id = ?;',
     [id],
   );
-  const gate = sourceDeleteGuard(refs?.count ?? 0, budgetRefs?.count ?? 0);
+  const trackedRefs = await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM tracked_source_periods WHERE source_id = ?;',
+    [id],
+  );
+  const gate = sourceDeleteGuard(
+    refs?.count ?? 0,
+    budgetRefs?.count ?? 0,
+    trackedRefs?.count ?? 0,
+  );
   if (!gate.ok) return gate;
 
   await db.runAsync('DELETE FROM sources WHERE id = ?;', [id]);

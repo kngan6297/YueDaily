@@ -12,6 +12,13 @@ import type { SourceSpendingGroup } from '../types';
  */
 export const HOUSEHOLD_FOOD_ENVELOPE_SOURCE_NAME = 'Woori · Quỹ ăn' as const;
 
+/**
+ * Persisted seed name for Yue's VPBank tracked account.
+ * Used ONLY to resolve sources.id → tracked_source_periods.source_id (lazy ensure).
+ * Runtime membership must NEVER compare source names.
+ */
+export const VPBANK_TRACKED_SOURCE_NAME = 'VPBank' as const;
+
 /** @deprecated Prefer envelope_source_id membership; kept for migration helpers/tests */
 export function isHouseholdFoodEnvelopeSourceName(
   name: string | null | undefined,

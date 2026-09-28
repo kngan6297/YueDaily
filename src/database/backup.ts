@@ -71,7 +71,8 @@ export interface BackupData {
   sources: Record<string, unknown>[];
   payers?: Record<string, unknown>[];
   budget_periods?: Record<string, unknown>[];
-  /** v1–v3 legacy; v4 export omits product streak state */
+  tracked_source_periods?: Record<string, unknown>[];
+  /** v1–v3 legacy; v4 restore leaves streak table untouched */
   streak?: Record<string, unknown> | null;
 }
 
@@ -95,6 +96,9 @@ export async function exportBackup(): Promise<void> {
   const budget_periods = await db.getAllAsync<Record<string, unknown>>(
     'SELECT * FROM budget_periods ORDER BY id;'
   );
+  const tracked_source_periods = await db.getAllAsync<Record<string, unknown>>(
+    'SELECT * FROM tracked_source_periods ORDER BY id;'
+  );
 
   const backup: BackupData = {
     appVersion: '1.0.0',
@@ -105,6 +109,7 @@ export async function exportBackup(): Promise<void> {
     sources,
     payers,
     budget_periods,
+    tracked_source_periods,
   };
 
   const json = JSON.stringify(backup, null, 2);
@@ -136,11 +141,13 @@ export async function applyValidatedBackupRestore(
     await db.execAsync('DELETE FROM sources;');
     await db.execAsync('DELETE FROM payers;');
     await db.execAsync('DELETE FROM budget_periods;');
+    await db.execAsync('DELETE FROM tracked_source_periods;');
 
     if (
       backup.backupVersion !== '4' &&
       backup.backupVersion !== '5' &&
-      backup.backupVersion !== '6'
+      backup.backupVersion !== '6' &&
+      backup.backupVersion !== '7'
     ) {
       await restoreLegacyStreak(db, backup.streak);
     }
@@ -194,6 +201,25 @@ export async function applyValidatedBackupRestore(
       );
     }
 
+    for (const period of backup.tracked_source_periods) {
+      await db.runAsync(
+        `INSERT INTO tracked_source_periods
+           (id, source_id, period_start, period_end, opening_balance,
+            adjustment_amount, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
+        [
+          period.id,
+          period.source_id,
+          period.period_start,
+          period.period_end,
+          period.opening_balance,
+          period.adjustment_amount,
+          period.created_at,
+          period.updated_at,
+        ],
+      );
+    }
+
     for (const tx of backup.transactions) {
       await db.runAsync(
         `INSERT INTO transactions
@@ -229,8 +255,12 @@ export async function applyValidatedBackupRestore(
     if (shouldRunFirstPeriodBudgetSeedsAfterRestore(backup.backupVersion)) {
       // v1–v4: may apply one-time carryover + envelope_source_id for 2026-09-05
       await runFirstPeriodBudgetSeedsIfNeeded(db);
-    } else if (backup.backupVersion === '5' || backup.backupVersion === '6') {
-      // v5/v6 authoritative — never let startup seeds overwrite restored values
+    } else if (
+      backup.backupVersion === '5' ||
+      backup.backupVersion === '6' ||
+      backup.backupVersion === '7'
+    ) {
+      // v5+ authoritative — never let startup seeds overwrite restored values
       await markFirstPeriodBudgetSeedsComplete(db);
     }
   });

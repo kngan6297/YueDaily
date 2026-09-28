@@ -22,12 +22,19 @@ import { useAppTheme } from '../../context/ThemeContext';
 import { BottomSheetModal } from '../../components/ui/BottomSheetModal';
 import { HouseholdFoodBudgetCard } from '../../components/budget/HouseholdFoodBudgetCard';
 import { HouseholdFoodBudgetDetailSheet } from '../../components/budget/HouseholdFoodBudgetDetailSheet';
+import { VpBankBalanceCard } from '../../components/budget/VpBankBalanceCard';
+import { VpBankBalanceDetailSheet } from '../../components/budget/VpBankBalanceDetailSheet';
 import { useModalBottomInset } from '../../hooks/useModalBottomInset';
 import {
   ensureContinuingHouseholdFoodBudgetPeriod,
   loadHouseholdFoodBudgetHomeCard,
   type HouseholdFoodBudgetHomeCardData,
 } from '../../database/householdFoodBudgetRead';
+import {
+  ensureVpBankBalancePeriod,
+  loadVpBankBalanceHomeCard,
+  type VpBankBalanceHomeCardData,
+} from '../../database/trackedSourceBalanceRead';
 import {
   HOME_SPEND_VIEW_OPTIONS,
   spendingGroupForHomeSpendView,
@@ -96,6 +103,11 @@ export default function HomeScreen() {
   const [budgetLoading, setBudgetLoading] = useState(true);
   const [budgetDetailVisible, setBudgetDetailVisible] = useState(false);
   const [budgetDetailPeriodId, setBudgetDetailPeriodId] = useState<number | null>(null);
+  const [vpBankCard, setVpBankCard] = useState<VpBankBalanceHomeCardData | null>(null);
+  const [vpBankLoading, setVpBankLoading] = useState(true);
+  const [vpBankDetailVisible, setVpBankDetailVisible] = useState(false);
+  const [vpBankDetailPeriodId, setVpBankDetailPeriodId] = useState<number | null>(null);
+  const [vpBankPreferOpeningEdit, setVpBankPreferOpeningEdit] = useState(false);
 
   const loadBudgetCard = useCallback(async () => {
     setBudgetLoading(true);
@@ -109,6 +121,21 @@ export default function HomeScreen() {
       setBudgetCard(null);
     } finally {
       setBudgetLoading(false);
+    }
+  }, []);
+
+  const loadVpBankCard = useCallback(async () => {
+    setVpBankLoading(true);
+    try {
+      const referenceDate = todayLocal();
+      await ensureVpBankBalancePeriod(referenceDate);
+      const card = await loadVpBankBalanceHomeCard(referenceDate);
+      setVpBankCard(card);
+    } catch (err) {
+      console.error(err);
+      setVpBankCard(null);
+    } finally {
+      setVpBankLoading(false);
     }
   }, []);
 
@@ -129,7 +156,8 @@ export default function HomeScreen() {
     useCallback(() => {
       loadData();
       loadBudgetCard();
-    }, [loadData, loadBudgetCard])
+      loadVpBankCard();
+    }, [loadData, loadBudgetCard, loadVpBankCard])
   );
 
   const openBudgetDetail = useCallback(() => {
@@ -138,6 +166,14 @@ export default function HomeScreen() {
     setBudgetDetailPeriodId(periodId);
     setBudgetDetailVisible(true);
   }, [budgetCard]);
+
+  const openVpBankDetail = useCallback((preferOpening = false) => {
+    const periodId = vpBankCard?.period?.id ?? null;
+    if (!periodId) return;
+    setVpBankDetailPeriodId(periodId);
+    setVpBankPreferOpeningEdit(preferOpening);
+    setVpBankDetailVisible(true);
+  }, [vpBankCard]);
 
   const monthSummary = useMemo(() => ({
     chi: monthTxns.filter((t) => t.type === 'chi').reduce((s, t) => s + t.amount, 0),
@@ -375,6 +411,15 @@ export default function HomeScreen() {
             budgetCard?.period || budgetCard?.upcomingPeriod ? openBudgetDetail : undefined
           }
         />
+        <View style={{ height: Spacing.sm }} />
+        <VpBankBalanceCard
+          data={vpBankCard}
+          loading={vpBankLoading}
+          onPress={vpBankCard?.period ? () => openVpBankDetail(false) : undefined}
+          onEnterOpeningBalance={
+            vpBankCard?.period ? () => openVpBankDetail(true) : undefined
+          }
+        />
         <View style={styles.filterRow}>
           {HOME_SPEND_VIEW_OPTIONS.map((opt) => {
             const active = spendView === opt.id;
@@ -533,6 +578,16 @@ export default function HomeScreen() {
         periodId={budgetDetailPeriodId}
         onClose={() => setBudgetDetailVisible(false)}
         onUpdated={loadBudgetCard}
+      />
+      <VpBankBalanceDetailSheet
+        visible={vpBankDetailVisible}
+        periodId={vpBankDetailPeriodId}
+        preferOpeningEdit={vpBankPreferOpeningEdit}
+        onClose={() => {
+          setVpBankDetailVisible(false);
+          setVpBankPreferOpeningEdit(false);
+        }}
+        onUpdated={loadVpBankCard}
       />
     </SafeAreaView>
   );

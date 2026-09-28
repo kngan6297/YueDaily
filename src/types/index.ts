@@ -148,6 +148,27 @@ export interface BudgetPeriod {
   updated_at: string;
 }
 
+/**
+ * Persisted monthly tracked-source period (calendar month 01→last day).
+ * Used for real account balance (e.g. VPBank) — not Woori food-budget carryover.
+ */
+export interface TrackedSourcePeriod {
+  id: number;
+  /** Persisted sources.id — identity for membership; rename-safe */
+  source_id: number;
+  period_start: string; // YYYY-MM-DD local (day 01)
+  period_end: string; // last day of calendar month
+  /** Manual opening balance; null = not entered yet (do not treat as 0) */
+  opening_balance: number | null;
+  /**
+   * Manual corrections. Signed integer; default 0.
+   * Accumulates; does not replace opening_balance.
+   */
+  adjustment_amount: number;
+  created_at: string;
+  updated_at: string;
+}
+
 /** Cấu trúc bảng nguồn chi (master data generic — không hardcode ngân hàng) */
 export type SourceSpendingGroup = 'personal_yue' | 'household';
 

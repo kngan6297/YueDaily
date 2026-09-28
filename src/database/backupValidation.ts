@@ -3,6 +3,7 @@
 // ============================================================
 
 import { validateBudgetPeriodBounds } from './budgetPeriodDomain';
+import { validateCalendarMonthPeriodBounds } from './calendarMonthPeriodDomain';
 import { HOUSEHOLD_FOOD_BUDGET_KEY } from '../constants/budget';
 import {
   normalizeBudgetGroup,
@@ -15,8 +16,8 @@ import {
 } from '../types';
 import { normalizeSourceIsActive } from './sourceLifecycle';
 
-export type BackupVersion = '1' | '2' | '3' | '4' | '5' | '6';
-export const CURRENT_BACKUP_VERSION: BackupVersion = '6';
+export type BackupVersion = '1' | '2' | '3' | '4' | '5' | '6' | '7';
+export const CURRENT_BACKUP_VERSION: BackupVersion = '7';
 
 interface ValidCategory {
   id: number;
@@ -36,6 +37,17 @@ interface ValidBudgetPeriod {
   carryover_amount: number;
   adjustment_amount: number;
   envelope_source_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ValidTrackedSourcePeriod {
+  id: number;
+  source_id: number;
+  period_start: string;
+  period_end: string;
+  opening_balance: number | null;
+  adjustment_amount: number;
   created_at: string;
   updated_at: string;
 }
@@ -82,6 +94,7 @@ export interface ValidatedBackup {
   sources: ValidSource[];
   payers: ValidPayer[] | null;
   budget_periods: ValidBudgetPeriod[];
+  tracked_source_periods: ValidTrackedSourcePeriod[];
   streak: ValidStreak | null;
 }
 
@@ -141,7 +154,12 @@ function validateCategory(row: unknown, index: number, backupVersion: BackupVers
   if (!CAT_TYPES.has(type)) fail(`${p}.type`);
 
   let budget_group: BudgetGroup | null = null;
-  if (backupVersion === '4' || backupVersion === '5' || backupVersion === '6') {
+  if (
+    backupVersion === '4' ||
+    backupVersion === '5' ||
+    backupVersion === '6' ||
+    backupVersion === '7'
+  ) {
     if (!('budget_group' in row)) fail(`${p}.budget_group`);
     if (row.budget_group !== null && row.budget_group !== undefined) {
       budget_group = normalizeBudgetGroup(row.budget_group);
@@ -182,7 +200,7 @@ function validateBudgetPeriod(
   if (!Number.isInteger(limit_amount) || limit_amount < 0) fail(`${p}.limit_amount`);
 
   let carryover_amount = 0;
-  if (backupVersion === '5' || backupVersion === '6') {
+  if (backupVersion === '5' || backupVersion === '6' || backupVersion === '7') {
     if (!('carryover_amount' in row)) fail(`${p}.carryover_amount`);
     carryover_amount = assertFiniteNumber(row.carryover_amount, `${p}.carryover_amount`);
     if (!Number.isInteger(carryover_amount) || carryover_amount < 0) {
@@ -196,7 +214,7 @@ function validateBudgetPeriod(
   }
 
   let adjustment_amount = 0;
-  if (backupVersion === '6') {
+  if (backupVersion === '6' || backupVersion === '7') {
     if (!('adjustment_amount' in row)) fail(`${p}.adjustment_amount`);
     adjustment_amount = assertFiniteNumber(row.adjustment_amount, `${p}.adjustment_amount`);
     if (!Number.isInteger(adjustment_amount)) fail(`${p}.adjustment_amount`);
@@ -204,7 +222,7 @@ function validateBudgetPeriod(
   // v1–v5: always default adjustment_amount to 0 (ignore any stray field)
 
   let envelope_source_id: number | null = null;
-  if (backupVersion === '5' || backupVersion === '6') {
+  if (backupVersion === '5' || backupVersion === '6' || backupVersion === '7') {
     if (!('envelope_source_id' in row)) fail(`${p}.envelope_source_id`);
     if (row.envelope_source_id !== null && row.envelope_source_id !== undefined) {
       envelope_source_id = assertFiniteNumber(row.envelope_source_id, `${p}.envelope_source_id`);
@@ -243,6 +261,58 @@ function validateBudgetPeriod(
     carryover_amount,
     adjustment_amount,
     envelope_source_id,
+    created_at,
+    updated_at,
+  };
+}
+
+function validateTrackedSourcePeriod(
+  row: unknown,
+  index: number,
+): ValidTrackedSourcePeriod {
+  const p = `tracked_source_periods[${index}]`;
+  if (!isPlainObject(row)) fail(p);
+
+  const period_start = assertString(row.period_start, `${p}.period_start`);
+  const period_end = assertString(row.period_end, `${p}.period_end`);
+  if (!DATE_ONLY_RE.test(period_start)) fail(`${p}.period_start`);
+  if (!DATE_ONLY_RE.test(period_end)) fail(`${p}.period_end`);
+
+  let opening_balance: number | null = null;
+  if (row.opening_balance !== null && row.opening_balance !== undefined) {
+    opening_balance = assertFiniteNumber(row.opening_balance, `${p}.opening_balance`);
+    if (!Number.isInteger(opening_balance)) fail(`${p}.opening_balance`);
+  }
+
+  if (!('adjustment_amount' in row)) fail(`${p}.adjustment_amount`);
+  const adjustment_amount = assertFiniteNumber(
+    row.adjustment_amount,
+    `${p}.adjustment_amount`,
+  );
+  if (!Number.isInteger(adjustment_amount)) fail(`${p}.adjustment_amount`);
+
+  try {
+    validateCalendarMonthPeriodBounds(period_start, period_end);
+  } catch {
+    fail(`${p}.bounds`);
+  }
+
+  const created_at =
+    row.created_at === undefined || row.created_at === null
+      ? '1970-01-01 00:00:00'
+      : assertString(row.created_at, `${p}.created_at`);
+  const updated_at =
+    row.updated_at === undefined || row.updated_at === null
+      ? created_at
+      : assertString(row.updated_at, `${p}.updated_at`);
+
+  return {
+    id: assertIntegerId(row.id, `${p}.id`),
+    source_id: assertIntegerId(row.source_id, `${p}.source_id`),
+    period_start,
+    period_end,
+    opening_balance,
+    adjustment_amount,
     created_at,
     updated_at,
   };
@@ -337,7 +407,8 @@ export function validateBackupPayload(raw: unknown): ValidatedBackup {
     raw.backupVersion !== '3' &&
     raw.backupVersion !== '4' &&
     raw.backupVersion !== '5' &&
-    raw.backupVersion !== '6'
+    raw.backupVersion !== '6' &&
+    raw.backupVersion !== '7'
   ) {
     fail('backupVersion');
   }
@@ -351,10 +422,25 @@ export function validateBackupPayload(raw: unknown): ValidatedBackup {
     fail('payers');
   }
 
-  if (backupVersion === '4' || backupVersion === '5' || backupVersion === '6') {
+  if (
+    backupVersion === '4' ||
+    backupVersion === '5' ||
+    backupVersion === '6' ||
+    backupVersion === '7'
+  ) {
     if (!Array.isArray(raw.budget_periods)) fail('budget_periods');
   } else if (raw.budget_periods !== undefined && raw.budget_periods !== null && !Array.isArray(raw.budget_periods)) {
     fail('budget_periods');
+  }
+
+  if (backupVersion === '7') {
+    if (!Array.isArray(raw.tracked_source_periods)) fail('tracked_source_periods');
+  } else if (
+    raw.tracked_source_periods !== undefined &&
+    raw.tracked_source_periods !== null &&
+    !Array.isArray(raw.tracked_source_periods)
+  ) {
+    fail('tracked_source_periods');
   }
 
   const categories = raw.categories.map((row, i) => validateCategory(row, i, backupVersion));
@@ -366,7 +452,12 @@ export function validateBackupPayload(raw: unknown): ValidatedBackup {
   assertUniqueIds(transactions.map((t) => t.id), 'transactions');
 
   let budget_periods: ValidBudgetPeriod[] = [];
-  if (backupVersion === '4' || backupVersion === '5' || backupVersion === '6') {
+  if (
+    backupVersion === '4' ||
+    backupVersion === '5' ||
+    backupVersion === '6' ||
+    backupVersion === '7'
+  ) {
     budget_periods = (raw.budget_periods as unknown[]).map((row, i) =>
       validateBudgetPeriod(row, i, backupVersion),
     );
@@ -375,6 +466,20 @@ export function validateBackupPayload(raw: unknown): ValidatedBackup {
     for (let i = 0; i < budget_periods.length; i++) {
       const key = `${budget_periods[i].budget_key}\0${budget_periods[i].period_start}`;
       if (periodKeys.has(key)) fail(`budget_periods[${i}].duplicate`);
+      periodKeys.add(key);
+    }
+  }
+
+  let tracked_source_periods: ValidTrackedSourcePeriod[] = [];
+  if (backupVersion === '7') {
+    tracked_source_periods = (raw.tracked_source_periods as unknown[]).map((row, i) =>
+      validateTrackedSourcePeriod(row, i),
+    );
+    assertUniqueIds(tracked_source_periods.map((b) => b.id), 'tracked_source_periods');
+    const periodKeys = new Set<string>();
+    for (let i = 0; i < tracked_source_periods.length; i++) {
+      const key = `${tracked_source_periods[i].source_id}\0${tracked_source_periods[i].period_start}`;
+      if (periodKeys.has(key)) fail(`tracked_source_periods[${i}].duplicate`);
       periodKeys.add(key);
     }
   }
@@ -390,5 +495,14 @@ export function validateBackupPayload(raw: unknown): ValidatedBackup {
     streak = validateStreak(raw.streak);
   }
 
-  return { backupVersion, transactions, categories, sources, payers, budget_periods, streak };
+  return {
+    backupVersion,
+    transactions,
+    categories,
+    sources,
+    payers,
+    budget_periods,
+    tracked_source_periods,
+    streak,
+  };
 }

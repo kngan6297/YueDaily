@@ -142,4 +142,12 @@ describe('P1.5.2 source archive', () => {
       assert.match(txBlocked.reason, /lưu trữ/i);
     }
   });
+
+  it('source with tracked_source_periods ref cannot be deleted', () => {
+    const blocked = sourceDeleteGuard(0, 0, 1);
+    assert.equal(blocked.ok, false);
+    if (!blocked.ok) {
+      assert.match(blocked.reason, /số dư|theo dõi/i);
+    }
+  });
 });

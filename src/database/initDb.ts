@@ -25,6 +25,7 @@ export async function runSchemaMigrationsOn(database: SQLite.SQLiteDatabase): Pr
   await migrateSourcesSchema(database);
   await migrateCategoriesBudgetGroupSchema(database);
   await migrateBudgetPeriodsSchema(database);
+  await migrateTrackedSourcePeriodsSchema(database);
   await runP16TrustedBackfillIfNeeded(database);
   await runFirstPeriodBudgetSeedsIfNeeded(database);
   await database.execAsync(`
@@ -96,6 +97,7 @@ export async function initializeDatabaseOn(database: SQLite.SQLiteDatabase): Pro
   await migrateSourcesSchema(database);
   await migrateCategoriesBudgetGroupSchema(database);
   await migrateBudgetPeriodsSchema(database);
+  await migrateTrackedSourcePeriodsSchema(database);
 
   // P1.6A one-time trusted backfill for pre-P1.6 DB lineage (marker-guarded)
   await runP16TrustedBackfillIfNeeded(database);
@@ -199,6 +201,29 @@ async function migrateBudgetPeriodsSchema(database: SQLite.SQLiteDatabase): Prom
       `ALTER TABLE budget_periods ADD COLUMN envelope_source_id INTEGER;`,
     );
   }
+}
+
+/**
+ * Calendar-month tracked-source balance periods (e.g. VPBank).
+ * opening_balance nullable — never auto-carry from prior month.
+ */
+async function migrateTrackedSourcePeriodsSchema(
+  database: SQLite.SQLiteDatabase,
+): Promise<void> {
+  await database.execAsync(`
+    CREATE TABLE IF NOT EXISTS tracked_source_periods (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_id          INTEGER NOT NULL,
+      period_start       TEXT    NOT NULL,
+      period_end         TEXT    NOT NULL,
+      opening_balance    INTEGER,
+      adjustment_amount  INTEGER NOT NULL DEFAULT 0,
+      created_at         TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+      updated_at         TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+      UNIQUE (source_id, period_start),
+      FOREIGN KEY (source_id) REFERENCES sources(id)
+    );
+  `);
 }
 
 /** Exact-name spending_group for known current sources. Safe after v1/v2 restore. */

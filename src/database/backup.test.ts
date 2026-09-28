@@ -158,15 +158,50 @@ function minimalV6Backup(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function minimalV7Backup(overrides: Record<string, unknown> = {}) {
+  return {
+    ...minimalV6Backup(),
+    backupVersion: '7',
+    sources: [
+      {
+        id: 7,
+        name: 'Woori · Quỹ ăn',
+        is_active: 1,
+        spending_group: 'household',
+      },
+      {
+        id: 2,
+        name: 'VPBank',
+        is_active: 1,
+        spending_group: 'personal_yue',
+      },
+    ],
+    tracked_source_periods: [
+      {
+        id: 1,
+        source_id: 2,
+        period_start: '2026-09-01',
+        period_end: '2026-09-30',
+        opening_balance: 5_000_000,
+        adjustment_amount: 138,
+        created_at: '2026-09-01 00:00:00',
+        updated_at: '2026-09-01 00:00:00',
+      },
+    ],
+    ...overrides,
+  };
+}
+
 describe('backup validation v6', () => {
-  it('CURRENT_BACKUP_VERSION is 6', () => {
-    assert.equal(CURRENT_BACKUP_VERSION, '6');
+  it('CURRENT_BACKUP_VERSION is 7', () => {
+    assert.equal(CURRENT_BACKUP_VERSION, '7');
   });
 
   it('accepts v1/v2/v3 without budget_periods', () => {
     const v1 = validateBackupPayload(minimalV3Backup({ backupVersion: '1' }));
     assert.equal(v1.backupVersion, '1');
     assert.deepEqual(v1.budget_periods, []);
+    assert.deepEqual(v1.tracked_source_periods, []);
     const v2 = validateBackupPayload(minimalV3Backup({ backupVersion: '2' }));
     assert.equal(v2.backupVersion, '2');
     const v3 = validateBackupPayload(minimalV3Backup());
@@ -310,11 +345,12 @@ describe('backup validation v6', () => {
     );
   });
 
-  it('v1–v4 may run first-period seeds after restore; v5/v6 must not', () => {
+  it('v1–v4 may run first-period seeds after restore; v5+ must not', () => {
     assert.equal(shouldRunFirstPeriodBudgetSeedsAfterRestore('1'), true);
     assert.equal(shouldRunFirstPeriodBudgetSeedsAfterRestore('4'), true);
     assert.equal(shouldRunFirstPeriodBudgetSeedsAfterRestore('5'), false);
     assert.equal(shouldRunFirstPeriodBudgetSeedsAfterRestore('6'), false);
+    assert.equal(shouldRunFirstPeriodBudgetSeedsAfterRestore('7'), false);
   });
 
   it('v5 rejects duplicate budget_key + period_start', () => {
@@ -339,6 +375,98 @@ describe('backup validation v6', () => {
               limit_amount: 8_000_000,
               carryover_amount: 0,
               envelope_source_id: 7,
+            },
+          ],
+        }),
+      ),
+    );
+  });
+});
+
+describe('backup validation v7 tracked_source_periods', () => {
+  it('v6 restores with empty tracked_source_periods (lazy create later)', () => {
+    const parsed = validateBackupPayload(minimalV6Backup());
+    assert.deepEqual(parsed.tracked_source_periods, []);
+  });
+
+  it('v7 preserves tracked_source_periods exactly including null opening', () => {
+    const parsed = validateBackupPayload(minimalV7Backup());
+    assert.equal(parsed.backupVersion, '7');
+    assert.equal(parsed.tracked_source_periods.length, 1);
+    assert.equal(parsed.tracked_source_periods[0].source_id, 2);
+    assert.equal(parsed.tracked_source_periods[0].opening_balance, 5_000_000);
+    assert.equal(parsed.tracked_source_periods[0].adjustment_amount, 138);
+    assert.equal(parsed.tracked_source_periods[0].period_start, '2026-09-01');
+    assert.equal(parsed.tracked_source_periods[0].period_end, '2026-09-30');
+
+    const withNull = validateBackupPayload(
+      minimalV7Backup({
+        tracked_source_periods: [
+          {
+            id: 1,
+            source_id: 2,
+            period_start: '2026-10-01',
+            period_end: '2026-10-31',
+            opening_balance: null,
+            adjustment_amount: 0,
+            created_at: '2026-10-01 00:00:00',
+            updated_at: '2026-10-01 00:00:00',
+          },
+        ],
+      }),
+    );
+    assert.equal(withNull.tracked_source_periods[0].opening_balance, null);
+    assert.equal(withNull.tracked_source_periods[0].adjustment_amount, 0);
+  });
+
+  it('v7 requires tracked_source_periods array', () => {
+    assert.throws(() =>
+      validateBackupPayload({
+        ...minimalV7Backup(),
+        tracked_source_periods: undefined,
+      }),
+    );
+  });
+
+  it('v7 rejects non-calendar-month bounds', () => {
+    assert.throws(() =>
+      validateBackupPayload(
+        minimalV7Backup({
+          tracked_source_periods: [
+            {
+              id: 1,
+              source_id: 2,
+              period_start: '2026-09-05',
+              period_end: '2026-10-04',
+              opening_balance: 0,
+              adjustment_amount: 0,
+            },
+          ],
+        }),
+      ),
+    );
+  });
+
+  it('v7 rejects duplicate source_id + period_start', () => {
+    assert.throws(() =>
+      validateBackupPayload(
+        minimalV7Backup({
+          tracked_source_periods: [
+            {
+              id: 1,
+              source_id: 2,
+              period_start: '2026-09-01',
+              period_end: '2026-09-30',
+              opening_balance: 1,
+              adjustment_amount: 0,
+            },
+            {
+              id: 2,
+              source_id: 2,
+              period_start: '2026-09-01',
+              period_end: '2026-09-30',
+              opening_balance: 2,
+              adjustment_amount: 0,
             },
           ],
         }),
