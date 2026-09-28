@@ -9,6 +9,10 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { HouseholdFoodBudgetCard } from '../../components/budget/HouseholdFoodBudgetCard';
+import { HouseholdFoodBudgetDetailSheet } from '../../components/budget/HouseholdFoodBudgetDetailSheet';
+import { VpBankBalanceCard } from '../../components/budget/VpBankBalanceCard';
+import { VpBankBalanceDetailSheet } from '../../components/budget/VpBankBalanceDetailSheet';
 import {
   BorderRadius,
   Spacing,
@@ -17,7 +21,18 @@ import {
   Typography,
 } from '../../constants/theme';
 import { useAppTheme } from '../../context/ThemeContext';
+import {
+  ensureContinuingHouseholdFoodBudgetPeriod,
+  loadHouseholdFoodBudgetHomeCard,
+  type HouseholdFoodBudgetHomeCardData,
+} from '../../database/householdFoodBudgetRead';
+import {
+  ensureVpBankBalancePeriod,
+  loadVpBankBalanceHomeCard,
+  type VpBankBalanceHomeCardData,
+} from '../../database/trackedSourceBalanceRead';
 import { getAccountSummary, getSourceBalances } from '../../database/transactions';
+import { todayLocal } from '../../utils/date';
 
 type Period = 'month' | 'year' | 'all';
 
@@ -39,6 +54,45 @@ export default function AccountsScreen() {
   const [sources, setSources] = useState<
     Array<{ source_id: number | null; source_name: string; chi: number }>
   >([]);
+  const [budgetCard, setBudgetCard] = useState<HouseholdFoodBudgetHomeCardData | null>(null);
+  const [budgetLoading, setBudgetLoading] = useState(true);
+  const [budgetDetailVisible, setBudgetDetailVisible] = useState(false);
+  const [budgetDetailPeriodId, setBudgetDetailPeriodId] = useState<number | null>(null);
+  const [vpBankCard, setVpBankCard] = useState<VpBankBalanceHomeCardData | null>(null);
+  const [vpBankLoading, setVpBankLoading] = useState(true);
+  const [vpBankDetailVisible, setVpBankDetailVisible] = useState(false);
+  const [vpBankDetailPeriodId, setVpBankDetailPeriodId] = useState<number | null>(null);
+  const [vpBankPreferOpeningEdit, setVpBankPreferOpeningEdit] = useState(false);
+
+  const loadBudgetCard = useCallback(async () => {
+    setBudgetLoading(true);
+    try {
+      const referenceDate = todayLocal();
+      await ensureContinuingHouseholdFoodBudgetPeriod(referenceDate);
+      const card = await loadHouseholdFoodBudgetHomeCard(referenceDate);
+      setBudgetCard(card);
+    } catch (err) {
+      console.error(err);
+      setBudgetCard(null);
+    } finally {
+      setBudgetLoading(false);
+    }
+  }, []);
+
+  const loadVpBankCard = useCallback(async () => {
+    setVpBankLoading(true);
+    try {
+      const referenceDate = todayLocal();
+      await ensureVpBankBalancePeriod(referenceDate);
+      const card = await loadVpBankBalanceHomeCard(referenceDate);
+      setVpBankCard(card);
+    } catch (err) {
+      console.error(err);
+      setVpBankCard(null);
+    } finally {
+      setVpBankLoading(false);
+    }
+  }, []);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -56,7 +110,28 @@ export default function AccountsScreen() {
     }
   }, [period]);
 
-  useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+      loadBudgetCard();
+      loadVpBankCard();
+    }, [loadData, loadBudgetCard, loadVpBankCard])
+  );
+
+  const openBudgetDetail = useCallback(() => {
+    const periodId = budgetCard?.period?.id ?? budgetCard?.upcomingPeriod?.id ?? null;
+    if (!periodId) return;
+    setBudgetDetailPeriodId(periodId);
+    setBudgetDetailVisible(true);
+  }, [budgetCard]);
+
+  const openVpBankDetail = useCallback((preferOpening = false) => {
+    const periodId = vpBankCard?.period?.id ?? null;
+    if (!periodId) return;
+    setVpBankDetailPeriodId(periodId);
+    setVpBankPreferOpeningEdit(preferOpening);
+    setVpBankDetailVisible(true);
+  }, [vpBankCard]);
 
   const periodLabel = PERIODS.find((p) => p.id === period)?.label ?? '';
 
@@ -65,7 +140,7 @@ export default function AccountsScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>💳 Chi theo nguồn chi</Text>
+          <Text style={styles.headerTitle}>Tài khoản & Quỹ</Text>
           <TouchableOpacity
             style={styles.addBtn}
             onPress={() => router.push('/camera')}
@@ -73,6 +148,24 @@ export default function AccountsScreen() {
           >
             <Text style={styles.addBtnText}>+ Thêm</Text>
           </TouchableOpacity>
+        </View>
+
+        <View style={styles.fundSection}>
+          <HouseholdFoodBudgetCard
+            data={budgetCard}
+            loading={budgetLoading}
+            onPress={
+              budgetCard?.period || budgetCard?.upcomingPeriod ? openBudgetDetail : undefined
+            }
+          />
+          <VpBankBalanceCard
+            data={vpBankCard}
+            loading={vpBankLoading}
+            onPress={vpBankCard?.period ? () => openVpBankDetail(false) : undefined}
+            onEnterOpeningBalance={
+              vpBankCard?.period ? () => openVpBankDetail(true) : undefined
+            }
+          />
         </View>
 
         <View style={styles.periodRow}>
@@ -139,6 +232,23 @@ export default function AccountsScreen() {
 
         <View style={{ height: 24 }} />
       </ScrollView>
+
+      <HouseholdFoodBudgetDetailSheet
+        visible={budgetDetailVisible}
+        periodId={budgetDetailPeriodId}
+        onClose={() => setBudgetDetailVisible(false)}
+        onUpdated={loadBudgetCard}
+      />
+      <VpBankBalanceDetailSheet
+        visible={vpBankDetailVisible}
+        periodId={vpBankDetailPeriodId}
+        preferOpeningEdit={vpBankPreferOpeningEdit}
+        onClose={() => {
+          setVpBankDetailVisible(false);
+          setVpBankPreferOpeningEdit(false);
+        }}
+        onUpdated={loadVpBankCard}
+      />
     </SafeAreaView>
   );
 }
@@ -170,6 +280,10 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
       color: colors.action.primaryText,
       fontSize: Typography.fontSize.sm,
       fontWeight: '700',
+    },
+
+    fundSection: {
+      gap: Spacing.sm,
     },
 
     periodRow: {

@@ -20,21 +20,7 @@ import {
 import { BorderRadius, Spacing, ThemeColors, ThemeShadows, Typography } from '../../constants/theme';
 import { useAppTheme } from '../../context/ThemeContext';
 import { BottomSheetModal } from '../../components/ui/BottomSheetModal';
-import { HouseholdFoodBudgetCard } from '../../components/budget/HouseholdFoodBudgetCard';
-import { HouseholdFoodBudgetDetailSheet } from '../../components/budget/HouseholdFoodBudgetDetailSheet';
-import { VpBankBalanceCard } from '../../components/budget/VpBankBalanceCard';
-import { VpBankBalanceDetailSheet } from '../../components/budget/VpBankBalanceDetailSheet';
 import { useModalBottomInset } from '../../hooks/useModalBottomInset';
-import {
-  ensureContinuingHouseholdFoodBudgetPeriod,
-  loadHouseholdFoodBudgetHomeCard,
-  type HouseholdFoodBudgetHomeCardData,
-} from '../../database/householdFoodBudgetRead';
-import {
-  ensureVpBankBalancePeriod,
-  loadVpBankBalanceHomeCard,
-  type VpBankBalanceHomeCardData,
-} from '../../database/trackedSourceBalanceRead';
 import {
   HOME_SPEND_VIEW_OPTIONS,
   spendingGroupForHomeSpendView,
@@ -46,7 +32,7 @@ import {
 } from '../../database/transactions';
 import type { Transaction } from '../../types';
 import { EXPENSE_AUDIENCE_LABELS } from '../../types';
-import { formatDateVi, todayLocal } from '../../utils/date';
+import { formatDateVi } from '../../utils/date';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const CELL_SIZE = Math.floor((SCREEN_W - Spacing.base * 2 - Spacing.xs * 6) / 7);
@@ -99,45 +85,6 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [monthTxns, setMonthTxns] = useState<TxnWithMeta[]>([]);
   const [spendView, setSpendView] = useState<HomeSpendView>('all');
-  const [budgetCard, setBudgetCard] = useState<HouseholdFoodBudgetHomeCardData | null>(null);
-  const [budgetLoading, setBudgetLoading] = useState(true);
-  const [budgetDetailVisible, setBudgetDetailVisible] = useState(false);
-  const [budgetDetailPeriodId, setBudgetDetailPeriodId] = useState<number | null>(null);
-  const [vpBankCard, setVpBankCard] = useState<VpBankBalanceHomeCardData | null>(null);
-  const [vpBankLoading, setVpBankLoading] = useState(true);
-  const [vpBankDetailVisible, setVpBankDetailVisible] = useState(false);
-  const [vpBankDetailPeriodId, setVpBankDetailPeriodId] = useState<number | null>(null);
-  const [vpBankPreferOpeningEdit, setVpBankPreferOpeningEdit] = useState(false);
-
-  const loadBudgetCard = useCallback(async () => {
-    setBudgetLoading(true);
-    try {
-      const referenceDate = todayLocal();
-      await ensureContinuingHouseholdFoodBudgetPeriod(referenceDate);
-      const card = await loadHouseholdFoodBudgetHomeCard(referenceDate);
-      setBudgetCard(card);
-    } catch (err) {
-      console.error(err);
-      setBudgetCard(null);
-    } finally {
-      setBudgetLoading(false);
-    }
-  }, []);
-
-  const loadVpBankCard = useCallback(async () => {
-    setVpBankLoading(true);
-    try {
-      const referenceDate = todayLocal();
-      await ensureVpBankBalancePeriod(referenceDate);
-      const card = await loadVpBankBalanceHomeCard(referenceDate);
-      setVpBankCard(card);
-    } catch (err) {
-      console.error(err);
-      setVpBankCard(null);
-    } finally {
-      setVpBankLoading(false);
-    }
-  }, []);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -155,25 +102,8 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       loadData();
-      loadBudgetCard();
-      loadVpBankCard();
-    }, [loadData, loadBudgetCard, loadVpBankCard])
+    }, [loadData])
   );
-
-  const openBudgetDetail = useCallback(() => {
-    const periodId = budgetCard?.period?.id ?? budgetCard?.upcomingPeriod?.id ?? null;
-    if (!periodId) return;
-    setBudgetDetailPeriodId(periodId);
-    setBudgetDetailVisible(true);
-  }, [budgetCard]);
-
-  const openVpBankDetail = useCallback((preferOpening = false) => {
-    const periodId = vpBankCard?.period?.id ?? null;
-    if (!periodId) return;
-    setVpBankDetailPeriodId(periodId);
-    setVpBankPreferOpeningEdit(preferOpening);
-    setVpBankDetailVisible(true);
-  }, [vpBankCard]);
 
   const monthSummary = useMemo(() => ({
     chi: monthTxns.filter((t) => t.type === 'chi').reduce((s, t) => s + t.amount, 0),
@@ -260,12 +190,11 @@ export default function HomeScreen() {
           onPress: async () => {
             await deleteTransaction(id);
             await loadData();
-            await loadBudgetCard();
           },
         },
       ]
     );
-  }, [loadData, loadBudgetCard]);
+  }, [loadData]);
 
   // Build calendar cells array
   const calCells: (number | null)[] = [
@@ -397,29 +326,10 @@ export default function HomeScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>{getGreeting()}</Text>
+          <Text style={styles.monthSummaryLine}>
+            Tháng {calMonth} · Đã chi {fmt(monthSummary.chi)}đ
+          </Text>
         </View>
-        <View style={styles.summaryCards}>
-          <View style={[styles.summaryCard, styles.summaryCardChi]}>
-            <Text style={styles.summaryCardLabel}>Tổng chi tháng này</Text>
-            <Text style={[styles.summaryCardAmt, styles.expenseText]}>{fmt(monthSummary.chi)}đ</Text>
-          </View>
-        </View>
-        <HouseholdFoodBudgetCard
-          data={budgetCard}
-          loading={budgetLoading}
-          onPress={
-            budgetCard?.period || budgetCard?.upcomingPeriod ? openBudgetDetail : undefined
-          }
-        />
-        <View style={{ height: Spacing.sm }} />
-        <VpBankBalanceCard
-          data={vpBankCard}
-          loading={vpBankLoading}
-          onPress={vpBankCard?.period ? () => openVpBankDetail(false) : undefined}
-          onEnterOpeningBalance={
-            vpBankCard?.period ? () => openVpBankDetail(true) : undefined
-          }
-        />
         <View style={styles.filterRow}>
           {HOME_SPEND_VIEW_OPTIONS.map((opt) => {
             const active = spendView === opt.id;
@@ -572,23 +482,6 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
       </BottomSheetModal>
-
-      <HouseholdFoodBudgetDetailSheet
-        visible={budgetDetailVisible}
-        periodId={budgetDetailPeriodId}
-        onClose={() => setBudgetDetailVisible(false)}
-        onUpdated={loadBudgetCard}
-      />
-      <VpBankBalanceDetailSheet
-        visible={vpBankDetailVisible}
-        periodId={vpBankDetailPeriodId}
-        preferOpeningEdit={vpBankPreferOpeningEdit}
-        onClose={() => {
-          setVpBankDetailVisible(false);
-          setVpBankPreferOpeningEdit(false);
-        }}
-        onUpdated={loadVpBankCard}
-      />
     </SafeAreaView>
   );
 }
@@ -609,28 +502,11 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     fontWeight: '800',
     color: colors.neutral[700],
   },
-  summaryCards: {
-    marginTop: Spacing.xs,
-  },
-  summaryCard: {
-    borderRadius: BorderRadius.xl,
-    paddingHorizontal: Spacing.base,
-    paddingVertical: Spacing.md,
-    gap: 2,
-  },
-  summaryCardChi: {
-    backgroundColor: colors.background.surface,
-    borderWidth: 1,
-    borderColor: colors.ui.cardBorder,
-  },
-  summaryCardLabel: {
-    fontSize: Typography.fontSize.xs,
-    color: colors.neutral[400],
+  monthSummaryLine: {
+    marginTop: 2,
+    fontSize: Typography.fontSize.sm,
     fontWeight: '600',
-  },
-  summaryCardAmt: {
-    fontSize: Typography.fontSize.xl,
-    fontWeight: '800',
+    color: colors.neutral[400],
   },
   expenseText: { color: colors.pink[500] },
 
