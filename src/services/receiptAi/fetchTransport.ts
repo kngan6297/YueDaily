@@ -1,30 +1,10 @@
 import { RECEIPT_AI_TIMEOUT_MS } from './config';
+import {
+  classifyTransportFailure as classifySharedTransportFailure,
+  describeFetchThrow,
+} from '../ai/fetchTransport';
 
-/** Safe classification of a fetch() throw — never includes message text. */
-export function describeFetchThrow(err: unknown): {
-  errorName: string;
-  category: string;
-  aborted: boolean;
-  messageLen: number;
-} {
-  const name =
-    err && typeof err === 'object' && 'name' in err && (err as { name?: unknown }).name != null
-      ? String((err as { name: unknown }).name)
-      : 'Error';
-  const messageLen =
-    err instanceof Error
-      ? err.message.length
-      : typeof err === 'string'
-        ? err.length
-        : 0;
-  const aborted = name === 'AbortError';
-  let category = 'unknown';
-  if (aborted) category = 'abort';
-  else if (name === 'TypeError') category = 'type_error';
-  else if (name === 'DOMException') category = 'dom_exception';
-  else if (name === 'Error') category = 'error';
-  return { errorName: name, category, aborted, messageLen };
-}
+export { describeFetchThrow };
 
 /**
  * RN may throw TypeError after AbortController fires instead of AbortError.
@@ -36,9 +16,10 @@ export function classifyTransportFailure(opts: {
   abortedByTimeout: boolean;
   timeoutMs?: number;
 }): 'timeout' | 'network_error' {
-  const timeoutMs = opts.timeoutMs ?? RECEIPT_AI_TIMEOUT_MS;
-  const desc = describeFetchThrow(opts.err);
-  if (opts.abortedByTimeout || desc.aborted) return 'timeout';
-  if (opts.durationMs >= timeoutMs - 500) return 'timeout';
-  return 'network_error';
+  return classifySharedTransportFailure({
+    err: opts.err,
+    durationMs: opts.durationMs,
+    abortedByTimeout: opts.abortedByTimeout,
+    timeoutMs: opts.timeoutMs ?? RECEIPT_AI_TIMEOUT_MS,
+  });
 }

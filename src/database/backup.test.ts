@@ -192,9 +192,54 @@ function minimalV7Backup(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function minimalV8Backup(overrides: Record<string, unknown> = {}) {
+  return {
+    ...minimalV7Backup(),
+    backupVersion: '8',
+    ai_chat_threads: [
+      {
+        id: 1,
+        title: 'Tháng này tiêu gì?',
+        anchor_year: 2026,
+        anchor_month: 9,
+        context_json: '{"lastReferencedTransactionIds":[10]}',
+        created_at: '2026-09-15 10:00:00',
+        updated_at: '2026-09-15 10:05:00',
+      },
+    ],
+    ai_chat_messages: [
+      {
+        id: 1,
+        thread_id: 1,
+        role: 'user',
+        content: 'Tháng này tiêu gì nhiều nhất?',
+        created_at: '2026-09-15 10:00:00',
+      },
+      {
+        id: 2,
+        thread_id: 1,
+        role: 'assistant',
+        content: '{"v":1,"answer":"Mua sắm nhiều nhất.","evidenceTransactionIds":[10],"followUps":[]}',
+        created_at: '2026-09-15 10:00:05',
+      },
+    ],
+    ai_saved_prompts: [
+      {
+        id: 1,
+        title: 'Câu hỏi ghim',
+        body: 'Chi trà sữa tháng này?',
+        sort_order: 0,
+        created_at: '2026-09-10 00:00:00',
+        updated_at: '2026-09-10 00:00:00',
+      },
+    ],
+    ...overrides,
+  };
+}
+
 describe('backup validation v6', () => {
-  it('CURRENT_BACKUP_VERSION is 7', () => {
-    assert.equal(CURRENT_BACKUP_VERSION, '7');
+  it('CURRENT_BACKUP_VERSION is 8', () => {
+    assert.equal(CURRENT_BACKUP_VERSION, '8');
   });
 
   it('accepts v1/v2/v3 without budget_periods', () => {
@@ -351,6 +396,7 @@ describe('backup validation v6', () => {
     assert.equal(shouldRunFirstPeriodBudgetSeedsAfterRestore('5'), false);
     assert.equal(shouldRunFirstPeriodBudgetSeedsAfterRestore('6'), false);
     assert.equal(shouldRunFirstPeriodBudgetSeedsAfterRestore('7'), false);
+    assert.equal(shouldRunFirstPeriodBudgetSeedsAfterRestore('8'), false);
   });
 
   it('v5 rejects duplicate budget_key + period_start', () => {
@@ -472,5 +518,106 @@ describe('backup validation v7 tracked_source_periods', () => {
         }),
       ),
     );
+  });
+});
+
+describe('backup validation v8 ai chat', () => {
+  it('v1–v7 restore yields empty chat tables', () => {
+    for (const parsed of [
+      validateBackupPayload(minimalV3Backup({ backupVersion: '1' })),
+      validateBackupPayload(minimalV6Backup()),
+      validateBackupPayload(minimalV7Backup()),
+    ]) {
+      assert.deepEqual(parsed.ai_chat_threads, []);
+      assert.deepEqual(parsed.ai_chat_messages, []);
+      assert.deepEqual(parsed.ai_saved_prompts, []);
+    }
+  });
+
+  it('v8 round-trip preserves chat threads, messages, saved prompts', () => {
+    const parsed = validateBackupPayload(minimalV8Backup());
+    assert.equal(parsed.backupVersion, '8');
+    assert.equal(parsed.ai_chat_threads.length, 1);
+    assert.equal(parsed.ai_chat_threads[0].anchor_year, 2026);
+    assert.equal(parsed.ai_chat_threads[0].anchor_month, 9);
+    assert.equal(parsed.ai_chat_messages.length, 2);
+    assert.equal(parsed.ai_chat_messages[0].role, 'user');
+    assert.equal(parsed.ai_saved_prompts.length, 1);
+    assert.equal(parsed.ai_saved_prompts[0].title, 'Câu hỏi ghim');
+    // v7 tracked source still required
+    assert.equal(parsed.tracked_source_periods.length, 1);
+  });
+
+  it('v8 requires chat arrays', () => {
+    assert.throws(() =>
+      validateBackupPayload({
+        ...minimalV8Backup(),
+        ai_chat_threads: undefined,
+      }),
+    );
+    assert.throws(() =>
+      validateBackupPayload({
+        ...minimalV8Backup(),
+        ai_chat_messages: undefined,
+      }),
+    );
+    assert.throws(() =>
+      validateBackupPayload({
+        ...minimalV8Backup(),
+        ai_saved_prompts: undefined,
+      }),
+    );
+  });
+
+  it('v8 rejects message with unknown thread_id', () => {
+    assert.throws(() =>
+      validateBackupPayload(
+        minimalV8Backup({
+          ai_chat_messages: [
+            {
+              id: 1,
+              thread_id: 99,
+              role: 'user',
+              content: 'orphan',
+              created_at: '2026-09-15 10:00:00',
+            },
+          ],
+        }),
+      ),
+    );
+  });
+
+  it('v8 rejects context_json with secrets markers', () => {
+    assert.throws(() =>
+      validateBackupPayload(
+        minimalV8Backup({
+          ai_chat_threads: [
+            {
+              id: 1,
+              title: 'x',
+              anchor_year: 2026,
+              anchor_month: 9,
+              context_json: '{"api_key":"secret"}',
+              created_at: '2026-09-15 10:00:00',
+              updated_at: '2026-09-15 10:00:00',
+            },
+          ],
+          ai_chat_messages: [],
+        }),
+      ),
+    );
+  });
+
+  it('v8 accepts empty chat tables', () => {
+    const parsed = validateBackupPayload(
+      minimalV8Backup({
+        ai_chat_threads: [],
+        ai_chat_messages: [],
+        ai_saved_prompts: [],
+      }),
+    );
+    assert.deepEqual(parsed.ai_chat_threads, []);
+    assert.deepEqual(parsed.ai_chat_messages, []);
+    assert.deepEqual(parsed.ai_saved_prompts, []);
   });
 });

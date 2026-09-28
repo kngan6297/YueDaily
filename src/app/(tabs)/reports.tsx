@@ -1,5 +1,5 @@
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -333,6 +333,7 @@ function TransactionList({
 
 // ─── Main Screen ─────────────────────────────────────────────
 export default function ReportsScreen() {
+  const router = useRouter();
   const { colors, shadows } = useAppTheme();
   const styles = useMemo(() => createStyles(colors, shadows), [colors, shadows]);
   const now = new Date();
@@ -649,6 +650,20 @@ export default function ReportsScreen() {
                   </Text>
                 )}
               </View>
+              <TouchableOpacity
+                style={styles.aiChatCta}
+                onPress={() => {
+                  const y = period === 'month' ? navYear : now.getFullYear();
+                  const m = period === 'month' ? navMonth : now.getMonth() + 1;
+                  router.push({
+                    pathname: '/spending-chat',
+                    params: { year: String(y), month: String(m) },
+                  });
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.aiChatCtaText}>Hỏi AI về chi tiêu</Text>
+              </TouchableOpacity>
             </View>
 
             {/* Filters */}
@@ -949,6 +964,19 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     fontSize: Typography.fontSize.xs,
     color: colors.neutral[400],
     fontWeight: '600',
+  },
+  aiChatCta: {
+    marginTop: Spacing.sm,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.action.primaryBackground,
+    borderRadius: BorderRadius.lg,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  aiChatCtaText: {
+    color: colors.action.primaryText,
+    fontSize: Typography.fontSize.sm,
+    fontWeight: '700',
   },
   expenseText: { color: colors.pink[500] },
 

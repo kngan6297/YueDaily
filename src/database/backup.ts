@@ -72,6 +72,9 @@ export interface BackupData {
   payers?: Record<string, unknown>[];
   budget_periods?: Record<string, unknown>[];
   tracked_source_periods?: Record<string, unknown>[];
+  ai_chat_threads?: Record<string, unknown>[];
+  ai_chat_messages?: Record<string, unknown>[];
+  ai_saved_prompts?: Record<string, unknown>[];
   /** v1–v3 legacy; v4 restore leaves streak table untouched */
   streak?: Record<string, unknown> | null;
 }
@@ -99,6 +102,15 @@ export async function exportBackup(): Promise<void> {
   const tracked_source_periods = await db.getAllAsync<Record<string, unknown>>(
     'SELECT * FROM tracked_source_periods ORDER BY id;'
   );
+  const ai_chat_threads = await db.getAllAsync<Record<string, unknown>>(
+    'SELECT * FROM ai_chat_threads ORDER BY id;'
+  );
+  const ai_chat_messages = await db.getAllAsync<Record<string, unknown>>(
+    'SELECT * FROM ai_chat_messages ORDER BY id;'
+  );
+  const ai_saved_prompts = await db.getAllAsync<Record<string, unknown>>(
+    'SELECT * FROM ai_saved_prompts ORDER BY id;'
+  );
 
   const backup: BackupData = {
     appVersion: '1.0.0',
@@ -110,6 +122,9 @@ export async function exportBackup(): Promise<void> {
     payers,
     budget_periods,
     tracked_source_periods,
+    ai_chat_threads,
+    ai_chat_messages,
+    ai_saved_prompts,
   };
 
   const json = JSON.stringify(backup, null, 2);
@@ -136,6 +151,10 @@ export async function applyValidatedBackupRestore(
   backup: ValidatedBackup,
 ): Promise<void> {
   await db.withTransactionAsync(async () => {
+    // Messages before threads (FK); empty chat is correct for v1–v7 restores.
+    await db.execAsync('DELETE FROM ai_chat_messages;');
+    await db.execAsync('DELETE FROM ai_chat_threads;');
+    await db.execAsync('DELETE FROM ai_saved_prompts;');
     await db.execAsync('DELETE FROM transactions;');
     await db.execAsync('DELETE FROM categories;');
     await db.execAsync('DELETE FROM sources;');
@@ -147,7 +166,8 @@ export async function applyValidatedBackupRestore(
       backup.backupVersion !== '4' &&
       backup.backupVersion !== '5' &&
       backup.backupVersion !== '6' &&
-      backup.backupVersion !== '7'
+      backup.backupVersion !== '7' &&
+      backup.backupVersion !== '8'
     ) {
       await restoreLegacyStreak(db, backup.streak);
     }
@@ -220,6 +240,48 @@ export async function applyValidatedBackupRestore(
       );
     }
 
+    for (const thread of backup.ai_chat_threads) {
+      await db.runAsync(
+        `INSERT INTO ai_chat_threads
+           (id, title, anchor_year, anchor_month, context_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?);`,
+        [
+          thread.id,
+          thread.title,
+          thread.anchor_year,
+          thread.anchor_month,
+          thread.context_json,
+          thread.created_at,
+          thread.updated_at,
+        ],
+      );
+    }
+
+    for (const msg of backup.ai_chat_messages) {
+      await db.runAsync(
+        `INSERT INTO ai_chat_messages
+           (id, thread_id, role, content, created_at)
+         VALUES (?, ?, ?, ?, ?);`,
+        [msg.id, msg.thread_id, msg.role, msg.content, msg.created_at],
+      );
+    }
+
+    for (const prompt of backup.ai_saved_prompts) {
+      await db.runAsync(
+        `INSERT INTO ai_saved_prompts
+           (id, title, body, sort_order, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?);`,
+        [
+          prompt.id,
+          prompt.title,
+          prompt.body,
+          prompt.sort_order,
+          prompt.created_at,
+          prompt.updated_at,
+        ],
+      );
+    }
+
     for (const tx of backup.transactions) {
       await db.runAsync(
         `INSERT INTO transactions
@@ -258,7 +320,8 @@ export async function applyValidatedBackupRestore(
     } else if (
       backup.backupVersion === '5' ||
       backup.backupVersion === '6' ||
-      backup.backupVersion === '7'
+      backup.backupVersion === '7' ||
+      backup.backupVersion === '8'
     ) {
       // v5+ authoritative — never let startup seeds overwrite restored values
       await markFirstPeriodBudgetSeedsComplete(db);

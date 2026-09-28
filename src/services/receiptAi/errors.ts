@@ -1,17 +1,11 @@
 import { METRO_ENV_RESTART_HINT } from './env';
+import {
+  classifyHttpFailure as classifySharedHttpFailure,
+  type AiProviderErrorKind,
+} from '../ai/errors';
 
 export type ReceiptAiErrorKind =
-  | 'missing_key'
-  | 'invalid_key'
-  | 'permission_denied'
-  | 'model_unavailable'
-  | 'rate_limited'
-  | 'quota_or_billing'
-  | 'server_error'
-  | 'network_error'
-  | 'timeout'
-  | 'invalid_response'
-  | 'all_providers_failed'
+  | AiProviderErrorKind
   | 'image_load_failed'
   | 'image_decode_failed'
   | 'image_processing_failed';
@@ -61,49 +55,7 @@ export function classifyHttpFailure(
   status: number,
   errorMessage: string,
 ): ReceiptAiErrorKind {
-  const msg = errorMessage.toLowerCase();
-
-  if (status === 401) return 'invalid_key';
-
-  if (status === 403) {
-    if (
-      msg.includes('api key') ||
-      msg.includes('invalid') ||
-      msg.includes('unauthorized')
-    ) {
-      return 'invalid_key';
-    }
-    return 'permission_denied';
-  }
-
-  if (
-    status === 404 ||
-    msg.includes('not found') ||
-    msg.includes('does not exist') ||
-    msg.includes('unsupported') ||
-    msg.includes('modality')
-  ) {
-    return 'model_unavailable';
-  }
-
-  if (status === 429 || msg.includes('rate limit') || msg.includes('too many')) {
-    return 'rate_limited';
-  }
-
-  if (
-    msg.includes('quota') ||
-    msg.includes('billing') ||
-    msg.includes('exceeded') ||
-    msg.includes('resource exhausted')
-  ) {
-    return 'quota_or_billing';
-  }
-
-  if (status === 413) return 'model_unavailable';
-
-  if (status >= 500 || status === 503) return 'server_error';
-
-  return 'invalid_response';
+  return classifySharedHttpFailure(status, errorMessage);
 }
 
 export function userMessageForKind(

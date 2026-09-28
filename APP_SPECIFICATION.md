@@ -1132,13 +1132,40 @@ Token màu cụ thể được định nghĩa tại `src/constants/theme.ts`.
 
 **Trạng thái:** CODE COMPLETE — APK VERIFICATION PENDING (PRD v1.7A; Expo SDK 57).
 
+### P1.8A — AI Spending Chat
+
+Read-only conversational spending analyst (calendar-month anchored: day **01 → last day**).
+
+| Hạng mục | Quy tắc |
+|----------|---------|
+| Entry | Thống kê / Reports CTA **「Hỏi AI về chi tiêu」** → modal `spending-chat` (không thêm bottom tab) |
+| Authority | SQLite / existing report & budget APIs are authoritative — AI **never** mentally sums raw transactions |
+| Tools | Allowlisted read-only: `getPeriodSummary`, `getBreakdown`, `getTransactions`, `getLargestTransactions`, `comparePeriods`, `getWooriBudget`, `getTrackedSourceBalance`, `getUnusualSpendingFacts` |
+| No writes | No insert/update/delete tools; mutation requests get read-only refusal |
+| No raw SQL | Planner tool names + args schema-validated; max 4 tool calls / turn |
+| Woori | `budget_cycle` = stored payday period (typically **05→04**) with limit/carryover/adjustment/available/spent/remaining; `calendar_month` = spend from persisted `envelope_source_id` in **01→last day** only — never conflate |
+| VPBank | Tracked-source calendar month; if `opening_balance` is **NULL** → `current_balance` stays **NULL**, `needsOpeningBalance=true`, income/expense may still return — **never invent opening 0** |
+| Presets | 10 code-constant presets; **skip planner** → deterministic tool plan → one answer AI call. Defaults **not** seeded into `ai_saved_prompts` |
+| Multi-turn | `context_json` stores refs only (filters, last/excluded tx IDs, breakdown dim, comparison month, last category/source/audience) — never transaction snapshots / secrets |
+| Evidence | Structured `evidenceTransactionIds` → 「Xem giao dịch」 drill-down; do not parse IDs from answer prose |
+| Pinned | User-created prompts in `ai_saved_prompts` (CRUD); saving does not auto-run |
+| History | Local `ai_chat_threads` / `ai_chat_messages`; title from first user question; no cloud sync |
+| Provider | Groq `qwen/qwen3.8-27b` → Gemini 2.5 Flash-Lite → Gemini 2.5 Flash (`EXPO_PUBLIC_GROQ_API_KEY` / `EXPO_PUBLIC_GEMINI_API_KEY`); shared text core under `src/services/ai/` |
+| Unusual | App-side heuristic facts only (category vs prior month, tx vs month average, top-N) — AI may say “đáng chú ý”, not formal anomaly detection |
+| Backup | Format **v8** exports/restores chat tables; v1–v7 restore → empty chat tables; preserve all v7 tracked-source behavior |
+| Privacy / telemetry | `__DEV__` only: provider/model, phase, tool names/count, aiMs/totalMs, fallback, failure category — never keys, chat content, notes, full tx payloads |
+
+Implementation: `src/services/spendingChat/*`, `src/services/ai/*`, `src/app/spending-chat.tsx`, `src/database/aiChat*`, backup v8.
+
+> **Trạng thái P1.8A:** **IMPLEMENTATION COMPLETE / APK QA PENDING.** Không claim runtime/manual QA DONE cho đến khi fresh APK verify chat UI trên device với dữ liệu thật.
+
 ### Deferred — P1.7B / P1.7C
 
 | Ưu tiên | Hạng mục | Ghi chú |
 |---------|----------|---------|
 | **P1.7B — DEFERRED** | Persistent Receipt Archive | App document storage, persistent receipt URI, viewer/zoom, delete cleanup. **P1.7A TEMP AI-prep files are NOT this archive.** |
 | **P1.7C — DEFERRED** | Media-aware Backup | JSON + receipt media archive/ZIP; restore media across devices. |
-| P1.8+ | Spending Insights / other | Food vs drinks, `expense_nature`, weekday patterns — after P1.7A closed. |
+| P1.8+ | Spending Insights / other | Food vs drinks, `expense_nature`, weekday patterns — after chat + P1.7A closed. |
 | P2 | Widget / shortcut chụp nhanh | Phụ thuộc nền tảng |
 
 Các hạng mục **không** nằm trong lộ trình sản phẩm cốt lõi: UI API key Cài đặt, repeat transaction, export CSV, pending inbox, thu nhập / cash-flow / opening balance, shop accounting / profit / owner draw, Family Savings balance, reimbursement / internal transfer, actual contribution ledger, bank sync, streak/gamification.

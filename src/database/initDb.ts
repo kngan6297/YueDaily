@@ -26,6 +26,7 @@ export async function runSchemaMigrationsOn(database: SQLite.SQLiteDatabase): Pr
   await migrateCategoriesBudgetGroupSchema(database);
   await migrateBudgetPeriodsSchema(database);
   await migrateTrackedSourcePeriodsSchema(database);
+  await migrateAiChatSchema(database);
   await runP16TrustedBackfillIfNeeded(database);
   await runFirstPeriodBudgetSeedsIfNeeded(database);
   await database.execAsync(`
@@ -98,6 +99,7 @@ export async function initializeDatabaseOn(database: SQLite.SQLiteDatabase): Pro
   await migrateCategoriesBudgetGroupSchema(database);
   await migrateBudgetPeriodsSchema(database);
   await migrateTrackedSourcePeriodsSchema(database);
+  await migrateAiChatSchema(database);
 
   // P1.6A one-time trusted backfill for pre-P1.6 DB lineage (marker-guarded)
   await runP16TrustedBackfillIfNeeded(database);
@@ -223,6 +225,53 @@ async function migrateTrackedSourcePeriodsSchema(
       UNIQUE (source_id, period_start),
       FOREIGN KEY (source_id) REFERENCES sources(id)
     );
+  `);
+}
+
+/**
+ * P1.8A — local AI spending chat (threads / messages / user-pinned prompts).
+ * Default presets stay in code constants — never seeded into ai_saved_prompts.
+ */
+async function migrateAiChatSchema(database: SQLite.SQLiteDatabase): Promise<void> {
+  await database.execAsync(`
+    CREATE TABLE IF NOT EXISTS ai_chat_threads (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      title         TEXT,
+      anchor_year   INTEGER NOT NULL,
+      anchor_month  INTEGER NOT NULL,
+      context_json  TEXT,
+      created_at    TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+      updated_at    TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
+    );
+  `);
+
+  await database.execAsync(`
+    CREATE TABLE IF NOT EXISTS ai_chat_messages (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      thread_id  INTEGER NOT NULL,
+      role       TEXT    NOT NULL,
+      content    TEXT    NOT NULL,
+      created_at TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+      FOREIGN KEY (thread_id) REFERENCES ai_chat_threads(id) ON DELETE CASCADE
+    );
+  `);
+
+  await database.execAsync(`
+    CREATE TABLE IF NOT EXISTS ai_saved_prompts (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      title       TEXT    NOT NULL,
+      body        TEXT    NOT NULL,
+      sort_order  INTEGER NOT NULL DEFAULT 0,
+      created_at  TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+      updated_at  TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
+    );
+  `);
+
+  await database.execAsync(`
+    CREATE INDEX IF NOT EXISTS idx_ai_chat_messages_thread_id
+      ON ai_chat_messages (thread_id);
+    CREATE INDEX IF NOT EXISTS idx_ai_saved_prompts_sort
+      ON ai_saved_prompts (sort_order, id);
   `);
 }
 

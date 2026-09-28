@@ -104,6 +104,13 @@ function RootLayoutContent() {
               animation: 'fade',
             }}
           />
+          <Stack.Screen
+            name="spending-chat"
+            options={{
+              presentation: 'modal',
+              animation: 'slide_from_bottom',
+            }}
+          />
         </Stack>
       </BottomSheetPortalProvider>
     </SafeAreaProvider>

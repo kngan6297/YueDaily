@@ -16,8 +16,33 @@ import {
 } from '../types';
 import { normalizeSourceIsActive } from './sourceLifecycle';
 
-export type BackupVersion = '1' | '2' | '3' | '4' | '5' | '6' | '7';
-export const CURRENT_BACKUP_VERSION: BackupVersion = '7';
+export type BackupVersion = '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8';
+export const CURRENT_BACKUP_VERSION: BackupVersion = '8';
+
+/** Versions that require category.budget_group */
+function hasBudgetGroupField(v: BackupVersion): boolean {
+  return v === '4' || v === '5' || v === '6' || v === '7' || v === '8';
+}
+
+/** Versions that require carryover + envelope_source_id on budget_periods */
+function hasCarryoverEnvelopeFields(v: BackupVersion): boolean {
+  return v === '5' || v === '6' || v === '7' || v === '8';
+}
+
+/** Versions that require adjustment_amount on budget_periods */
+function hasBudgetAdjustmentField(v: BackupVersion): boolean {
+  return v === '6' || v === '7' || v === '8';
+}
+
+/** Versions that require tracked_source_periods array */
+function hasTrackedSourcePeriods(v: BackupVersion): boolean {
+  return v === '7' || v === '8';
+}
+
+/** Versions that require AI chat tables */
+function hasAiChatTables(v: BackupVersion): boolean {
+  return v === '8';
+}
 
 interface ValidCategory {
   id: number;
@@ -87,6 +112,33 @@ interface ValidStreak {
   last_logged_date: string | null;
 }
 
+interface ValidAiChatThread {
+  id: number;
+  title: string | null;
+  anchor_year: number;
+  anchor_month: number;
+  context_json: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ValidAiChatMessage {
+  id: number;
+  thread_id: number;
+  role: 'user' | 'assistant';
+  content: string;
+  created_at: string;
+}
+
+interface ValidAiSavedPrompt {
+  id: number;
+  title: string;
+  body: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ValidatedBackup {
   backupVersion: BackupVersion;
   transactions: ValidTransaction[];
@@ -95,6 +147,9 @@ export interface ValidatedBackup {
   payers: ValidPayer[] | null;
   budget_periods: ValidBudgetPeriod[];
   tracked_source_periods: ValidTrackedSourcePeriod[];
+  ai_chat_threads: ValidAiChatThread[];
+  ai_chat_messages: ValidAiChatMessage[];
+  ai_saved_prompts: ValidAiSavedPrompt[];
   streak: ValidStreak | null;
 }
 
@@ -154,12 +209,7 @@ function validateCategory(row: unknown, index: number, backupVersion: BackupVers
   if (!CAT_TYPES.has(type)) fail(`${p}.type`);
 
   let budget_group: BudgetGroup | null = null;
-  if (
-    backupVersion === '4' ||
-    backupVersion === '5' ||
-    backupVersion === '6' ||
-    backupVersion === '7'
-  ) {
+  if (hasBudgetGroupField(backupVersion)) {
     if (!('budget_group' in row)) fail(`${p}.budget_group`);
     if (row.budget_group !== null && row.budget_group !== undefined) {
       budget_group = normalizeBudgetGroup(row.budget_group);
@@ -200,7 +250,7 @@ function validateBudgetPeriod(
   if (!Number.isInteger(limit_amount) || limit_amount < 0) fail(`${p}.limit_amount`);
 
   let carryover_amount = 0;
-  if (backupVersion === '5' || backupVersion === '6' || backupVersion === '7') {
+  if (hasCarryoverEnvelopeFields(backupVersion)) {
     if (!('carryover_amount' in row)) fail(`${p}.carryover_amount`);
     carryover_amount = assertFiniteNumber(row.carryover_amount, `${p}.carryover_amount`);
     if (!Number.isInteger(carryover_amount) || carryover_amount < 0) {
@@ -214,7 +264,7 @@ function validateBudgetPeriod(
   }
 
   let adjustment_amount = 0;
-  if (backupVersion === '6' || backupVersion === '7') {
+  if (hasBudgetAdjustmentField(backupVersion)) {
     if (!('adjustment_amount' in row)) fail(`${p}.adjustment_amount`);
     adjustment_amount = assertFiniteNumber(row.adjustment_amount, `${p}.adjustment_amount`);
     if (!Number.isInteger(adjustment_amount)) fail(`${p}.adjustment_amount`);
@@ -222,7 +272,7 @@ function validateBudgetPeriod(
   // v1–v5: always default adjustment_amount to 0 (ignore any stray field)
 
   let envelope_source_id: number | null = null;
-  if (backupVersion === '5' || backupVersion === '6' || backupVersion === '7') {
+  if (hasCarryoverEnvelopeFields(backupVersion)) {
     if (!('envelope_source_id' in row)) fail(`${p}.envelope_source_id`);
     if (row.envelope_source_id !== null && row.envelope_source_id !== undefined) {
       envelope_source_id = assertFiniteNumber(row.envelope_source_id, `${p}.envelope_source_id`);
@@ -397,6 +447,95 @@ function validateStreak(row: unknown): ValidStreak {
   };
 }
 
+function validateAiChatThread(row: unknown, index: number): ValidAiChatThread {
+  const p = `ai_chat_threads[${index}]`;
+  if (!isPlainObject(row)) fail(p);
+
+  const anchor_year = assertFiniteNumber(row.anchor_year, `${p}.anchor_year`);
+  if (!Number.isInteger(anchor_year) || anchor_year < 2000 || anchor_year > 2100) {
+    fail(`${p}.anchor_year`);
+  }
+  const anchor_month = assertFiniteNumber(row.anchor_month, `${p}.anchor_month`);
+  if (!Number.isInteger(anchor_month) || anchor_month < 1 || anchor_month > 12) {
+    fail(`${p}.anchor_month`);
+  }
+
+  const created_at =
+    row.created_at === undefined || row.created_at === null
+      ? '1970-01-01 00:00:00'
+      : assertString(row.created_at, `${p}.created_at`);
+  const updated_at =
+    row.updated_at === undefined || row.updated_at === null
+      ? created_at
+      : assertString(row.updated_at, `${p}.updated_at`);
+
+  // context_json: references only — reject huge dumps / obvious secrets
+  let context_json: string | null = assertNullableString(row.context_json, `${p}.context_json`);
+  if (context_json != null) {
+    if (context_json.length > 20_000) fail(`${p}.context_json`);
+    const lower = context_json.toLowerCase();
+    if (
+      lower.includes('api_key') ||
+      lower.includes('apikey') ||
+      lower.includes('image_uri') ||
+      lower.includes('base64')
+    ) {
+      fail(`${p}.context_json`);
+    }
+  }
+
+  return {
+    id: assertIntegerId(row.id, `${p}.id`),
+    title: assertNullableString(row.title, `${p}.title`),
+    anchor_year,
+    anchor_month,
+    context_json,
+    created_at,
+    updated_at,
+  };
+}
+
+function validateAiChatMessage(row: unknown, index: number): ValidAiChatMessage {
+  const p = `ai_chat_messages[${index}]`;
+  if (!isPlainObject(row)) fail(p);
+  const role = assertString(row.role, `${p}.role`);
+  if (role !== 'user' && role !== 'assistant') fail(`${p}.role`);
+  const created_at =
+    row.created_at === undefined || row.created_at === null
+      ? '1970-01-01 00:00:00'
+      : assertString(row.created_at, `${p}.created_at`);
+  return {
+    id: assertIntegerId(row.id, `${p}.id`),
+    thread_id: assertIntegerId(row.thread_id, `${p}.thread_id`),
+    role,
+    content: assertString(row.content, `${p}.content`),
+    created_at,
+  };
+}
+
+function validateAiSavedPrompt(row: unknown, index: number): ValidAiSavedPrompt {
+  const p = `ai_saved_prompts[${index}]`;
+  if (!isPlainObject(row)) fail(p);
+  const sort_order = assertFiniteNumber(row.sort_order, `${p}.sort_order`);
+  if (!Number.isInteger(sort_order)) fail(`${p}.sort_order`);
+  const created_at =
+    row.created_at === undefined || row.created_at === null
+      ? '1970-01-01 00:00:00'
+      : assertString(row.created_at, `${p}.created_at`);
+  const updated_at =
+    row.updated_at === undefined || row.updated_at === null
+      ? created_at
+      : assertString(row.updated_at, `${p}.updated_at`);
+  return {
+    id: assertIntegerId(row.id, `${p}.id`),
+    title: assertString(row.title, `${p}.title`),
+    body: assertString(row.body, `${p}.body`),
+    sort_order,
+    created_at,
+    updated_at,
+  };
+}
+
 /** Validate toàn bộ backup — throw trước khi chạm database */
 export function validateBackupPayload(raw: unknown): ValidatedBackup {
   if (!isPlainObject(raw)) fail('root');
@@ -408,7 +547,8 @@ export function validateBackupPayload(raw: unknown): ValidatedBackup {
     raw.backupVersion !== '4' &&
     raw.backupVersion !== '5' &&
     raw.backupVersion !== '6' &&
-    raw.backupVersion !== '7'
+    raw.backupVersion !== '7' &&
+    raw.backupVersion !== '8'
   ) {
     fail('backupVersion');
   }
@@ -422,18 +562,13 @@ export function validateBackupPayload(raw: unknown): ValidatedBackup {
     fail('payers');
   }
 
-  if (
-    backupVersion === '4' ||
-    backupVersion === '5' ||
-    backupVersion === '6' ||
-    backupVersion === '7'
-  ) {
+  if (hasBudgetGroupField(backupVersion)) {
     if (!Array.isArray(raw.budget_periods)) fail('budget_periods');
   } else if (raw.budget_periods !== undefined && raw.budget_periods !== null && !Array.isArray(raw.budget_periods)) {
     fail('budget_periods');
   }
 
-  if (backupVersion === '7') {
+  if (hasTrackedSourcePeriods(backupVersion)) {
     if (!Array.isArray(raw.tracked_source_periods)) fail('tracked_source_periods');
   } else if (
     raw.tracked_source_periods !== undefined &&
@@ -441,6 +576,34 @@ export function validateBackupPayload(raw: unknown): ValidatedBackup {
     !Array.isArray(raw.tracked_source_periods)
   ) {
     fail('tracked_source_periods');
+  }
+
+  if (hasAiChatTables(backupVersion)) {
+    if (!Array.isArray(raw.ai_chat_threads)) fail('ai_chat_threads');
+    if (!Array.isArray(raw.ai_chat_messages)) fail('ai_chat_messages');
+    if (!Array.isArray(raw.ai_saved_prompts)) fail('ai_saved_prompts');
+  } else {
+    if (
+      raw.ai_chat_threads !== undefined &&
+      raw.ai_chat_threads !== null &&
+      !Array.isArray(raw.ai_chat_threads)
+    ) {
+      fail('ai_chat_threads');
+    }
+    if (
+      raw.ai_chat_messages !== undefined &&
+      raw.ai_chat_messages !== null &&
+      !Array.isArray(raw.ai_chat_messages)
+    ) {
+      fail('ai_chat_messages');
+    }
+    if (
+      raw.ai_saved_prompts !== undefined &&
+      raw.ai_saved_prompts !== null &&
+      !Array.isArray(raw.ai_saved_prompts)
+    ) {
+      fail('ai_saved_prompts');
+    }
   }
 
   const categories = raw.categories.map((row, i) => validateCategory(row, i, backupVersion));
@@ -452,12 +615,7 @@ export function validateBackupPayload(raw: unknown): ValidatedBackup {
   assertUniqueIds(transactions.map((t) => t.id), 'transactions');
 
   let budget_periods: ValidBudgetPeriod[] = [];
-  if (
-    backupVersion === '4' ||
-    backupVersion === '5' ||
-    backupVersion === '6' ||
-    backupVersion === '7'
-  ) {
+  if (hasBudgetGroupField(backupVersion)) {
     budget_periods = (raw.budget_periods as unknown[]).map((row, i) =>
       validateBudgetPeriod(row, i, backupVersion),
     );
@@ -471,7 +629,7 @@ export function validateBackupPayload(raw: unknown): ValidatedBackup {
   }
 
   let tracked_source_periods: ValidTrackedSourcePeriod[] = [];
-  if (backupVersion === '7') {
+  if (hasTrackedSourcePeriods(backupVersion)) {
     tracked_source_periods = (raw.tracked_source_periods as unknown[]).map((row, i) =>
       validateTrackedSourcePeriod(row, i),
     );
@@ -481,6 +639,24 @@ export function validateBackupPayload(raw: unknown): ValidatedBackup {
       const key = `${tracked_source_periods[i].source_id}\0${tracked_source_periods[i].period_start}`;
       if (periodKeys.has(key)) fail(`tracked_source_periods[${i}].duplicate`);
       periodKeys.add(key);
+    }
+  }
+
+  let ai_chat_threads: ValidAiChatThread[] = [];
+  let ai_chat_messages: ValidAiChatMessage[] = [];
+  let ai_saved_prompts: ValidAiSavedPrompt[] = [];
+  if (hasAiChatTables(backupVersion)) {
+    ai_chat_threads = (raw.ai_chat_threads as unknown[]).map(validateAiChatThread);
+    ai_chat_messages = (raw.ai_chat_messages as unknown[]).map(validateAiChatMessage);
+    ai_saved_prompts = (raw.ai_saved_prompts as unknown[]).map(validateAiSavedPrompt);
+    assertUniqueIds(ai_chat_threads.map((t) => t.id), 'ai_chat_threads');
+    assertUniqueIds(ai_chat_messages.map((m) => m.id), 'ai_chat_messages');
+    assertUniqueIds(ai_saved_prompts.map((p) => p.id), 'ai_saved_prompts');
+    const threadIds = new Set(ai_chat_threads.map((t) => t.id));
+    for (let i = 0; i < ai_chat_messages.length; i++) {
+      if (!threadIds.has(ai_chat_messages[i].thread_id)) {
+        fail(`ai_chat_messages[${i}].thread_id`);
+      }
     }
   }
 
@@ -503,6 +679,9 @@ export function validateBackupPayload(raw: unknown): ValidatedBackup {
     payers,
     budget_periods,
     tracked_source_periods,
+    ai_chat_threads,
+    ai_chat_messages,
+    ai_saved_prompts,
     streak,
   };
 }
