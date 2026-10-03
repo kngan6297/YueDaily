@@ -1169,13 +1169,53 @@ Implementation: `src/services/spendingChat/*`, `src/services/ai/*`, `src/app/spe
 | SDK align | Expo SDK 57 patch baseline restored (`expo-doctor` 21/21) |
 | Web bootstrap | Temporary foundation shell — **does not** open browser SQLite as production data |
 | Android data | Remains local-first SQLite; no automatic cloud upload |
-| Production web data | **Not implemented** — Supabase Auth + per-user RLS = **P2.1** |
 | Core web expense UI | **P2.2** |
 | Web receipt + Edge AI | **P2.3** |
 | Spending Chat cloud / Edge turn | **P2.4** |
 | Offline / service worker / PWA install polish / deploy | **Deferred** (P2.6+) |
 
-> **Trạng thái P2.0:** **IMPLEMENTATION COMPLETE / MANUAL WEB QA PENDING.** `expo export --platform web` succeeds; interactive browser / iPhone Safari QA not claimed DONE. No EAS Hosting deploy in this phase.
+> **Trạng thái P2.0:** **IMPLEMENTATION COMPLETE / MANUAL WEB QA PENDING.**
+
+### P2.1 — Supabase Auth + Per-User Private Data Foundation
+
+| Hạng mục | Ghi chú |
+|----------|---------|
+| Auth | Web email/password **sign-in only** (no public signup UI) |
+| Env | `EXPO_PUBLIC_SUPABASE_URL` + `EXPO_PUBLIC_SUPABASE_ANON_KEY` (never service-role in client) |
+| Session | Browser persist + auto refresh; missing config → safe configuration screen |
+| Schema | `supabase/migrations/*_p2_1_private_user_schema.sql` (+ seed RPC EXECUTE hardening) — **applied on DEV** |
+| Ownership | Every user-owned table: `user_id` + `auth.uid()` RLS |
+| Cross-user FK | Composite `(user_id, …)` FKs for transaction/source/category, budget envelope, tracked periods, chat messages |
+| New-user seed | Categories + legacy payers only — **no** auto-seed of Woori/VPBank/cash (Yue-install examples, not universal); **no** transactions / periods / balances / chat |
+| Receipt media | **Not** in schema/Storage — P1.7B/C remain deferred; `image_uri` not a cloud Storage reference |
+| Android | Remains SQLite; no Auth gate; no cloud upload |
+| Cloud expense UI | **Not implemented** — **P2.2** |
+| Receipt Edge AI | **P2.3** |
+| Spending Chat Edge turn | **P2.4** |
+| Android → cloud ID mapping | **P2.5** (local AUTOINCREMENT → UUID; no import code in P2.1) |
+
+**Verified on DEV (runtime, not UI):**
+
+- Migration applied; 9 user-owned tables + RLS
+- 2-user RLS isolation (forged ownership / cross-user reads rejected)
+- Cross-user composite FK injection rejected
+- New-user seed: 12 categories + 2 legacy payers + 0 sources
+- VPBank `opening_balance` NULL vs 0 preserved
+- Auth API sign-in verified (anon client)
+- Seed-function `EXECUTE` revoked from `anon` / `authenticated` (trigger-only)
+
+**Still pending (manual):**
+
+- Interactive browser sign-in UI QA
+- Session restore via actual Web UI
+- Sign-out via actual Web UI
+- iPhone Safari / PWA Auth UI QA
+
+**Production hardening (does not block DEV commit):**
+
+- Enable Supabase Auth **leaked-password protection** before public production release
+
+> **Trạng thái P2.1:** **RUNTIME AUTH/RLS VERIFIED / WEB+IPHONE AUTH UI QA PENDING.** No production deploy / no P2.2.
 
 ### Deferred — P1.7B / P1.7C
 
@@ -1184,7 +1224,7 @@ Implementation: `src/services/spendingChat/*`, `src/services/ai/*`, `src/app/spe
 | **P1.7B — DEFERRED** | Persistent Receipt Archive | App document storage, persistent receipt URI, viewer/zoom, delete cleanup. **P1.7A TEMP AI-prep files are NOT this archive.** |
 | **P1.7C — DEFERRED** | Media-aware Backup | JSON + receipt media archive/ZIP; restore media across devices. |
 | P1.8+ | Spending Insights / other | Food vs drinks, `expense_nature`, weekday patterns — after chat + P1.7A closed. |
-| P2.1+ | Supabase Auth + per-user data / RLS | After P2.0 web foundation |
+| P2.2+ | Core Web expense UI on cloud | After P2.1 Auth/RLS foundation |
 | P2 | Widget / shortcut chụp nhanh | Phụ thuộc nền tảng |
 
 Các hạng mục **không** nằm trong lộ trình sản phẩm cốt lõi: UI API key Cài đặt, repeat transaction, export CSV, pending inbox, thu nhập / cash-flow / opening balance, shop accounting / profit / owner draw, Family Savings balance, reimbursement / internal transfer, actual contribution ledger, bank sync, streak/gamification.

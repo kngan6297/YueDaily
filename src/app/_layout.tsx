@@ -35,7 +35,7 @@ function RootLayoutContent() {
     }
   }, [isReady, error]);
 
-  // P2.0: web foundation shell — no browser SQLite finance DB (cloud arrives P2.1+)
+  // Web foundation shell — no browser SQLite finance DB (auth P2.1; expense UI P2.2)
   if (webFoundation) {
     return (
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
