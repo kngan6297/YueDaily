@@ -1159,6 +1159,24 @@ Implementation: `src/services/spendingChat/*`, `src/services/ai/*`, `src/app/spe
 
 > **Trạng thái P1.8A:** **IMPLEMENTATION COMPLETE / APK QA PENDING.** Không claim runtime/manual QA DONE cho đến khi fresh APK verify chat UI trên device với dữ liệu thật.
 
+### P2.0 — Web Compatibility Foundation
+
+| Hạng mục | Ghi chú |
+|----------|---------|
+| Platforms | Expo `platforms`: **android + web** (Android package/build settings preserved) |
+| Web output | `expo.web.output = "single"` — client SPA, no SSR / Expo `+api` (future backend = Supabase Edge) |
+| Favicon | Reuses `./assets/icon.png` (dedicated favicon polish deferred) |
+| SDK align | Expo SDK 57 patch baseline restored (`expo-doctor` 21/21) |
+| Web bootstrap | Temporary foundation shell — **does not** open browser SQLite as production data |
+| Android data | Remains local-first SQLite; no automatic cloud upload |
+| Production web data | **Not implemented** — Supabase Auth + per-user RLS = **P2.1** |
+| Core web expense UI | **P2.2** |
+| Web receipt + Edge AI | **P2.3** |
+| Spending Chat cloud / Edge turn | **P2.4** |
+| Offline / service worker / PWA install polish / deploy | **Deferred** (P2.6+) |
+
+> **Trạng thái P2.0:** **IMPLEMENTATION COMPLETE / MANUAL WEB QA PENDING.** `expo export --platform web` succeeds; interactive browser / iPhone Safari QA not claimed DONE. No EAS Hosting deploy in this phase.
+
 ### Deferred — P1.7B / P1.7C
 
 | Ưu tiên | Hạng mục | Ghi chú |
@@ -1166,6 +1184,7 @@ Implementation: `src/services/spendingChat/*`, `src/services/ai/*`, `src/app/spe
 | **P1.7B — DEFERRED** | Persistent Receipt Archive | App document storage, persistent receipt URI, viewer/zoom, delete cleanup. **P1.7A TEMP AI-prep files are NOT this archive.** |
 | **P1.7C — DEFERRED** | Media-aware Backup | JSON + receipt media archive/ZIP; restore media across devices. |
 | P1.8+ | Spending Insights / other | Food vs drinks, `expense_nature`, weekday patterns — after chat + P1.7A closed. |
+| P2.1+ | Supabase Auth + per-user data / RLS | After P2.0 web foundation |
 | P2 | Widget / shortcut chụp nhanh | Phụ thuộc nền tảng |
 
 Các hạng mục **không** nằm trong lộ trình sản phẩm cốt lõi: UI API key Cài đặt, repeat transaction, export CSV, pending inbox, thu nhập / cash-flow / opening balance, shop accounting / profit / owner draw, Family Savings balance, reimbursement / internal transfer, actual contribution ledger, bank sync, streak/gamification.

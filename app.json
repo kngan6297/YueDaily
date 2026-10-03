@@ -3,13 +3,19 @@
     "name": "YueDaily",
     "slug": "Yozakura",
     "platforms": [
-      "android"
+      "android",
+      "web"
     ],
     "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "yuedaily",
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/icon.png"
+    },
     "android": {
       "icon": "./assets/icon.png",
       "versionCode": 3,

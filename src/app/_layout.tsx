@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { BottomSheetPortalProvider } from '../components/ui/BottomSheetPortal';
+import { WebFoundationShell } from '../components/web/WebFoundationShell';
 import { Typography } from '../constants/theme';
 import { ThemeProvider, useAppTheme } from '../context/ThemeContext';
 import { useDatabase } from '../hooks/useDatabase';
@@ -24,7 +25,7 @@ import { useDatabase } from '../hooks/useDatabase';
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutContent() {
-  const { isReady, error, isInitializing, retryDatabase } = useDatabase();
+  const { isReady, error, isInitializing, retryDatabase, webFoundation } = useDatabase();
   const { colors, resolvedColorScheme } = useAppTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -33,6 +34,19 @@ function RootLayoutContent() {
       SplashScreen.hideAsync();
     }
   }, [isReady, error]);
+
+  // P2.0: web foundation shell — no browser SQLite finance DB (cloud arrives P2.1+)
+  if (webFoundation) {
+    return (
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+        <StatusBar
+          barStyle={resolvedColorScheme === 'dark' ? 'light-content' : 'dark-content'}
+          backgroundColor={colors.background.primary}
+        />
+        <WebFoundationShell />
+      </SafeAreaProvider>
+    );
+  }
 
   if (!isReady && isInitializing) {
     return (

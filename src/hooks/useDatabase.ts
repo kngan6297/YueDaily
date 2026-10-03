@@ -4,13 +4,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { initializeDatabase } from '../database/initDb';
+import type { UseDatabaseResult } from './useDatabaseTypes';
 
-interface UseDatabaseResult {
-  isReady: boolean;
-  error: Error | null;
-  isInitializing: boolean;
-  retryDatabase: () => Promise<void>;
-}
+export type { UseDatabaseResult } from './useDatabaseTypes';
 
 /**
  * Hook này phải được gọi ở root layout để đảm bảo
