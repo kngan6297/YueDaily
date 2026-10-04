@@ -44,6 +44,7 @@ import {
   EXPENSE_AUDIENCE_LABELS,
   EXPENSE_AUDIENCE_SHORT,
 } from '../../types';
+import { SPENDING_CHAT_ENABLED } from '../../platform/spendingChatEnabled';
 import {
   formatDateVi,
   formatLocalDate,
@@ -666,20 +667,22 @@ export default function ReportsScreen() {
                   </Text>
                 )}
               </View>
-              <TouchableOpacity
-                style={styles.aiChatCta}
-                onPress={() => {
-                  const y = period === 'month' ? navYear : now.getFullYear();
-                  const m = period === 'month' ? navMonth : now.getMonth() + 1;
-                  router.push({
-                    pathname: '/spending-chat',
-                    params: { year: String(y), month: String(m) },
-                  });
-                }}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.aiChatCtaText}>Hỏi AI về chi tiêu</Text>
-              </TouchableOpacity>
+              {SPENDING_CHAT_ENABLED ? (
+                <TouchableOpacity
+                  style={styles.aiChatCta}
+                  onPress={() => {
+                    const y = period === 'month' ? navYear : now.getFullYear();
+                    const m = period === 'month' ? navMonth : now.getMonth() + 1;
+                    router.push({
+                      pathname: '/spending-chat',
+                      params: { year: String(y), month: String(m) },
+                    });
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.aiChatCtaText}>Hỏi AI về chi tiêu</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
 
             {/* Filters */}

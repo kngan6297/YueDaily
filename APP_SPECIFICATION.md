@@ -1136,9 +1136,11 @@ Token màu cụ thể được định nghĩa tại `src/constants/theme.ts`.
 
 Read-only conversational spending analyst (calendar-month anchored: day **01 → last day**).
 
+**Platform:** **Android/APK only** (local SQLite). **Web/PWA intentionally unsupported** — no CTA, no deferred screen, no Edge turn. Direct Web `/spending-chat` redirects to Reports. Cloud tables from P2.1 (`ai_chat_*`) remain RLS-protected but **unused / reserved** (not populated; not a Web feature).
+
 | Hạng mục | Quy tắc |
 |----------|---------|
-| Entry | Thống kê / Reports CTA **「Hỏi AI về chi tiêu」** → modal `spending-chat` (không thêm bottom tab) |
+| Entry | **Android only:** Thống kê / Reports CTA **「Hỏi AI về chi tiêu」** → modal `spending-chat` (không thêm bottom tab). **Web:** no entry. |
 | Authority | SQLite / existing report & budget APIs are authoritative — AI **never** mentally sums raw transactions |
 | Tools | Allowlisted read-only: `getPeriodSummary`, `getBreakdown`, `getTransactions`, `getLargestTransactions`, `comparePeriods`, `getWooriBudget`, `getTrackedSourceBalance`, `getUnusualSpendingFacts` |
 | No writes | No insert/update/delete tools; mutation requests get read-only refusal |
@@ -1171,7 +1173,7 @@ Implementation: `src/services/spendingChat/*`, `src/services/ai/*`, `src/app/spe
 | Android data | Remains local-first SQLite; no automatic cloud upload |
 | Core web expense UI | **P2.2** (see below) |
 | Web receipt + Edge AI | **P2.3** |
-| Spending Chat cloud / Edge turn | **P2.4** |
+| AI Spending Chat on Web | **NOT REQUIRED** — remains native/APK only (P2.4 cancelled) |
 | Offline / service worker / PWA install polish / deploy | **Deferred** (P2.6+) |
 
 > **Trạng thái P2.0:** **IMPLEMENTATION COMPLETE / MANUAL WEB QA PENDING.**
@@ -1186,6 +1188,7 @@ Implementation: `src/services/spendingChat/*`, `src/services/ai/*`, `src/app/spe
 | Sign-out | Web `auth.signOut({ scope: 'local' })` — **device/session-local only**; other phones/browsers stay signed in |
 | Multi-device | Same account may hold multiple simultaneous sessions (default Supabase Auth; do not enable single-session-per-user for YueDaily) |
 | Schema | Applied on DEV; RLS + seed + RPC hardening |
+| Cloud `ai_chat_*` tables | `ai_chat_threads` · `ai_chat_messages` · `ai_saved_prompts` — **created in P2.1 with RLS ownership policies; currently unused / reserved on Web** (no Web Spending Chat; do not drop; do not populate) |
 | Android | Remains SQLite; no Auth gate; no cloud upload |
 
 **Verified:** Auth API + RLS isolation + seed (P2.1); interactive browser Auth UI (invalid login VN error, User A/B sign-in, refresh session restore, Settings sign-out). Auth UI shell reused in P2.2. Web logout verified **local** (Session B survives Session A logout + refresh + authenticated Edge call).
@@ -1206,7 +1209,8 @@ Implementation: `src/services/spendingChat/*`, `src/services/ai/*`, `src/app/spe
 | Web delete confirm | In-app `confirmDestructive` sheet (RN Web `Alert.alert` callbacks are no-ops); native keeps `Alert.alert` |
 | Categories / sources | Settings CRUD; fresh users start with **0 sources** (must create first); Web destructive confirms use the same sheet |
 | Reports | Calendar month/day/custom; category/source/audience/daily totals via pure calculations |
-| Deferred on Web | Woori · VPBank · Spending Chat · backup v8 UI · offline |
+| Unsupported on Web | AI Spending Chat (native-only; not a deferred “coming later” Web feature) |
+| Deferred on Web | Woori · VPBank · backup v8 UI · offline |
 | Android | Unchanged SQLite path; no Auth requirement; native Alert confirmation unchanged |
 
 > **Trạng thái P2.2:** **WEB RUNTIME VERIFIED / IPHONE QA PENDING.**
@@ -1227,15 +1231,26 @@ Implementation: `src/services/spendingChat/*`, `src/services/ai/*`, `src/app/spe
 | Auth expiry | Missing/expired session → friendly VN “đăng nhập lại” (`permission_denied`); **not** generic AI failure; no provider fallback retry |
 | HEIC | Best-effort / browser-dependent; friendly VN fallback if decode fails |
 | Android P1.7A | Unchanged native camera/preprocess/`EXPO_PUBLIC_*` provider path |
-| Deferred | P1.7B/C receipt persistence · P2.4 Spending Chat cloud · production Hosting alias |
+| Deferred | P1.7B/C receipt persistence · production Hosting alias |
+| AI Spending Chat | **Native/APK only** — Web does not implement or defer a cloud chat phase |
 
 **Verified (DEV):** Edge secrets present (`GROQ_API_KEY`, `GEMINI_API_KEY`, `WEB_ALLOWED_ORIGINS` — names only); Edge function `analyze-receipt` deployed (`verify_jwt=true`); unauthenticated → 401; anon JWT → `UNAUTHENTICATED`; valid User A/B JWT → authenticated analyze; CORS allowlist includes localhost + EAS preview; live Web JPEG/PNG/large → preprocess → Edge (Groq primary; Gemini fallback when needed) → normalized schema handoff → `/form` prefill → manual Save → Home/Reports; Edge logs telemetry-only (no JWT/keys/image/financial payload); Web export has **no** provider key values (`env.web.ts` / `useGemini.web.ts`); Android P1.7A unchanged (no Edge dependency); unit tests cover preprocess/client/handoff/parity + mocked Groq→Gemini fallback chain.
 
 **EAS Hosting preview (non-prod):** latest `https://yozakura--gn4cjgf5za.expo.app` (deployment `gn4cjgf5za`; prior `g5k9ewj06k` may remain). No production alias. When `WEB_ALLOWED_ORIGINS` is set, include each active preview origin explicitly (no `*`).
 
-**Still pending:** iPhone Safari/PWA QA for P2.1–P2.3. Do not start P2.4 / receipt persistence / production Hosting alias from this phase.
+**Still pending:** iPhone Safari/PWA QA for P2.1–P2.3. Do not start receipt persistence / production Hosting alias from this phase. Do **not** start Web AI Spending Chat.
 
 > **Trạng thái P2.3:** **WEB RECEIPT RUNTIME VERIFIED / IPHONE QA PENDING.**
+
+### P2.4 — NOT REQUIRED — AI SPENDING CHAT REMAINS NATIVE-ONLY
+
+| Hạng mục | Quyết định |
+|----------|------------|
+| Product | AI Spending Chat is **Android/APK only** (P1.8A local SQLite) |
+| Web/PWA | Intentionally **unsupported** — no CTA, no deferred “coming later” screen, no Edge turn, no provider calls |
+| Direct route | Web `/spending-chat` → redirect to `/reports` |
+| Cloud tables | P2.1 `ai_chat_threads` / `ai_chat_messages` / `ai_saved_prompts` stay RLS-protected, **unused / reserved** — do not drop, do not populate |
+| Status | **CANCELLED / NOT PLANNED** |
 
 ### Deferred — P1.7B / P1.7C
 
@@ -1243,8 +1258,8 @@ Implementation: `src/services/spendingChat/*`, `src/services/ai/*`, `src/app/spe
 |---------|----------|---------|
 | **P1.7B — DEFERRED** | Persistent Receipt Archive | App document storage, persistent receipt URI, viewer/zoom, delete cleanup. **P1.7A TEMP AI-prep files are NOT this archive.** |
 | **P1.7C — DEFERRED** | Media-aware Backup | JSON + receipt media archive/ZIP; restore media across devices. |
-| P1.8+ | Spending Insights / other | Food vs drinks, `expense_nature`, weekday patterns — after chat + P1.7A closed. |
-| P2.4+ | Spending Chat cloud / Edge | After P2.3 web receipt |
+| P1.8+ | Spending Insights / other | Food vs drinks, `expense_nature`, weekday patterns — after native chat + P1.7A closed. |
+| ~~P2.4~~ | ~~Spending Chat cloud / Edge~~ | **NOT REQUIRED** — see P2.4 section above |
 | P2 | Widget / shortcut chụp nhanh | Phụ thuộc nền tảng |
 
 Các hạng mục **không** nằm trong lộ trình sản phẩm cốt lõi: UI API key Cài đặt, repeat transaction, export CSV, pending inbox, thu nhập / cash-flow / opening balance, shop accounting / profit / owner draw, Family Savings balance, reimbursement / internal transfer, actual contribution ledger, bank sync, streak/gamification.

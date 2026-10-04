@@ -14,9 +14,9 @@ export const WEB_FOUNDATION_BODY =
   'Android vẫn dùng SQLite local-first. Web production dùng Supabase Auth + dữ liệu riêng từng người (không phải SQLite trình duyệt).';
 
 export const WEB_FOUNDATION_NEXT_STEPS = [
-  'P2.3 — Web receipt scan + Edge AI proxy',
-  'P2.4 — AI Spending Chat (Edge turn)',
+  'P2.3 — Web receipt scan + Edge AI proxy (done)',
   'P2.5 — Android → cloud migration / backup hardening',
+  'AI Spending Chat remains native/APK only (P2.4 not planned)',
 ] as const;
 
 /** Explicit bootstrap kind so web never silently becomes a browser finance DB. */

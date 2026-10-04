@@ -18,7 +18,7 @@ export function sanitizeExpoPublicValue(raw: string | undefined): string {
 
 /**
  * Web must not inline provider keys. Receipt AI uses Supabase Edge (P2.3).
- * Spending Chat cloud is deferred (P2.4).
+ * AI Spending Chat is native/APK only — P2.4 cloud/Edge turn is not planned.
  */
 export function loadAiEnvFromProcess(): AiEnvKeys {
   return { geminiKey: '', groqKey: '' };
