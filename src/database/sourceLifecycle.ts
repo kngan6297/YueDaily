@@ -2,7 +2,7 @@
 // Source lifecycle — active vs archived (generic, không hardcode form theo tên)
 // ============================================================
 
-import type { Source } from '../types/index';
+import type { Source, SourceSpendingGroup } from '../types/index';
 
 /**
  * Exact names of sources this app historically seeded.
@@ -38,28 +38,28 @@ export function sourceIdsToArchiveOnUpgrade(
  * Create: active only.
  * Edit: current archived source (if any) + all active — so history stays representable.
  */
-export function pickerSources(
-  sources: readonly Source[],
+export function pickerSources<T extends { id: number | string; is_active?: unknown }>(
+  sources: readonly T[],
   mode: 'create' | 'edit',
-  currentSourceId: number | null,
-): Source[] {
+  currentSourceId: number | string | null,
+): T[] {
   const active = sources.filter(isSourceActive);
   if (mode === 'create' || currentSourceId == null) return active;
-  const current = sources.find((s) => s.id === currentSourceId);
+  const current = sources.find((s) => String(s.id) === String(currentSourceId));
   if (!current || isSourceActive(current)) return active;
-  return [current, ...active.filter((s) => s.id !== current.id)];
+  return [current, ...active.filter((s) => String(s.id) !== String(current.id))];
 }
 
 /** Last-selected archived source must not become the default for a new transaction. */
-export function resolveCreateSourceId(
-  activeSources: readonly Source[],
-  lastSelectedId: number | null,
-): number | null {
+export function resolveCreateSourceId<T extends { id: number | string; is_active?: unknown }>(
+  activeSources: readonly T[],
+  lastSelectedId: number | string | null,
+): T['id'] | null {
   if (
     lastSelectedId != null &&
-    activeSources.some((s) => s.id === lastSelectedId && isSourceActive(s))
+    activeSources.some((s) => String(s.id) === String(lastSelectedId) && isSourceActive(s))
   ) {
-    return lastSelectedId;
+    return lastSelectedId as T['id'];
   }
   return activeSources[0]?.id ?? null;
 }
@@ -142,4 +142,24 @@ export function sourceHasTransactionRefs(referenceCount: number): boolean {
 /** spending_group chỉ sửa khi chưa có giao dịch — tránh đổi nhóm lịch sử. */
 export function canEditSourceSpendingGroup(referenceCount: number): boolean {
   return referenceCount === 0;
+}
+
+/**
+ * New-source create draft (APP_SPEC): name required; spending_group required;
+ * no default group; never infer from source name.
+ */
+export type NewSourceDraftValidation =
+  | { ok: true; name: string; spending_group: SourceSpendingGroup }
+  | { ok: false; code: 'missing_name' | 'missing_spending_group' };
+
+export function validateNewSourceDraft(
+  name: string,
+  spendingGroup: SourceSpendingGroup | null | undefined,
+): NewSourceDraftValidation {
+  const trimmed = name.trim();
+  if (!trimmed) return { ok: false, code: 'missing_name' };
+  if (spendingGroup !== 'personal_yue' && spendingGroup !== 'household') {
+    return { ok: false, code: 'missing_spending_group' };
+  }
+  return { ok: true, name: trimmed, spending_group: spendingGroup };
 }

@@ -13,6 +13,7 @@ import {
   sourceDeleteGuard,
   sourceHasTransactionRefs,
   sourceIdsToArchiveOnUpgrade,
+  validateNewSourceDraft,
 } from './sourceLifecycle.ts';
 
 function src(id: number, name: string, is_active: number): Source {
@@ -149,5 +150,32 @@ describe('P1.5.2 source archive', () => {
     if (!blocked.ok) {
       assert.match(blocked.reason, /số dư|theo dõi/i);
     }
+  });
+});
+
+describe('P2.2 new source draft validation', () => {
+  it('rejects empty name without inventing a spending_group default', () => {
+    const draft = validateNewSourceDraft('   ', null);
+    assert.equal(draft.ok, false);
+    if (!draft.ok) assert.equal(draft.code, 'missing_name');
+  });
+
+  it('rejects missing spending_group instead of silent no-op payload', () => {
+    const draft = validateNewSourceDraft('Tiền mặt mới', null);
+    assert.equal(draft.ok, false);
+    if (!draft.ok) assert.equal(draft.code, 'missing_spending_group');
+  });
+
+  it('accepts explicit personal_yue / household and trims name', () => {
+    const personal = validateNewSourceDraft('  Ví A  ', 'personal_yue');
+    assert.equal(personal.ok, true);
+    if (personal.ok) {
+      assert.equal(personal.name, 'Ví A');
+      assert.equal(personal.spending_group, 'personal_yue');
+    }
+
+    const household = validateNewSourceDraft('Quỹ B', 'household');
+    assert.equal(household.ok, true);
+    if (household.ok) assert.equal(household.spending_group, 'household');
   });
 });

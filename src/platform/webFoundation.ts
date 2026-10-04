@@ -1,21 +1,19 @@
 // ============================================================
 // Web Compatibility Foundation bootstrap marker
-// P2.1 adds Auth; production finance data still waits for P2.2 cloud repos.
-// Do NOT treat browser-local SQLite as the web system of record.
+// P2.2: Auth + cloud expense repos. Do NOT use browser SQLite as SoR.
 // ============================================================
 
-export const WEB_FOUNDATION_PHASE = 'P2.1' as const;
+export const WEB_FOUNDATION_PHASE = 'P2.2' as const;
 
 export const WEB_FOUNDATION_TITLE = 'YueDaily Web Foundation';
 
 export const WEB_FOUNDATION_HEADLINE =
-  'Đăng nhập riêng tư (P2.1). Màn hình chi tiêu Web sẽ đến ở P2.2.';
+  'Chi tiêu Web riêng tư (P2.2) trên Supabase — Android vẫn SQLite.';
 
 export const WEB_FOUNDATION_BODY =
   'Android vẫn dùng SQLite local-first. Web production dùng Supabase Auth + dữ liệu riêng từng người (không phải SQLite trình duyệt).';
 
 export const WEB_FOUNDATION_NEXT_STEPS = [
-  'P2.2 — Core Web expense UI trên cloud',
   'P2.3 — Web receipt scan + Edge AI proxy',
   'P2.4 — AI Spending Chat (Edge turn)',
   'P2.5 — Android → cloud migration / backup hardening',

@@ -24,23 +24,37 @@ import {
 import { useAppTheme } from '../../context/ThemeContext';
 import { exportBackup, importBackup } from '../../database/backup';
 import {
+  canEditSourceSpendingGroup,
+  isSourceActive,
+  sourceHasTransactionRefs,
+  validateNewSourceDraft,
+} from '../../database/sourceLifecycle';
+import { BACKUP_UI_ENABLED } from '../../platform/backupUiEnabled';
+import { getSourceGroupLabels } from '../../platform/sourceGroupLabels';
+import { useWebSignOut } from '../../platform/webSignOut';
+import {
   deleteCategory,
-  deleteSource,
-  getAllCategories,
-  getSourcesWithReferenceCounts,
   insertCategory,
-  insertSource,
-  setSourceActive,
+  listCategories,
   updateCategory,
+} from '../../repositories/categories';
+import { userMessageForDataError } from '../../repositories/errors';
+import {
+  deleteSource,
+  insertSource,
+  listSourcesWithReferenceCounts,
+  setSourceActive,
   updateSource,
-  type SourceWithRefs,
-} from '../../database/categories';
-import { canEditSourceSpendingGroup, isSourceActive, sourceHasTransactionRefs } from '../../database/sourceLifecycle';
-import type { Category, SourceSpendingGroup } from '../../types';
+} from '../../repositories/sources';
+import type {
+  EntityId,
+  FinanceCategory,
+  FinanceSourceWithRefs,
+} from '../../repositories/types';
+import type { SourceSpendingGroup } from '../../types';
 import {
   SOURCE_SPENDING_GROUP_CHOICES,
-  SOURCE_SPENDING_GROUP_LABELS,
-  sourceSpendingGroupLabel,
+  UNCLASSIFIED_SPENDING_GROUP_LABEL,
 } from '../../types';
 
 
@@ -54,7 +68,7 @@ const APPEARANCE_OPTIONS: { id: AppearanceMode; label: string; hint: string }[] 
 
 interface EditState {
   kind: EditKind;
-  id?: number;
+  id?: EntityId;
   name: string;
   icon: string;
   color: string;
@@ -76,25 +90,33 @@ function emptyEdit(kind: EditKind): EditState {
 export default function SettingsScreen() {
   const { colors, shadows, appearanceMode, setAppearanceMode } = useAppTheme();
   const styles = useMemo(() => createStyles(colors, shadows), [colors, shadows]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [sources, setSources] = useState<SourceWithRefs[]>([]);
+  const sourceGroupLabels = getSourceGroupLabels();
+  const sourceGroupLabel = (group: SourceSpendingGroup | null): string =>
+    group ? sourceGroupLabels[group] : UNCLASSIFIED_SPENDING_GROUP_LABEL;
+  const webSignOut = useWebSignOut();
+  const [signingOut, setSigningOut] = useState(false);
+  const [categories, setCategories] = useState<FinanceCategory[]>([]);
+  const [sources, setSources] = useState<FinanceSourceWithRefs[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [edit, setEdit] = useState<EditState | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [cats, srcs] = await Promise.all([
-        getAllCategories(),
-        getSourcesWithReferenceCounts(),
+        listCategories(),
+        listSourcesWithReferenceCounts(),
       ]);
       setCategories(cats);
       setSources(srcs);
     } catch (err) {
-      console.error(err);
+      setLoadError(userMessageForDataError(err, 'settings'));
     } finally {
       setLoading(false);
     }
@@ -108,9 +130,13 @@ export default function SettingsScreen() {
     (c) => c.type === 'chi' || c.type === 'both'
   );
 
-  const openAdd = (kind: EditKind) => setEdit(emptyEdit(kind));
+  const openAdd = (kind: EditKind) => {
+    setEditError(null);
+    setEdit(emptyEdit(kind));
+  };
 
-  const openEditSource = (s: SourceWithRefs) =>
+  const openEditSource = (s: FinanceSourceWithRefs) => {
+    setEditError(null);
     setEdit({
       kind: 'source',
       id: s.id,
@@ -120,8 +146,10 @@ export default function SettingsScreen() {
       spending_group: s.spending_group,
       groupLocked: !canEditSourceSpendingGroup(s.reference_count),
     });
+  };
 
-  const openEditCategory = (c: Category) =>
+  const openEditCategory = (c: FinanceCategory) => {
+    setEditError(null);
     setEdit({
       kind: 'category',
       id: c.id,
@@ -131,27 +159,60 @@ export default function SettingsScreen() {
       spending_group: null,
       groupLocked: false,
     });
+  };
+
+  const showEditValidation = (title: string, message: string) => {
+    // RN Web Alert.alert is a no-op — keep inline error as the Web-visible signal.
+    setEditError(message);
+    Alert.alert(title, message);
+  };
 
   const handleSaveEdit = async () => {
     if (!edit) return;
-    const trimmed = edit.name.trim();
-    if (!trimmed) {
-      Alert.alert('Thiếu tên', 'Nhập tên trước nhé!');
+
+    if (edit.kind === 'source' && !edit.id) {
+      const draft = validateNewSourceDraft(edit.name, edit.spending_group);
+      if (!draft.ok) {
+        if (draft.code === 'missing_name') {
+          showEditValidation('Thiếu tên', 'Nhập tên trước nhé!');
+        } else {
+          showEditValidation(
+            'Thiếu nhóm theo dõi',
+            `Chọn ${sourceGroupLabels.personal_yue} hoặc ${sourceGroupLabels.household}.`,
+          );
+        }
+        return;
+      }
+
+      setSaving(true);
+      setEditError(null);
+      try {
+        await insertSource(draft.name, draft.spending_group);
+        setEdit(null);
+        await loadData();
+      } catch (err) {
+        const nativeUnique = err instanceof Error && err.message.includes('UNIQUE');
+        const message = nativeUnique
+          ? 'Tên này đã tồn tại. Hãy chọn tên khác.'
+          : userMessageForDataError(err, 'settings');
+        showEditValidation('Không lưu được', message);
+      } finally {
+        setSaving(false);
+      }
       return;
     }
-    if (edit.kind === 'source' && !edit.id && !edit.spending_group) {
-      Alert.alert('Thiếu nhóm theo dõi', 'Chọn Cá nhân Yue hoặc Quỹ chung.');
+
+    const trimmed = edit.name.trim();
+    if (!trimmed) {
+      showEditValidation('Thiếu tên', 'Nhập tên trước nhé!');
       return;
     }
 
     setSaving(true);
+    setEditError(null);
     try {
       if (edit.kind === 'source') {
-        if (!edit.id) {
-          await insertSource(trimmed, edit.spending_group!);
-        } else {
-          await updateSource(edit.id, trimmed, edit.spending_group);
-        }
+        await updateSource(edit.id!, trimmed, edit.spending_group);
       } else {
         if (edit.id) await updateCategory(edit.id, trimmed, 'chi', edit.icon, edit.color);
         else await insertCategory(trimmed, 'chi', edit.icon, edit.color);
@@ -159,8 +220,11 @@ export default function SettingsScreen() {
       setEdit(null);
       await loadData();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      Alert.alert('Lỗi', msg.includes('UNIQUE') ? 'Tên này đã tồn tại.' : 'Không thể lưu. Thử lại nhé!');
+      const nativeUnique = err instanceof Error && err.message.includes('UNIQUE');
+      const message = nativeUnique
+        ? 'Tên này đã tồn tại. Hãy chọn tên khác.'
+        : userMessageForDataError(err, 'settings');
+      showEditValidation('Không lưu được', message);
     } finally {
       setSaving(false);
     }
@@ -169,11 +233,19 @@ export default function SettingsScreen() {
   const confirmDelete = (title: string, message: string, onConfirm: () => Promise<void>) => {
     Alert.alert(title, message, [
       { text: 'Huỷ', style: 'cancel' },
-      { text: 'Xoá', style: 'destructive', onPress: () => { onConfirm().catch(console.error); } },
+      {
+        text: 'Xoá',
+        style: 'destructive',
+        onPress: () => {
+          onConfirm().catch((err) => {
+            Alert.alert('Không xoá được', userMessageForDataError(err, 'settings'));
+          });
+        },
+      },
     ]);
   };
 
-  const handleArchiveSource = (s: SourceWithRefs) => {
+  const handleArchiveSource = (s: FinanceSourceWithRefs) => {
     const nextActive = !isSourceActive(s);
     const title = nextActive ? 'Dùng lại nguồn chi?' : 'Lưu trữ nguồn chi?';
     const message = nextActive
@@ -184,13 +256,17 @@ export default function SettingsScreen() {
       {
         text: nextActive ? 'Dùng lại' : 'Lưu trữ',
         onPress: () => {
-          setSourceActive(s.id, nextActive).then(loadData).catch(console.error);
+          setSourceActive(s.id, nextActive)
+            .then(loadData)
+            .catch((err) => {
+              Alert.alert('Không cập nhật được', userMessageForDataError(err, 'sources'));
+            });
         },
       },
     ]);
   };
 
-  const handleDeleteSource = (s: SourceWithRefs) => {
+  const handleDeleteSource = (s: FinanceSourceWithRefs) => {
     confirmDelete(
       'Xoá nguồn chi?',
       `Xoá 「${s.name}」? Chỉ xoá được nguồn chưa có giao dịch.`,
@@ -202,7 +278,7 @@ export default function SettingsScreen() {
     );
   };
 
-  const handleDeleteCategory = (c: Category) => {
+  const handleDeleteCategory = (c: FinanceCategory) => {
     confirmDelete('Xoá danh mục?', `Xoá 「${c.name}」? Giao dịch cũ sẽ mất liên kết danh mục.`, async () => {
       const result = await deleteCategory(c.id);
       if (!result.ok) Alert.alert('Không thể xoá', result.reason);
@@ -249,6 +325,16 @@ export default function SettingsScreen() {
         },
       ]
     );
+  };
+
+  const handleWebSignOut = async () => {
+    if (!webSignOut || signingOut) return;
+    setSigningOut(true);
+    try {
+      await webSignOut();
+    } finally {
+      setSigningOut(false);
+    }
   };
 
   const editTitle =
@@ -306,6 +392,15 @@ export default function SettingsScreen() {
 
         {loading ? (
           <ActivityIndicator color={colors.blue[400]} style={{ paddingVertical: 40 }} />
+        ) : loadError ? (
+          <View style={styles.section}>
+            <View style={[styles.card, styles.cardPadded]}>
+              <Text style={styles.emptyText}>{loadError}</Text>
+              <TouchableOpacity style={styles.saveEditBtn} onPress={loadData} activeOpacity={0.85}>
+                <Text style={styles.saveEditBtnText}>Thử lại</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         ) : (
           <>
             {/* ── Nguồn chi ── */}
@@ -335,7 +430,7 @@ export default function SettingsScreen() {
                         <Text style={[styles.itemName, !active && styles.itemNameArchived]}>{s.name}</Text>
                         <Text style={styles.itemMeta}>
                           {[
-                            sourceSpendingGroupLabel(s.spending_group),
+                            sourceGroupLabel(s.spending_group),
                             !active ? 'Đã lưu trữ' : null,
                           ].filter(Boolean).join(' · ')}
                         </Text>
@@ -412,51 +507,70 @@ export default function SettingsScreen() {
           </>
         )}
 
-        {/* ── Backup ── */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>💾 Sao lưu & Khôi phục</Text>
-          <View style={[styles.card, styles.cardPadded]}>
-            <Text style={styles.backupHint}>
-              Xuất dữ liệu ra file JSON để lưu vào Google Drive, máy tính, hoặc bất kỳ đâu. Khi cần, nhập lại để khôi phục toàn bộ giao dịch, danh mục, nguồn chi và dữ liệu lịch sử.
-            </Text>
+        {/* ── Backup (Android SQLite v8; hidden on Web P2.2) ── */}
+        {BACKUP_UI_ENABLED ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>💾 Sao lưu & Khôi phục</Text>
+            <View style={[styles.card, styles.cardPadded]}>
+              <Text style={styles.backupHint}>
+                Xuất dữ liệu ra file JSON để lưu vào Google Drive, máy tính, hoặc bất kỳ đâu. Khi cần, nhập lại để khôi phục toàn bộ giao dịch, danh mục, nguồn chi và dữ liệu lịch sử.
+              </Text>
 
-            <View style={styles.infoDivider} />
+              <View style={styles.infoDivider} />
 
+              <TouchableOpacity
+                style={[styles.backupBtn, styles.backupBtnExport]}
+                onPress={handleExport}
+                disabled={exporting || importing}
+                activeOpacity={0.75}
+              >
+                {exporting ? (
+                  <ActivityIndicator size="small" color={colors.action.primaryText} />
+                ) : (
+                  <Text style={styles.backupBtnIcon}>📤</Text>
+                )}
+                <View style={styles.backupBtnText}>
+                  <Text style={styles.backupBtnLabel}>Xuất backup</Text>
+                  <Text style={styles.backupBtnSub}>Lưu file JSON ra ngoài</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.backupBtn, styles.backupBtnImport]}
+                onPress={handleImport}
+                disabled={exporting || importing}
+                activeOpacity={0.75}
+              >
+                {importing ? (
+                  <ActivityIndicator size="small" color={colors.neutral[700]} />
+                ) : (
+                  <Text style={styles.backupBtnIcon}>📥</Text>
+                )}
+                <View style={styles.backupBtnText}>
+                  <Text style={[styles.backupBtnLabel, styles.backupBtnLabelDark]}>Nhập backup</Text>
+                  <Text style={styles.backupBtnSub}>Khôi phục từ file JSON</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
+
+        {webSignOut ? (
+          <View style={styles.section}>
             <TouchableOpacity
-              style={[styles.backupBtn, styles.backupBtnExport]}
-              onPress={handleExport}
-              disabled={exporting || importing}
-              activeOpacity={0.75}
+              style={[styles.signOutBtn, signingOut && { opacity: 0.6 }]}
+              onPress={handleWebSignOut}
+              disabled={signingOut}
+              activeOpacity={0.85}
             >
-              {exporting ? (
-                <ActivityIndicator size="small" color={colors.action.primaryText} />
+              {signingOut ? (
+                <ActivityIndicator size="small" color={colors.action.destructiveText} />
               ) : (
-                <Text style={styles.backupBtnIcon}>📤</Text>
+                <Text style={styles.signOutBtnText}>Đăng xuất</Text>
               )}
-              <View style={styles.backupBtnText}>
-                <Text style={styles.backupBtnLabel}>Xuất backup</Text>
-                <Text style={styles.backupBtnSub}>Lưu file JSON ra ngoài</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.backupBtn, styles.backupBtnImport]}
-              onPress={handleImport}
-              disabled={exporting || importing}
-              activeOpacity={0.75}
-            >
-              {importing ? (
-                <ActivityIndicator size="small" color={colors.neutral[700]} />
-              ) : (
-                <Text style={styles.backupBtnIcon}>📥</Text>
-              )}
-              <View style={styles.backupBtnText}>
-                <Text style={[styles.backupBtnLabel, styles.backupBtnLabelDark]}>Nhập backup</Text>
-                <Text style={styles.backupBtnSub}>Khôi phục từ file JSON</Text>
-              </View>
             </TouchableOpacity>
           </View>
-        </View>
+        ) : null}
 
         <View style={{ height: 24 }} />
       </ScrollView>
@@ -464,7 +578,10 @@ export default function SettingsScreen() {
       {/* Modal thêm/sửa */}
       <BottomSheetModal
         visible={edit !== null}
-        onClose={() => setEdit(null)}
+        onClose={() => {
+          setEditError(null);
+          setEdit(null);
+        }}
         keyboardAvoiding
       >
         {edit && (
@@ -487,7 +604,10 @@ export default function SettingsScreen() {
                 placeholder="Tên..."
                 placeholderTextColor={colors.neutral[400]}
                 value={edit.name}
-                onChangeText={(name) => setEdit((p) => p && { ...p, name })}
+                onChangeText={(name) => {
+                  setEditError(null);
+                  setEdit((p) => p && { ...p, name });
+                }}
                 maxLength={30}
                 autoFocus
               />
@@ -507,7 +627,7 @@ export default function SettingsScreen() {
                 <Text style={styles.editLabel}>Nhóm theo dõi</Text>
                 {edit.groupLocked ? (
                   <Text style={styles.groupLockedHint}>
-                    {sourceSpendingGroupLabel(edit.spending_group)} — đã có giao dịch, không đổi nhóm. Đổi ý nghĩa tài chính thì lưu trữ nguồn này và tạo nguồn mới.
+                    {sourceGroupLabel(edit.spending_group)} — đã có giao dịch, không đổi nhóm. Đổi ý nghĩa tài chính thì lưu trữ nguồn này và tạo nguồn mới.
                   </Text>
                 ) : (
                   <View style={styles.typeRow}>
@@ -517,10 +637,13 @@ export default function SettingsScreen() {
                         <TouchableOpacity
                           key={id}
                           style={[styles.typeChip, active && styles.typeChipActive]}
-                          onPress={() => setEdit((p) => p && { ...p, spending_group: id })}
+                          onPress={() => {
+                            setEditError(null);
+                            setEdit((p) => p && { ...p, spending_group: id });
+                          }}
                         >
                           <Text style={[styles.typeChipText, active && styles.typeChipTextActive]}>
-                            {SOURCE_SPENDING_GROUP_LABELS[id]}
+                            {sourceGroupLabels[id]}
                           </Text>
                         </TouchableOpacity>
                       );
@@ -544,6 +667,8 @@ export default function SettingsScreen() {
                 </View>
               </>
             )}
+
+            {editError ? <Text style={styles.editErrorText}>{editError}</Text> : null}
 
             <TouchableOpacity
               style={[styles.saveEditBtn, saving && { opacity: 0.6 }]}
@@ -914,6 +1039,14 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     backgroundColor: colors.action.selectedBackground,
     borderColor: colors.action.selectedBorder,
   },
+  editErrorText: {
+    color: colors.action.destructiveText,
+    fontSize: Typography.fontSize.sm,
+    fontWeight: '600',
+    lineHeight: 18,
+    paddingHorizontal: Spacing.base,
+    marginTop: Spacing.sm,
+  },
   typeChipText: {
     fontSize: Typography.fontSize.sm,
     fontWeight: '600',
@@ -946,6 +1079,19 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     marginHorizontal: Spacing.base,
     marginTop: Spacing.md,
     ...shadows.medium,
+  },
+  signOutBtn: {
+    backgroundColor: colors.action.destructiveBackground,
+    borderWidth: 1,
+    borderColor: colors.pink[200],
+    borderRadius: BorderRadius.xl,
+    paddingVertical: Spacing.md,
+    alignItems: 'center',
+  },
+  signOutBtnText: {
+    color: colors.action.destructiveText,
+    fontSize: Typography.fontSize.base,
+    fontWeight: '700',
   },
   saveEditBtnText: {
     color: colors.action.primaryText,

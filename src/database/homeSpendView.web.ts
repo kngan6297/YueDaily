@@ -1,6 +1,5 @@
 // ============================================================
-// Home monitoring views — grouping theo sources.spending_group
-// Không dùng expense_audience. Không persist trên transaction.
+// P2.2 — Web Home spend-view labels (neutral multi-account copy)
 // ============================================================
 
 import type { HomeSpendView } from './homeSpendViewShared';
@@ -9,7 +8,7 @@ export type { HomeSpendView };
 
 export const HOME_SPEND_VIEW_OPTIONS: { id: HomeSpendView; label: string }[] = [
   { id: 'all', label: 'Tất cả' },
-  { id: 'personal_yue', label: 'Cá nhân Yue' },
+  { id: 'personal_yue', label: 'Cá nhân' },
   { id: 'household', label: 'Quỹ chung' },
 ];
 

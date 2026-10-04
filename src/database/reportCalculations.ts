@@ -205,7 +205,8 @@ export function buildReportFilterClauses(filters: ReportFilterInput): {
 }
 
 export interface SourceAmountRow {
-  source_id: number | null;
+  /** Native integer id or cloud UUID string */
+  source_id: number | string | null;
   source_name?: string | null;
   amount: number;
 }

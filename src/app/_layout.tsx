@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { BottomSheetPortalProvider } from '../components/ui/BottomSheetPortal';
-import { WebFoundationShell } from '../components/web/WebFoundationShell';
+import { WebAppShell } from '../components/web/WebAppShell';
 import { Typography } from '../constants/theme';
 import { ThemeProvider, useAppTheme } from '../context/ThemeContext';
 import { useDatabase } from '../hooks/useDatabase';
@@ -35,7 +35,7 @@ function RootLayoutContent() {
     }
   }, [isReady, error]);
 
-  // Web foundation shell — no browser SQLite finance DB (auth P2.1; expense UI P2.2)
+  // Legacy P2.0/P2.1 foundation marker — unused once useDatabase.web clears webFoundation.
   if (webFoundation) {
     return (
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
@@ -43,7 +43,11 @@ function RootLayoutContent() {
           barStyle={resolvedColorScheme === 'dark' ? 'light-content' : 'dark-content'}
           backgroundColor={colors.background.primary}
         />
-        <WebFoundationShell />
+        <WebAppShell>
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Đang mở YueDaily Web…</Text>
+          </View>
+        </WebAppShell>
       </SafeAreaProvider>
     );
   }
@@ -96,37 +100,39 @@ function RootLayoutContent() {
         barStyle={resolvedColorScheme === 'dark' ? 'light-content' : 'dark-content'}
         backgroundColor={colors.background.primary}
       />
-      <BottomSheetPortalProvider>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: colors.background.primary },
-          }}
-        >
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen
-            name="form"
-            options={{
-              presentation: 'modal',
-              animation: 'slide_from_bottom',
+      <WebAppShell>
+        <BottomSheetPortalProvider>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: colors.background.primary },
             }}
-          />
-          <Stack.Screen
-            name="camera"
-            options={{
-              presentation: 'fullScreenModal',
-              animation: 'fade',
-            }}
-          />
-          <Stack.Screen
-            name="spending-chat"
-            options={{
-              presentation: 'modal',
-              animation: 'slide_from_bottom',
-            }}
-          />
-        </Stack>
-      </BottomSheetPortalProvider>
+          >
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen
+              name="form"
+              options={{
+                presentation: 'modal',
+                animation: 'slide_from_bottom',
+              }}
+            />
+            <Stack.Screen
+              name="camera"
+              options={{
+                presentation: 'fullScreenModal',
+                animation: 'fade',
+              }}
+            />
+            <Stack.Screen
+              name="spending-chat"
+              options={{
+                presentation: 'modal',
+                animation: 'slide_from_bottom',
+              }}
+            />
+          </Stack>
+        </BottomSheetPortalProvider>
+      </WebAppShell>
     </SafeAreaProvider>
   );
 }

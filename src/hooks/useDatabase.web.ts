@@ -1,21 +1,18 @@
 // ============================================================
-// P2.0 — Web bootstrap: do NOT open browser SQLite as system of record.
+// P2.2 — Web bootstrap: no browser SQLite; app mounts after Auth gate.
 // Android keeps useDatabase.ts → initializeDatabase() unchanged.
 // ============================================================
 
-import { useCallback, useMemo, useState } from 'react';
-import { createWebFoundationBootstrap } from '../platform/webFoundation';
+import { useCallback, useMemo } from 'react';
 import type { UseDatabaseResult } from './useDatabaseTypes';
 
 /**
- * Web foundation bootstrap — app shell may render, but finance data waits for P2.1+.
- * Intentionally does not call expo-sqlite / initializeDatabase.
+ * Web is ready without SQLite. Auth gate lives in WebAppShell.
+ * Finance data comes from Supabase repositories (RLS).
  */
 export function useDatabase(): UseDatabaseResult {
-  const [bootstrap] = useState(() => createWebFoundationBootstrap());
-
   const retryDatabase = useCallback(async () => {
-    // No-op: cloud data layer arrives in P2.1; retrying cannot open a production web DB yet.
+    // No local DB to retry — cloud session/repos handle recovery.
   }, []);
 
   return useMemo(
@@ -24,8 +21,9 @@ export function useDatabase(): UseDatabaseResult {
       error: null,
       isInitializing: false,
       retryDatabase,
-      webFoundation: bootstrap,
+      // P2.2: do not short-circuit to foundation placeholder — show real tabs.
+      webFoundation: undefined,
     }),
-    [bootstrap, retryDatabase],
+    [retryDatabase],
   );
 }

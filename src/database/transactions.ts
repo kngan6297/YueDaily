@@ -34,6 +34,13 @@ export async function insertTransaction(data: TransactionFormData): Promise<numb
   const expenseAudience = resolveExpenseAudienceForSave(data.expense_audience);
   const payerToSave = resolvePayerForInsert(data.payer);
 
+  const categoryId =
+    data.category_id == null || data.category_id === ''
+      ? null
+      : Number(data.category_id);
+  const sourceId =
+    data.source_id == null || data.source_id === '' ? null : Number(data.source_id);
+
   const result = await db.runAsync(
     `INSERT INTO transactions
       (amount, type, category_id, source_id, payer, expense_audience, image_uri, location, note, status, created_at)
@@ -41,8 +48,8 @@ export async function insertTransaction(data: TransactionFormData): Promise<numb
     [
       parseInt(data.amount.replace(/\D/g, ''), 10) || 0,
       'chi',
-      data.category_id,
-      data.source_id,
+      categoryId,
+      sourceId,
       payerToSave,
       expenseAudience,
       data.image_uri,
@@ -119,6 +126,13 @@ export async function updateTransaction(id: number, data: TransactionFormData): 
   const expenseAudience = resolveExpenseAudienceForSave(data.expense_audience);
   const typeToSave = existing.type;
 
+  const categoryId =
+    data.category_id == null || data.category_id === ''
+      ? null
+      : Number(data.category_id);
+  const sourceId =
+    data.source_id == null || data.source_id === '' ? null : Number(data.source_id);
+
   // Không ghi đè payer: form P1.5 không expose field này.
   await db.runAsync(
     `UPDATE transactions
@@ -128,8 +142,8 @@ export async function updateTransaction(id: number, data: TransactionFormData): 
     [
       parseInt(data.amount.replace(/\D/g, ''), 10) || 0,
       typeToSave,
-      data.category_id,
-      data.source_id,
+      categoryId,
+      sourceId,
       expenseAudience,
       data.location,
       data.note,

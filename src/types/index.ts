@@ -228,8 +228,9 @@ export interface GeminiAnalysisResult {
 export interface TransactionFormData {
   amount: string;
   type: TransactionType;
-  category_id: number | null;
-  source_id: number | null;
+  /** Native integer or cloud UUID string — SQLite DAO coerces to number */
+  category_id: number | string | null;
+  source_id: number | string | null;
   /** Legacy — form P1.5 không gửi; insert dùng LEGACY_DEFAULT_PAYER */
   payer?: Payer;
   expense_audience: ExpenseAudience;

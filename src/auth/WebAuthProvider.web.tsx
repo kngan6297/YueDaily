@@ -19,6 +19,7 @@ import {
 import { normalizeAuthErrorMessage } from '../services/supabase/authErrors';
 import { getSupabaseClient } from '../services/supabase/client.web';
 import { loadSupabaseEnvFromProcess } from '../services/supabase/env';
+import { clearLastSelectedSourceId } from '../utils/lastSource';
 
 interface WebAuthContextValue {
   ui: WebAuthUiState;
@@ -127,6 +128,7 @@ export function WebAuthProvider({ children }: { children: React.ReactNode }) {
     const client = getSupabaseClient();
     if (!client) return;
     try {
+      await clearLastSelectedSourceId();
       await client.auth.signOut();
     } catch {
       // UI still clears via auth state listener when possible

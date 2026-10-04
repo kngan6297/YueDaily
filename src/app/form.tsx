@@ -21,15 +21,24 @@ import { AmountKeyboard, formatAmount } from '../components/form/AmountKeyboard'
 import { BottomSheetModal } from '../components/ui/BottomSheetModal';
 import { BorderRadius, Spacing, ThemeColors, ThemeShadows, Typography } from '../constants/theme';
 import { useAppTheme } from '../context/ThemeContext';
-import { getAllSources, getExpenseCategoriesByUsage } from '../database/categories';
-import { pickerSources, resolveCreateSourceId } from '../database/sourceLifecycle';
+import { isSourceActive, pickerSources, resolveCreateSourceId } from '../database/sourceLifecycle';
+import { useGemini } from '../hooks/useGemini';
+import { useModalBottomInset } from '../hooks/useModalBottomInset';
+import { RECEIPT_SCAN_ENABLED } from '../platform/receiptScanEnabled';
+import { listExpenseCategoriesByUsage } from '../repositories/categories';
+import { userMessageForDataError } from '../repositories/errors';
+import { listSources } from '../repositories/sources';
 import {
   getTransactionById,
   insertTransaction,
   updateTransaction,
-} from '../database/transactions';
-import { useGemini } from '../hooks/useGemini';
-import { useModalBottomInset } from '../hooks/useModalBottomInset';
+} from '../repositories/transactions';
+import type {
+  EntityId,
+  FinanceCategory,
+  FinanceSource,
+  FinanceTransactionInput,
+} from '../repositories/types';
 import { ReceiptAiError } from '../services/receiptAi/errors';
 import { preprocessReceiptImage } from '../services/receiptAi/preprocessReceiptImage';
 import {
@@ -39,12 +48,7 @@ import {
 import {
   consumePendingReceiptImage,
 } from '../services/receiptAi/pendingReceiptImage';
-import type {
-  Category,
-  ExpenseAudience,
-  Source,
-  TransactionFormData,
-} from '../types';
+import type { ExpenseAudience } from '../types';
 import {
   DEFAULT_EXPENSE_AUDIENCE,
   EXPENSE_AUDIENCE_CHOICES,
@@ -52,7 +56,6 @@ import {
   EXPENSE_AUDIENCE_LABELS,
 } from '../types';
 import {
-  dateFromCreatedAt,
   formatDateVi,
   formatLocalDate,
   parseLocalDate,
@@ -62,18 +65,18 @@ import { getLastSelectedSourceId, setLastSelectedSourceId } from '../utils/lastS
 // ─── Dropdown Picker ──────────────────────────────────────────────────────────
 
 interface PickerOption {
-  id: number | string;
+  id: string;
   label: string;
   icon?: string;
   color?: string;
 }
 
 interface DropdownPickerProps {
-  value: number | string | null;
+  value: string | null;
   label: string;
   placeholder?: string;
   options: PickerOption[];
-  onSelect: (id: number | string) => void;
+  onSelect: (id: string) => void;
   accentColor?: string;
 }
 
@@ -96,7 +99,7 @@ function DropdownPicker({
   const { colors, shadows, resolvedColorScheme } = useAppTheme();
   const styles = useMemo(() => createStyles(colors, shadows, resolvedColorScheme), [colors, shadows, resolvedColorScheme]);
   const [open, setOpen] = useState(false);
-  const selected = options.find((o) => o.id === value);
+  const selected = options.find((o) => String(o.id) === String(value));
 
   return (
     <View style={styles.field}>
@@ -118,7 +121,7 @@ function DropdownPicker({
         <Text style={styles.sheetTitle}>{label}</Text>
         <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
           {options.map((opt) => {
-            const isActive = opt.id === value;
+            const isActive = String(opt.id) === String(value);
             return (
               <TouchableOpacity
                 key={String(opt.id)}
@@ -152,7 +155,7 @@ export default function TransactionForm() {
   const params = useLocalSearchParams<{
     imageUri?: string | string[];
     imageHandoff?: string | string[];
-    transactionId?: string;
+    transactionId?: string | string[];
     isEdit?: string;
     transactionDate?: string;
   }>();
@@ -165,14 +168,15 @@ export default function TransactionForm() {
   const [handoff] = useState(() => consumePendingReceiptImage());
 
   const imageUri = handoff?.uri ?? paramImageUri;
-  const transactionId = params.transactionId
-    ? parseInt(
-        Array.isArray(params.transactionId)
-          ? params.transactionId[0]
-          : params.transactionId,
-        10,
-      )
-    : null;
+  const rawTransactionId = params.transactionId;
+  const transactionIdParam: string | undefined =
+    typeof rawTransactionId === 'string'
+      ? rawTransactionId
+      : Array.isArray(rawTransactionId)
+        ? rawTransactionId[0]
+        : undefined;
+  const transactionId: EntityId | null =
+    transactionIdParam && transactionIdParam.trim() ? transactionIdParam.trim() : null;
   const isEdit = (Array.isArray(params.isEdit) ? params.isEdit[0] : params.isEdit) === 'true';
   const initialDateParam = Array.isArray(params.transactionDate)
     ? params.transactionDate[0]
@@ -183,7 +187,7 @@ export default function TransactionForm() {
   const formMode: FormMode =
     isEdit && transactionId ? 'edit-complete' : 'create-complete';
 
-  const [formData, setFormData] = useState<TransactionFormData>({
+  const [formData, setFormData] = useState<FinanceTransactionInput>({
     amount: '',
     type: 'chi',
     category_id: null,
@@ -195,8 +199,9 @@ export default function TransactionForm() {
     transaction_date: initialDate,
   });
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [sources, setSources] = useState<Source[]>([]);
+  const [categories, setCategories] = useState<FinanceCategory[]>([]);
+  const [sources, setSources] = useState<FinanceSource[]>([]);
+  const [sourcesLoaded, setSourcesLoaded] = useState(false);
   const [systemKeyboardVisible, setSystemKeyboardVisible] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -204,13 +209,13 @@ export default function TransactionForm() {
   const hasAutoScanned = useRef(false);
   const scanGenerationRef = useRef(0);
   // Ref luôn giữ bản categories mới nhất — tránh stale closure khi AI scan async
-  const categoriesRef = useRef<Category[]>([]);
+  const categoriesRef = useRef<FinanceCategory[]>([]);
 
   const { analyze, isLoading: isAiLoading } = useGemini();
 
   // Tải danh mục chi tiêu theo tần suất dùng; auto-chọn đầu danh sách nếu tạo mới
   useEffect(() => {
-    getExpenseCategoriesByUsage().then((cats) => {
+    listExpenseCategoriesByUsage().then((cats) => {
       categoriesRef.current = cats;
       setCategories(cats);
       if (formMode === 'create-complete') {
@@ -219,13 +224,16 @@ export default function TransactionForm() {
           category_id: p.category_id ?? (cats[0]?.id ?? null),
         }));
       }
-    }).catch(console.error);
+    }).catch((err) => {
+      Alert.alert('Không tải được danh mục', userMessageForDataError(err, 'categories'));
+    });
   }, [formMode]);
 
   // Tải nguồn chi — tạo mới: active + last-selected nếu còn active
   useEffect(() => {
-    getAllSources().then(async (srcs) => {
+    listSources().then(async (srcs) => {
       setSources(srcs);
+      setSourcesLoaded(true);
       if (formMode !== 'create-complete') return;
       const lastId = await getLastSelectedSourceId();
       setFormData((p) => {
@@ -233,14 +241,20 @@ export default function TransactionForm() {
         const nextId = resolveCreateSourceId(pickerSources(srcs, 'create', null), lastId);
         return nextId != null ? { ...p, source_id: nextId } : p;
       });
-    }).catch(console.error);
+    }).catch((err) => {
+      setSourcesLoaded(true);
+      Alert.alert('Không tải được nguồn chi', userMessageForDataError(err, 'sources'));
+    });
   }, [formMode]);
 
   // Load existing transaction when editing
   useEffect(() => {
     if (formMode === 'create-complete' || !transactionId) return;
     getTransactionById(transactionId).then((txn) => {
-      if (!txn) return;
+      if (!txn) {
+        Alert.alert('Không tìm thấy giao dịch', 'Giao dịch này có thể đã bị xoá.');
+        return;
+      }
       setFormData({
         amount: String(txn.amount),
         type: txn.type,
@@ -250,9 +264,11 @@ export default function TransactionForm() {
         image_uri: txn.image_uri,
         note: txn.note?.trim() || txn.location?.trim() || '',
         location: '',
-        transaction_date: dateFromCreatedAt(txn.created_at),
+        transaction_date: txn.transaction_date,
       });
-    }).catch(console.error);
+    }).catch((err) => {
+      Alert.alert('Không tải được giao dịch', userMessageForDataError(err, 'transactions'));
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formMode, transactionId]);
 
@@ -282,7 +298,7 @@ export default function TransactionForm() {
     });
   }, []);
 
-  const findCategoryByName = useCallback((cats: Category[], categoryName: string) => {
+  const findCategoryByName = useCallback((cats: FinanceCategory[], categoryName: string) => {
     return cats.find((c) =>
       c.name.toLowerCase().includes(categoryName.toLowerCase()) ||
       categoryName.toLowerCase().includes(c.name.toLowerCase())
@@ -297,12 +313,12 @@ export default function TransactionForm() {
 
     const summary = result.description || result.note || '';
 
-    const cats = await getExpenseCategoriesByUsage();
+    const cats = await listExpenseCategoriesByUsage();
     if (scanGeneration !== scanGenerationRef.current) return;
     categoriesRef.current = cats;
     setCategories(cats);
 
-    let categoryId: number | null = cats[0]?.id ?? null;
+    let categoryId: EntityId | null = cats[0]?.id ?? null;
     if (result.category) {
       const matched = findCategoryByName(cats, result.category);
       if (matched) categoryId = matched.id;
@@ -339,6 +355,7 @@ export default function TransactionForm() {
 
   // ── AI scan ──
   const handleAiScan = useCallback(async () => {
+    if (!RECEIPT_SCAN_ENABLED) return;
     if (!imageUri) { Alert.alert('Chưa có ảnh', 'Hãy chụp hoặc chọn ảnh trước!'); return; }
     const scanGeneration = ++scanGenerationRef.current;
     const totalStarted = Date.now();
@@ -375,6 +392,7 @@ export default function TransactionForm() {
 
   // Tự quét khi mở form với ảnh mới (không phải chỉnh sửa)
   useEffect(() => {
+    if (!RECEIPT_SCAN_ENABLED) return;
     if (!imageUri || formMode !== 'create-complete' || hasAutoScanned.current) return;
     hasAutoScanned.current = true;
     handleAiScan();
@@ -428,8 +446,8 @@ export default function TransactionForm() {
         await setLastSelectedSourceId(formData.source_id);
       }
       router.dismissAll();
-    } catch {
-      Alert.alert('Lỗi', 'Không thể lưu. Thử lại nhé!');
+    } catch (err) {
+      Alert.alert('Không lưu được', userMessageForDataError(err, 'transactions'));
     } finally {
       setIsSaving(false);
     }
@@ -466,6 +484,11 @@ export default function TransactionForm() {
     label: s.name,
     icon: '💳',
   }));
+
+  const showNoSourcesHint =
+    sourcesLoaded &&
+    formMode === 'create-complete' &&
+    sources.filter(isSourceActive).length === 0;
 
   const audienceOptions: PickerOption[] = [
     ...EXPENSE_AUDIENCE_CHOICES.map((key) => ({
@@ -510,7 +533,7 @@ export default function TransactionForm() {
 
             <View style={{ flex: 1 }} />
 
-            {imageUri ? (
+            {imageUri && RECEIPT_SCAN_ENABLED ? (
               <TouchableOpacity
                 style={[styles.aiBtn, isAiLoading && styles.aiBtnLoading]}
                 onPress={handleAiScan}
@@ -523,7 +546,7 @@ export default function TransactionForm() {
             ) : <View style={{ width: 34 }} />}
           </View>
 
-          {isAiLoading ? (
+          {RECEIPT_SCAN_ENABLED && isAiLoading ? (
             <Text style={styles.aiLoadingHint}>Đang đọc bill...</Text>
           ) : null}
 
@@ -576,7 +599,7 @@ export default function TransactionForm() {
                 value={formData.category_id}
                 label="Danh mục"
                 options={categoryOptions}
-                onSelect={(id) => setFormData((p) => ({ ...p, category_id: id as number }))}
+                onSelect={(id) => setFormData((p) => ({ ...p, category_id: id }))}
                 accentColor={accentColor}
               />
             </View>
@@ -593,6 +616,21 @@ export default function TransactionForm() {
             </View>
           </View>
 
+          {showNoSourcesHint ? (
+            <View style={styles.noSourceBox}>
+              <Text style={styles.noSourceText}>
+                Bạn chưa có nguồn chi nào. Hãy tạo nguồn chi trong Cài đặt trước khi lưu giao dịch.
+              </Text>
+              <TouchableOpacity
+                style={styles.noSourceBtn}
+                onPress={() => router.push('/settings')}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.noSourceBtnText}>Mở Cài đặt</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
           {/* Hàng 2: Nguồn chi | Ngày giao dịch */}
           <View style={styles.pillRow}>
             <View style={styles.pillFlex}>
@@ -600,7 +638,7 @@ export default function TransactionForm() {
                 value={formData.source_id}
                 label="Nguồn chi"
                 options={sourceOptions}
-                onSelect={(id) => setFormData((p) => ({ ...p, source_id: id as number }))}
+                onSelect={(id) => setFormData((p) => ({ ...p, source_id: id }))}
                 accentColor={accentColor}
               />
             </View>
@@ -860,6 +898,33 @@ function createStyles(
     alignItems: 'flex-start',
   },
   pillFlex: { flex: 1, minWidth: 0 },
+  noSourceBox: {
+    backgroundColor: colors.pink[50],
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.pink[100],
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  noSourceText: {
+    fontSize: Typography.fontSize.sm,
+    color: colors.neutral[600],
+    lineHeight: 20,
+  },
+  noSourceBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.action.secondaryBackground,
+    borderWidth: 1,
+    borderColor: colors.action.secondaryBorder,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 6,
+  },
+  noSourceBtnText: {
+    fontSize: Typography.fontSize.xs,
+    fontWeight: '700',
+    color: colors.action.secondaryText,
+  },
   field: { gap: 6 },
   fieldLabel: {
     fontSize: 12,

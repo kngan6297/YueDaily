@@ -1169,7 +1169,7 @@ Implementation: `src/services/spendingChat/*`, `src/services/ai/*`, `src/app/spe
 | SDK align | Expo SDK 57 patch baseline restored (`expo-doctor` 21/21) |
 | Web bootstrap | Temporary foundation shell — **does not** open browser SQLite as production data |
 | Android data | Remains local-first SQLite; no automatic cloud upload |
-| Core web expense UI | **P2.2** |
+| Core web expense UI | **P2.2** (see below) |
 | Web receipt + Edge AI | **P2.3** |
 | Spending Chat cloud / Edge turn | **P2.4** |
 | Offline / service worker / PWA install polish / deploy | **Deferred** (P2.6+) |
@@ -1183,39 +1183,30 @@ Implementation: `src/services/spendingChat/*`, `src/services/ai/*`, `src/app/spe
 | Auth | Web email/password **sign-in only** (no public signup UI) |
 | Env | `EXPO_PUBLIC_SUPABASE_URL` + `EXPO_PUBLIC_SUPABASE_ANON_KEY` (never service-role in client) |
 | Session | Browser persist + auto refresh; missing config → safe configuration screen |
-| Schema | `supabase/migrations/*_p2_1_private_user_schema.sql` (+ seed RPC EXECUTE hardening) — **applied on DEV** |
-| Ownership | Every user-owned table: `user_id` + `auth.uid()` RLS |
-| Cross-user FK | Composite `(user_id, …)` FKs for transaction/source/category, budget envelope, tracked periods, chat messages |
-| New-user seed | Categories + legacy payers only — **no** auto-seed of Woori/VPBank/cash (Yue-install examples, not universal); **no** transactions / periods / balances / chat |
-| Receipt media | **Not** in schema/Storage — P1.7B/C remain deferred; `image_uri` not a cloud Storage reference |
+| Schema | Applied on DEV; RLS + seed + RPC hardening |
 | Android | Remains SQLite; no Auth gate; no cloud upload |
-| Cloud expense UI | **Not implemented** — **P2.2** |
-| Receipt Edge AI | **P2.3** |
-| Spending Chat Edge turn | **P2.4** |
-| Android → cloud ID mapping | **P2.5** (local AUTOINCREMENT → UUID; no import code in P2.1) |
 
-**Verified on DEV (runtime, not UI):**
+**Verified:** Auth API + RLS isolation + seed (P2.1); interactive browser Auth UI (invalid login VN error, User A/B sign-in, refresh session restore, Settings sign-out). Auth UI shell reused in P2.2.
 
-- Migration applied; 9 user-owned tables + RLS
-- 2-user RLS isolation (forged ownership / cross-user reads rejected)
-- Cross-user composite FK injection rejected
-- New-user seed: 12 categories + 2 legacy payers + 0 sources
-- VPBank `opening_balance` NULL vs 0 preserved
-- Auth API sign-in verified (anon client)
-- Seed-function `EXECUTE` revoked from `anon` / `authenticated` (trigger-only)
+**Still pending:** iPhone Safari / PWA Auth UI QA
 
-**Still pending (manual):**
+**Production hardening:** Enable Supabase Auth **leaked-password protection** before public production release
 
-- Interactive browser sign-in UI QA
-- Session restore via actual Web UI
-- Sign-out via actual Web UI
-- iPhone Safari / PWA Auth UI QA
+> **Trạng thái P2.1:** **WEB AUTH RUNTIME VERIFIED / IPHONE QA PENDING.**
 
-**Production hardening (does not block DEV commit):**
+### P2.2 — Core Web Expense UI on Supabase
 
-- Enable Supabase Auth **leaked-password protection** before public production release
+| Hạng mục | Ghi chú |
+|----------|---------|
+| Architecture | Thin repository contracts → native SQLite adapters **or** Web Supabase adapters (Metro `.web.ts`) |
+| Web tabs | Home · Reports · Settings (Camera FAB + Accounts hidden) |
+| Transactions | Create / read / update / delete via RLS; integer VND; cloud `transaction_date` YYYY-MM-DD (+ `row_created_at` metadata); native `created_at` TEXT calendar unchanged |
+| Categories / sources | Settings CRUD; fresh users start with **0 sources** (must create first) |
+| Reports | Calendar month/day/custom; category/source/audience/daily totals via pure calculations |
+| Deferred on Web | Woori · VPBank · receipt AI · Spending Chat · backup v8 UI · offline |
+| Android | Unchanged SQLite path; no Auth requirement |
 
-> **Trạng thái P2.1:** **RUNTIME AUTH/RLS VERIFIED / WEB+IPHONE AUTH UI QA PENDING.** No production deploy / no P2.2.
+> **Trạng thái P2.2:** **WEB RUNTIME VERIFIED / IPHONE QA PENDING.** No production deploy / no P2.3.
 
 ### Deferred — P1.7B / P1.7C
 
@@ -1224,7 +1215,7 @@ Implementation: `src/services/spendingChat/*`, `src/services/ai/*`, `src/app/spe
 | **P1.7B — DEFERRED** | Persistent Receipt Archive | App document storage, persistent receipt URI, viewer/zoom, delete cleanup. **P1.7A TEMP AI-prep files are NOT this archive.** |
 | **P1.7C — DEFERRED** | Media-aware Backup | JSON + receipt media archive/ZIP; restore media across devices. |
 | P1.8+ | Spending Insights / other | Food vs drinks, `expense_nature`, weekday patterns — after chat + P1.7A closed. |
-| P2.2+ | Core Web expense UI on cloud | After P2.1 Auth/RLS foundation |
+| P2.3+ | Web receipt + Edge AI | After P2.2 expense UI |
 | P2 | Widget / shortcut chụp nhanh | Phụ thuộc nền tảng |
 
 Các hạng mục **không** nằm trong lộ trình sản phẩm cốt lõi: UI API key Cài đặt, repeat transaction, export CSV, pending inbox, thu nhập / cash-flow / opening balance, shop accounting / profit / owner draw, Family Savings balance, reimbursement / internal transfer, actual contribution ledger, bank sync, streak/gamification.

@@ -21,20 +21,23 @@ import { BorderRadius, Spacing, ThemeColors, ThemeShadows, Typography } from '..
 import { useAppTheme } from '../../context/ThemeContext';
 import {
   buildMonthDailySeries,
+  highestSpendingDay,
+  type DailyAmount,
+  type NamedAmount,
+  type ReportRange,
+} from '../../database/reportCalculations';
+import { userMessageForDataError } from '../../repositories/errors';
+import {
   getDailyExpenseTotals,
   getExpenseAudienceTotals,
   getExpenseCategoryTotals,
   getExpenseSourceTotals,
   getExpenseSummary,
   getExpenseTransactions,
-  highestSpendingDay,
-  type DailyAmount,
   type ExpenseSummary,
-  type NamedAmount,
-  type ReportRange,
-  type TransactionWithMeta,
-} from '../../database/reportQueries';
-import { getAllSources } from '../../database/categories';
+} from '../../repositories/reports';
+import { listSources } from '../../repositories/sources';
+import type { EntityId, FinanceTransaction } from '../../repositories/types';
 import type { ExpenseAudience } from '../../types';
 import {
   EXPENSE_AUDIENCE_CHOICES,
@@ -52,7 +55,7 @@ import {
 
 // ─── Types ───────────────────────────────────────────────────
 type PeriodKind = 'day' | 'month' | 'custom';
-type SourceFilter = 'all' | number;
+type SourceFilter = EntityId | 'all';
 type AudienceFilter = 'all' | ExpenseAudience;
 
 interface FilterOption {
@@ -276,7 +279,7 @@ function TransactionList({
   items,
   emptyMessage = 'Không có giao dịch phù hợp',
 }: {
-  items: TransactionWithMeta[];
+  items: FinanceTransaction[];
   emptyMessage?: string;
 }) {
   const { colors, shadows } = useAppTheme();
@@ -356,13 +359,14 @@ export default function ReportsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [transactions, setTransactions] = useState<TransactionWithMeta[]>([]);
+  const [transactions, setTransactions] = useState<FinanceTransaction[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [summary, setSummary] = useState<ExpenseSummary | null>(null);
   const [dailySeries, setDailySeries] = useState<DailyAmount[]>([]);
   const [sourceStats, setSourceStats] = useState<NamedAmount[]>([]);
   const [audienceStats, setAudienceStats] = useState<NamedAmount[]>([]);
   const [categoryRows, setCategoryRows] = useState<NamedAmount[]>([]);
-  const [sources, setSources] = useState<Array<{ id: number; name: string }>>([]);
+  const [sources, setSources] = useState<Array<{ id: EntityId; name: string }>>([]);
   const [datePicker, setDatePicker] = useState<'day' | 'from' | 'to' | null>(null);
 
   const customRange = useMemo(
@@ -397,6 +401,7 @@ export default function ReportsScreen() {
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const [txns, sum, bySource, byAudience, byCategory] = await Promise.all([
         getExpenseTransactions(reportRange, filters),
@@ -418,16 +423,19 @@ export default function ReportsScreen() {
         setDailySeries([]);
       }
     } catch (err) {
-      console.error(err);
+      setLoadError(userMessageForDataError(err, 'reports'));
     } finally {
       setIsLoading(false);
     }
   }, [reportRange, filters, period, navYear, navMonth]);
 
   useFocusEffect(useCallback(() => {
-    getAllSources().then((s) =>
+    listSources().then((s) =>
       setSources(s.map(({ id, name }) => ({ id, name })))
-    ).catch(console.error);
+    ).catch(() => {
+      // Source filter is optional; main load error is surfaced by loadData.
+      setSources([]);
+    });
   }, []));
 
   useEffect(() => {
@@ -629,6 +637,14 @@ export default function ReportsScreen() {
 
         {isLoading ? (
           <ActivityIndicator color={colors.blue[400]} style={{ paddingVertical: 28 }} />
+        ) : loadError ? (
+          <View style={styles.empty}>
+            <Text style={styles.emptyIcon}>⚠️</Text>
+            <Text style={styles.emptyText}>{loadError}</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={loadData} activeOpacity={0.85}>
+              <Text style={styles.retryBtnText}>Thử lại</Text>
+            </TouchableOpacity>
+          </View>
         ) : (
           <>
             {/* Summary */}
@@ -672,7 +688,7 @@ export default function ReportsScreen() {
                 label="Nguồn chi"
                 value={sourceId === 'all' ? 'all' : String(sourceId)}
                 options={sourceOptions}
-                onSelect={(id) => setSourceId(id === 'all' ? 'all' : Number(id))}
+                onSelect={(id) => setSourceId(id === 'all' ? 'all' : id)}
               />
               <FilterDropdown
                 label="Chi cho"
@@ -1274,6 +1290,19 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     color: colors.neutral[400],
     textAlign: 'center',
     lineHeight: 20,
+  },
+
+  retryBtn: {
+    marginTop: Spacing.xs,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.lg,
+    backgroundColor: colors.action.primaryBackground,
+  },
+  retryBtnText: {
+    color: colors.action.primaryText,
+    fontSize: Typography.fontSize.sm,
+    fontWeight: '700',
   },
 
   dateDoneBtn: {

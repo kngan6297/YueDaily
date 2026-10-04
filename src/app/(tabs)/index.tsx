@@ -26,11 +26,12 @@ import {
   spendingGroupForHomeSpendView,
   type HomeSpendView,
 } from '../../database/homeSpendView';
+import { userMessageForDataError } from '../../repositories/errors';
 import {
   deleteTransaction,
   getTransactionsByMonth,
-} from '../../database/transactions';
-import type { Transaction } from '../../types';
+} from '../../repositories/transactions';
+import type { EntityId, FinanceTransaction } from '../../repositories/types';
 import { EXPENSE_AUDIENCE_LABELS } from '../../types';
 import { formatDateVi } from '../../utils/date';
 
@@ -40,12 +41,7 @@ const CELL_SIZE = Math.floor((SCREEN_W - Spacing.base * 2 - Spacing.xs * 6) / 7)
 const fmt = (n: number) => n.toLocaleString('vi-VN');
 const DAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 
-type TxnWithMeta = Transaction & {
-  category_name?: string;
-  category_icon?: string;
-  category_color?: string;
-  source_name?: string;
-};
+type TxnWithMeta = FinanceTransaction;
 
 const getGreeting = () => {
   const h = new Date().getHours();
@@ -91,9 +87,9 @@ export default function HomeScreen() {
     try {
       const group = spendingGroupForHomeSpendView(spendView);
       const txns = await getTransactionsByMonth(calYear, calMonth, group);
-      setMonthTxns(txns as TxnWithMeta[]);
+      setMonthTxns(txns);
     } catch (err) {
-      console.error(err);
+      Alert.alert('Không tải được giao dịch', userMessageForDataError(err, 'transactions'));
     } finally {
       setIsLoading(false);
     }
@@ -121,7 +117,7 @@ export default function HomeScreen() {
     const source = monthTxns.filter((t) => t.type === 'chi');
     const map: Record<number, TxnWithMeta[]> = {};
     for (const t of source) {
-      const dateStr = t.created_at.slice(0, 10); // "YYYY-MM-DD"
+      const dateStr = t.transaction_date; // YYYY-MM-DD calendar domain
       const [yr, mo, dy] = dateStr.split('-').map(Number);
       if (yr === calYear && mo === calMonth) {
         if (!map[dy]) map[dy] = [];
@@ -178,7 +174,7 @@ export default function HomeScreen() {
     });
   }, [router]);
 
-  const handleDeleteTxn = useCallback((id: number) => {
+  const handleDeleteTxn = useCallback((id: EntityId) => {
     Alert.alert(
       'Xoá giao dịch?',
       'Giao dịch này sẽ bị xoá vĩnh viễn.',
@@ -188,8 +184,12 @@ export default function HomeScreen() {
           text: 'Xoá',
           style: 'destructive',
           onPress: async () => {
-            await deleteTransaction(id);
-            await loadData();
+            try {
+              await deleteTransaction(id);
+              await loadData();
+            } catch (err) {
+              Alert.alert('Không xoá được', userMessageForDataError(err, 'transactions'));
+            }
           },
         },
       ]
@@ -392,6 +392,15 @@ export default function HomeScreen() {
             </View>
           )}
         </View>
+
+        {!isLoading && monthTxns.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateIcon}>🌸</Text>
+            <Text style={styles.emptyStateText}>
+              Tháng này chưa có khoản chi nào. Chạm vào một ngày để thêm giao dịch nhé!
+            </Text>
+          </View>
+        ) : null}
 
         <View style={{ height: 24 }} />
       </ScrollView>
@@ -763,6 +772,8 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     fontSize: Typography.fontSize.sm,
     color: colors.neutral[400],
     fontWeight: '500',
+    textAlign: 'center',
+    paddingHorizontal: Spacing.base,
   },
   modalFooter: {
     flexShrink: 0,
