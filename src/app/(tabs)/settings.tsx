@@ -30,6 +30,7 @@ import {
   validateNewSourceDraft,
 } from '../../database/sourceLifecycle';
 import { BACKUP_UI_ENABLED } from '../../platform/backupUiEnabled';
+import { confirmDestructive } from '../../platform/confirmDestructive';
 import { getSourceGroupLabels } from '../../platform/sourceGroupLabels';
 import { useWebSignOut } from '../../platform/webSignOut';
 import {
@@ -230,60 +231,80 @@ export default function SettingsScreen() {
     }
   };
 
-  const confirmDelete = (title: string, message: string, onConfirm: () => Promise<void>) => {
-    Alert.alert(title, message, [
-      { text: 'Huỷ', style: 'cancel' },
-      {
-        text: 'Xoá',
-        style: 'destructive',
-        onPress: () => {
-          onConfirm().catch((err) => {
-            Alert.alert('Không xoá được', userMessageForDataError(err, 'settings'));
-          });
-        },
-      },
-    ]);
+  const confirmDelete = async (
+    title: string,
+    message: string,
+    onConfirm: () => Promise<void>,
+  ) => {
+    const confirmed = await confirmDestructive({
+      title,
+      message,
+      confirmLabel: 'Xoá',
+      cancelLabel: 'Huỷ',
+    });
+    if (!confirmed) return;
+    try {
+      await onConfirm();
+    } catch (err) {
+      const text = userMessageForDataError(err, 'settings');
+      setLoadError(text);
+      Alert.alert('Không xoá được', text);
+    }
   };
 
-  const handleArchiveSource = (s: FinanceSourceWithRefs) => {
+  const handleArchiveSource = async (s: FinanceSourceWithRefs) => {
     const nextActive = !isSourceActive(s);
     const title = nextActive ? 'Dùng lại nguồn chi?' : 'Lưu trữ nguồn chi?';
     const message = nextActive
       ? `「${s.name}」sẽ hiện lại trên form giao dịch mới. Lịch sử không đổi.`
       : `「${s.name}」ẩn khỏi form giao dịch mới. Giao dịch cũ vẫn giữ nguồn này.`;
-    Alert.alert(title, message, [
-      { text: 'Huỷ', style: 'cancel' },
-      {
-        text: nextActive ? 'Dùng lại' : 'Lưu trữ',
-        onPress: () => {
-          setSourceActive(s.id, nextActive)
-            .then(loadData)
-            .catch((err) => {
-              Alert.alert('Không cập nhật được', userMessageForDataError(err, 'sources'));
-            });
-        },
-      },
-    ]);
+    const confirmed = await confirmDestructive({
+      title,
+      message,
+      confirmLabel: nextActive ? 'Dùng lại' : 'Lưu trữ',
+      cancelLabel: 'Huỷ',
+    });
+    if (!confirmed) return;
+    try {
+      await setSourceActive(s.id, nextActive);
+      await loadData();
+    } catch (err) {
+      const text = userMessageForDataError(err, 'sources');
+      setLoadError(text);
+      Alert.alert('Không cập nhật được', text);
+    }
   };
 
   const handleDeleteSource = (s: FinanceSourceWithRefs) => {
-    confirmDelete(
+    void confirmDelete(
       'Xoá nguồn chi?',
       `Xoá 「${s.name}」? Chỉ xoá được nguồn chưa có giao dịch.`,
       async () => {
         const result = await deleteSource(s.id);
-        if (!result.ok) Alert.alert('Không thể xoá', result.reason);
-        else await loadData();
+        if (!result.ok) {
+          setLoadError(result.reason);
+          Alert.alert('Không thể xoá', result.reason);
+          return;
+        }
+        await loadData();
       },
     );
   };
 
   const handleDeleteCategory = (c: FinanceCategory) => {
-    confirmDelete('Xoá danh mục?', `Xoá 「${c.name}」? Giao dịch cũ sẽ mất liên kết danh mục.`, async () => {
-      const result = await deleteCategory(c.id);
-      if (!result.ok) Alert.alert('Không thể xoá', result.reason);
-      else await loadData();
-    });
+    void confirmDelete(
+      'Xoá danh mục?',
+      `Xoá 「${c.name}」? Giao dịch cũ sẽ mất liên kết danh mục.`,
+      async () => {
+        const result = await deleteCategory(c.id);
+        if (!result.ok) {
+          setLoadError(result.reason);
+          Alert.alert('Không thể xoá', result.reason);
+          return;
+        }
+        await loadData();
+      },
+    );
   };
 
   const handleExport = async () => {

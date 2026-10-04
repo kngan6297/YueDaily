@@ -8,6 +8,7 @@ const DEV_DEFAULT_ORIGINS = [
   'http://localhost:8082',
   'http://localhost:8084',
   'https://yozakura--g5k9ewj06k.expo.app',
+  'https://yozakura--gn4cjgf5za.expo.app',
 ] as const;
 
 export function parseAllowedOrigins(raw: string | undefined): string[] {

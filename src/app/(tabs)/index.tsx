@@ -26,6 +26,7 @@ import {
   spendingGroupForHomeSpendView,
   type HomeSpendView,
 } from '../../database/homeSpendView';
+import { confirmDestructive } from '../../platform/confirmDestructive';
 import { userMessageForDataError } from '../../repositories/errors';
 import {
   deleteTransaction,
@@ -81,6 +82,7 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [monthTxns, setMonthTxns] = useState<TxnWithMeta[]>([]);
   const [spendView, setSpendView] = useState<HomeSpendView>('all');
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -174,26 +176,23 @@ export default function HomeScreen() {
     });
   }, [router]);
 
-  const handleDeleteTxn = useCallback((id: EntityId) => {
-    Alert.alert(
-      'Xoá giao dịch?',
-      'Giao dịch này sẽ bị xoá vĩnh viễn.',
-      [
-        { text: 'Huỷ', style: 'cancel' },
-        {
-          text: 'Xoá',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteTransaction(id);
-              await loadData();
-            } catch (err) {
-              Alert.alert('Không xoá được', userMessageForDataError(err, 'transactions'));
-            }
-          },
-        },
-      ]
-    );
+  const handleDeleteTxn = useCallback(async (id: EntityId) => {
+    setActionError(null);
+    const confirmed = await confirmDestructive({
+      title: 'Xoá giao dịch?',
+      message: 'Giao dịch này sẽ bị xoá vĩnh viễn.',
+      confirmLabel: 'Xoá',
+      cancelLabel: 'Huỷ',
+    });
+    if (!confirmed) return;
+    try {
+      await deleteTransaction(id);
+      await loadData();
+    } catch (err) {
+      const message = userMessageForDataError(err, 'transactions');
+      setActionError(message);
+      Alert.alert('Không xoá được', message);
+    }
   }, [loadData]);
 
   // Build calendar cells array
@@ -408,7 +407,10 @@ export default function HomeScreen() {
       {/* === DAY DETAIL MODAL === */}
       <BottomSheetModal
         visible={showDayModal && selectedDay !== null}
-        onClose={() => setShowDayModal(false)}
+        onClose={() => {
+          setActionError(null);
+          setShowDayModal(false);
+        }}
         sheetStyle={daySheetStyle}
       >
           <View
@@ -421,7 +423,13 @@ export default function HomeScreen() {
             <View style={styles.sheetHeaderSection}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>{selectedDayLabel}</Text>
-                <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowDayModal(false)}>
+                <TouchableOpacity
+                  style={styles.modalCloseBtn}
+                  onPress={() => {
+                    setActionError(null);
+                    setShowDayModal(false);
+                  }}
+                >
                   <Text style={styles.modalCloseText}>✕</Text>
                 </TouchableOpacity>
               </View>
@@ -439,6 +447,9 @@ export default function HomeScreen() {
                   <Text style={styles.daySummaryAmt}>{selectedDaySummary.count}</Text>
                 </View>
               </View>
+              {actionError ? (
+                <Text style={styles.actionErrorText}>{actionError}</Text>
+              ) : null}
             </View>
           </View>
 
@@ -740,6 +751,12 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     fontSize: Typography.fontSize.base,
     fontWeight: '800',
     color: colors.neutral[700],
+  },
+  actionErrorText: {
+    marginTop: Spacing.sm,
+    fontSize: Typography.fontSize.sm,
+    color: colors.danger,
+    fontWeight: '600',
   },
   modalCloseBtn: {
     width: 30,

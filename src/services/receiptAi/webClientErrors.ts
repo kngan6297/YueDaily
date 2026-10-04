@@ -90,6 +90,19 @@ function codeFromHttpStatus(status: unknown): EdgeErrorCode | null {
   return null;
 }
 
+function looksLikeAuthFailure(error: unknown): boolean {
+  const e = (error ?? {}) as { message?: unknown; name?: unknown };
+  const message = typeof e.message === 'string' ? e.message.toLowerCase() : '';
+  const name = typeof e.name === 'string' ? e.name : '';
+  if (name === 'AuthSessionMissingError') return true;
+  if (name === 'AuthApiError') {
+    return /session|jwt|token|expired|refresh|authenticated/i.test(message);
+  }
+  return /jwt|session.*(expired|missing)|not authenticated|invalid claim|refresh.?token/i.test(
+    message,
+  );
+}
+
 /** Convert a supabase-js `functions.invoke` error into ReceiptAiError. */
 export async function receiptAiErrorFromInvokeError(
   error: unknown,
@@ -99,6 +112,9 @@ export async function receiptAiErrorFromInvokeError(
   const e = (error ?? {}) as { name?: unknown; context?: unknown };
 
   if (e.name === 'FunctionsFetchError') return networkReceiptAiError();
+  if (looksLikeAuthFailure(error)) {
+    return receiptAiErrorFromEdgeCode(EDGE_ERROR_UNAUTHENTICATED);
+  }
 
   const ctx = e.context as
     | { status?: unknown; json?: () => Promise<unknown> }

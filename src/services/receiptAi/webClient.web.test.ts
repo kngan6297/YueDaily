@@ -16,9 +16,16 @@ type InvokeResult = { data: unknown; error: unknown };
 
 function fakeClient(
   impl: (name: string, opts: { body: FormData }) => Promise<InvokeResult>,
+  session: { access_token: string } | null = { access_token: 'test-token' },
 ) {
   const calls: Array<{ name: string; body: FormData }> = [];
   const client = {
+    auth: {
+      getSession: async () => ({
+        data: { session },
+        error: null,
+      }),
+    },
     functions: {
       invoke: async (name: string, opts: { body: FormData }) => {
         calls.push({ name, body: opts.body });
@@ -111,6 +118,21 @@ describe('analyzeReceiptViaEdge', () => {
       (err: unknown) => (err as { kind?: string }).kind === 'network_error',
     );
   });
+
+  it('fails with permission_denied when session is missing before invoke', async () => {
+    const { client, calls } = fakeClient(async () => ({ data: null, error: null }), null);
+    await assert.rejects(
+      () => analyzeReceiptViaEdge(blob, client),
+      (err: unknown) => {
+        const e = err as { kind?: string; message?: string };
+        assert.equal(e.kind, 'permission_denied');
+        assert.match(String(e.message), /đăng nhập/i);
+        assert.doesNotMatch(String(e.message), /AI/);
+        return true;
+      },
+    );
+    assert.equal(calls.length, 0);
+  });
 });
 
 describe('webClientErrors', () => {
@@ -142,5 +164,14 @@ describe('webClientErrors', () => {
   it('returns generic message for unknown failures', async () => {
     const err = await receiptAiErrorFromInvokeError({ name: 'Weird' });
     assert.equal(err.kind, 'server_error');
+  });
+
+  it('maps AuthSessionMissingError separately from AI failures', async () => {
+    const err = await receiptAiErrorFromInvokeError({
+      name: 'AuthSessionMissingError',
+      message: 'Auth session missing!',
+    });
+    assert.equal(err.kind, 'permission_denied');
+    assert.match(err.message, /đăng nhập/i);
   });
 });

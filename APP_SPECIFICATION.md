@@ -1183,10 +1183,12 @@ Implementation: `src/services/spendingChat/*`, `src/services/ai/*`, `src/app/spe
 | Auth | Web email/password **sign-in only** (no public signup UI) |
 | Env | `EXPO_PUBLIC_SUPABASE_URL` + `EXPO_PUBLIC_SUPABASE_ANON_KEY` (never service-role in client) |
 | Session | Browser persist + auto refresh; missing config → safe configuration screen |
+| Sign-out | Web `auth.signOut({ scope: 'local' })` — **device/session-local only**; other phones/browsers stay signed in |
+| Multi-device | Same account may hold multiple simultaneous sessions (default Supabase Auth; do not enable single-session-per-user for YueDaily) |
 | Schema | Applied on DEV; RLS + seed + RPC hardening |
 | Android | Remains SQLite; no Auth gate; no cloud upload |
 
-**Verified:** Auth API + RLS isolation + seed (P2.1); interactive browser Auth UI (invalid login VN error, User A/B sign-in, refresh session restore, Settings sign-out). Auth UI shell reused in P2.2.
+**Verified:** Auth API + RLS isolation + seed (P2.1); interactive browser Auth UI (invalid login VN error, User A/B sign-in, refresh session restore, Settings sign-out). Auth UI shell reused in P2.2. Web logout verified **local** (Session B survives Session A logout + refresh + authenticated Edge call).
 
 **Still pending:** iPhone Safari / PWA Auth UI QA
 
@@ -1201,10 +1203,11 @@ Implementation: `src/services/spendingChat/*`, `src/services/ai/*`, `src/app/spe
 | Architecture | Thin repository contracts → native SQLite adapters **or** Web Supabase adapters (Metro `.web.ts`) |
 | Web tabs | Home · Reports · Settings (Camera FAB + Accounts hidden) |
 | Transactions | Create / read / update / delete via RLS; integer VND; cloud `transaction_date` YYYY-MM-DD (+ `row_created_at` metadata); native `created_at` TEXT calendar unchanged |
-| Categories / sources | Settings CRUD; fresh users start with **0 sources** (must create first) |
+| Web delete confirm | In-app `confirmDestructive` sheet (RN Web `Alert.alert` callbacks are no-ops); native keeps `Alert.alert` |
+| Categories / sources | Settings CRUD; fresh users start with **0 sources** (must create first); Web destructive confirms use the same sheet |
 | Reports | Calendar month/day/custom; category/source/audience/daily totals via pure calculations |
 | Deferred on Web | Woori · VPBank · Spending Chat · backup v8 UI · offline |
-| Android | Unchanged SQLite path; no Auth requirement |
+| Android | Unchanged SQLite path; no Auth requirement; native Alert confirmation unchanged |
 
 > **Trạng thái P2.2:** **WEB RUNTIME VERIFIED / IPHONE QA PENDING.**
 
@@ -1221,13 +1224,14 @@ Implementation: `src/services/spendingChat/*`, `src/services/ai/*`, `src/app/spe
 | Web keys | Web does **not** require `EXPO_PUBLIC_GROQ_API_KEY` / `EXPO_PUBLIC_GEMINI_API_KEY` |
 | CORS | Explicit allowlist (no `*`); DEV default includes `http://localhost:8082` when secret unset |
 | Handoff | In-memory `pendingReceiptResult` → `/form` prefill; user must review + Save (no auto-save) |
+| Auth expiry | Missing/expired session → friendly VN “đăng nhập lại” (`permission_denied`); **not** generic AI failure; no provider fallback retry |
 | HEIC | Best-effort / browser-dependent; friendly VN fallback if decode fails |
 | Android P1.7A | Unchanged native camera/preprocess/`EXPO_PUBLIC_*` provider path |
 | Deferred | P1.7B/C receipt persistence · P2.4 Spending Chat cloud · production Hosting alias |
 
 **Verified (DEV):** Edge secrets present (`GROQ_API_KEY`, `GEMINI_API_KEY`, `WEB_ALLOWED_ORIGINS` — names only); Edge function `analyze-receipt` deployed (`verify_jwt=true`); unauthenticated → 401; anon JWT → `UNAUTHENTICATED`; valid User A/B JWT → authenticated analyze; CORS allowlist includes localhost + EAS preview; live Web JPEG/PNG/large → preprocess → Edge (Groq primary; Gemini fallback when needed) → normalized schema handoff → `/form` prefill → manual Save → Home/Reports; Edge logs telemetry-only (no JWT/keys/image/financial payload); Web export has **no** provider key values (`env.web.ts` / `useGemini.web.ts`); Android P1.7A unchanged (no Edge dependency); unit tests cover preprocess/client/handoff/parity + mocked Groq→Gemini fallback chain.
 
-**EAS Hosting preview (non-prod):** `https://yozakura--g5k9ewj06k.expo.app` (deployment `g5k9ewj06k`). No production alias.
+**EAS Hosting preview (non-prod):** latest `https://yozakura--gn4cjgf5za.expo.app` (deployment `gn4cjgf5za`; prior `g5k9ewj06k` may remain). No production alias. When `WEB_ALLOWED_ORIGINS` is set, include each active preview origin explicitly (no `*`).
 
 **Still pending:** iPhone Safari/PWA QA for P2.1–P2.3. Do not start P2.4 / receipt persistence / production Hosting alias from this phase.
 

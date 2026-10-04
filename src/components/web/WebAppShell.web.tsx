@@ -6,6 +6,7 @@ import React, { useMemo } from 'react';
 import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebAuthProvider, useWebAuth } from '../../auth/WebAuthProvider.web';
+import { ConfirmDestructiveHost } from '../../components/ui/ConfirmDestructiveHost.web';
 import { BorderRadius, Spacing, Typography } from '../../constants/theme';
 import { useAppTheme } from '../../context/ThemeContext';
 import { WebConfigRequired } from './WebConfigRequired';
@@ -57,6 +58,7 @@ function WebAuthGate({ children }: { children: React.ReactNode }) {
 export function WebAppShell({ children }: { children: React.ReactNode }) {
   return (
     <WebAuthProvider>
+      <ConfirmDestructiveHost />
       <WebAuthGate>{children}</WebAuthGate>
     </WebAuthProvider>
   );

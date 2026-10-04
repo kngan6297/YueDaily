@@ -9,6 +9,7 @@ import {
   ANALYZE_RECEIPT_FUNCTION,
   ANALYZE_RECEIPT_IMAGE_FIELD,
   EDGE_ERROR_AI_MALFORMED_RESPONSE,
+  EDGE_ERROR_UNAUTHENTICATED,
 } from './edgeErrorCodes';
 import { ReceiptAiError } from './errors';
 import { parseReceiptAiJson } from './prompt';
@@ -57,6 +58,17 @@ export async function analyzeReceiptViaEdge(
   blob: Blob,
   client: SupabaseClient,
 ): Promise<GeminiAnalysisResult> {
+  // Rely on supabase-js session storage + refresh — never cache a separate JWT.
+  try {
+    const { data, error } = await client.auth.getSession();
+    if (error || !data.session?.access_token) {
+      throw receiptAiErrorFromEdgeCode(EDGE_ERROR_UNAUTHENTICATED);
+    }
+  } catch (err) {
+    if (err instanceof ReceiptAiError) throw err;
+    throw receiptAiErrorFromEdgeCode(EDGE_ERROR_UNAUTHENTICATED);
+  }
+
   const formData = new FormData();
   formData.append(ANALYZE_RECEIPT_IMAGE_FIELD, blob, 'receipt.jpg');
 
