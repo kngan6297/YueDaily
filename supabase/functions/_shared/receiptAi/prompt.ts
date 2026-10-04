@@ -1,5 +1,5 @@
-import type { GeminiAnalysisResult } from './resultTypes';
-import { RECEIPT_AI_MAX_OUTPUT_TOKENS } from './config';
+import type { GeminiAnalysisResult } from './resultTypes.ts';
+import { RECEIPT_AI_MAX_OUTPUT_TOKENS } from './config.ts';
 
 /**
  * Extraction prompt — shared by Groq + Gemini.

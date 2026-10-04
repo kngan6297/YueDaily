@@ -1203,10 +1203,35 @@ Implementation: `src/services/spendingChat/*`, `src/services/ai/*`, `src/app/spe
 | Transactions | Create / read / update / delete via RLS; integer VND; cloud `transaction_date` YYYY-MM-DD (+ `row_created_at` metadata); native `created_at` TEXT calendar unchanged |
 | Categories / sources | Settings CRUD; fresh users start with **0 sources** (must create first) |
 | Reports | Calendar month/day/custom; category/source/audience/daily totals via pure calculations |
-| Deferred on Web | Woori · VPBank · receipt AI · Spending Chat · backup v8 UI · offline |
+| Deferred on Web | Woori · VPBank · Spending Chat · backup v8 UI · offline |
 | Android | Unchanged SQLite path; no Auth requirement |
 
-> **Trạng thái P2.2:** **WEB RUNTIME VERIFIED / IPHONE QA PENDING.** No production deploy / no P2.3.
+> **Trạng thái P2.2:** **WEB RUNTIME VERIFIED / IPHONE QA PENDING.**
+
+### P2.3 — Web Receipt Scan + Authenticated Supabase Edge AI Proxy
+
+| Hạng mục | Ghi chú |
+|----------|---------|
+| Web input | `camera.web.tsx`: **Chụp bill** (`capture=environment`) + **Chọn ảnh**; single image; cancel = no-op |
+| Image handling | Browser decode → canvas resize (long edge **1024**) → JPEG quality **0.7** → temporary Blob only |
+| Persistence | **None** — no Storage bucket, no `receipt_files`, no base64 in router/AsyncStorage |
+| Edge | `analyze-receipt` — JWT verify **ON** + `auth.getUser()`; multipart field `image`; analyze only (no txn writes) |
+| Provider chain | Server-side **Groq `qwen/qwen3.8-27b` → Gemini `2.5-flash-lite` → Gemini `2.5-flash`** (same meaning as P1.7A) |
+| Secrets | Edge only: `GROQ_API_KEY`, `GEMINI_API_KEY`, `WEB_ALLOWED_ORIGINS` — **not** in Web bundle |
+| Web keys | Web does **not** require `EXPO_PUBLIC_GROQ_API_KEY` / `EXPO_PUBLIC_GEMINI_API_KEY` |
+| CORS | Explicit allowlist (no `*`); DEV default includes `http://localhost:8082` when secret unset |
+| Handoff | In-memory `pendingReceiptResult` → `/form` prefill; user must review + Save (no auto-save) |
+| HEIC | Best-effort / browser-dependent; friendly VN fallback if decode fails |
+| Android P1.7A | Unchanged native camera/preprocess/`EXPO_PUBLIC_*` provider path |
+| Deferred | P1.7B/C receipt persistence · P2.4 Spending Chat cloud · production Hosting alias |
+
+**Verified (DEV):** Edge secrets present (`GROQ_API_KEY`, `GEMINI_API_KEY`, `WEB_ALLOWED_ORIGINS` — names only); Edge function `analyze-receipt` deployed (`verify_jwt=true`); unauthenticated → 401; anon JWT → `UNAUTHENTICATED`; valid User A/B JWT → authenticated analyze; CORS allowlist includes localhost + EAS preview; live Web JPEG/PNG/large → preprocess → Edge (Groq primary; Gemini fallback when needed) → normalized schema handoff → `/form` prefill → manual Save → Home/Reports; Edge logs telemetry-only (no JWT/keys/image/financial payload); Web export has **no** provider key values (`env.web.ts` / `useGemini.web.ts`); Android P1.7A unchanged (no Edge dependency); unit tests cover preprocess/client/handoff/parity + mocked Groq→Gemini fallback chain.
+
+**EAS Hosting preview (non-prod):** `https://yozakura--g5k9ewj06k.expo.app` (deployment `g5k9ewj06k`). No production alias.
+
+**Still pending:** iPhone Safari/PWA QA for P2.1–P2.3. Do not start P2.4 / receipt persistence / production Hosting alias from this phase.
+
+> **Trạng thái P2.3:** **WEB RECEIPT RUNTIME VERIFIED / IPHONE QA PENDING.**
 
 ### Deferred — P1.7B / P1.7C
 
@@ -1215,7 +1240,7 @@ Implementation: `src/services/spendingChat/*`, `src/services/ai/*`, `src/app/spe
 | **P1.7B — DEFERRED** | Persistent Receipt Archive | App document storage, persistent receipt URI, viewer/zoom, delete cleanup. **P1.7A TEMP AI-prep files are NOT this archive.** |
 | **P1.7C — DEFERRED** | Media-aware Backup | JSON + receipt media archive/ZIP; restore media across devices. |
 | P1.8+ | Spending Insights / other | Food vs drinks, `expense_nature`, weekday patterns — after chat + P1.7A closed. |
-| P2.3+ | Web receipt + Edge AI | After P2.2 expense UI |
+| P2.4+ | Spending Chat cloud / Edge | After P2.3 web receipt |
 | P2 | Widget / shortcut chụp nhanh | Phụ thuộc nền tảng |
 
 Các hạng mục **không** nằm trong lộ trình sản phẩm cốt lõi: UI API key Cài đặt, repeat transaction, export CSV, pending inbox, thu nhập / cash-flow / opening balance, shop accounting / profit / owner draw, Family Savings balance, reimbursement / internal transfer, actual contribution ledger, bank sync, streak/gamification.

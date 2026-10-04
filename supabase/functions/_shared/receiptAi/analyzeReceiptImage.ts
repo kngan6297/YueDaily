@@ -1,4 +1,4 @@
-import type { GeminiAnalysisResult } from './resultTypes';
+import type { GeminiAnalysisResult } from './resultTypes.ts';
 import {
   GEMINI_BASE_URL,
   GEMINI_RECEIPT_MODELS,
@@ -8,10 +8,10 @@ import {
   RECEIPT_AI_PROVIDER_ORDER,
   RECEIPT_AI_RETRY_DELAY_MS,
   RECEIPT_AI_TIMEOUT_MS,
-} from './config';
-import type { ReceiptAiEnvKeys } from './env';
-import { hasGeminiReceiptKey, hasGroqReceiptKey } from './env';
-import { callGroqReceiptModel } from './groqReceipt';
+} from './config.ts';
+import type { ReceiptAiEnvKeys } from './env.ts';
+import { hasGeminiReceiptKey, hasGroqReceiptKey } from './env.ts';
+import { callGroqReceiptModel } from './groqReceipt.ts';
 import {
   classifyHttpFailure,
   finalFailureMessage,
@@ -20,7 +20,7 @@ import {
   receiptAiErrorFromKind,
   type ProviderAttemptFailure,
   type ReceiptAiErrorKind,
-} from './errors';
+} from './errors.ts';
 import {
   detectMimeType,
   GEMINI_RESPONSE_SCHEMA,
@@ -28,14 +28,14 @@ import {
   ReceiptAiParseError,
   SYSTEM_INSTRUCTION,
   USER_SCAN_PROMPT,
-} from './prompt';
-import { receiptAiDevLog } from './devLog';
+} from './prompt.ts';
+import { receiptAiDevLog } from './devLog.ts';
 import {
   classifyTransportFailure,
   describeFetchThrow,
-} from './fetchTransport';
+} from './fetchTransport.ts';
 
-export { classifyTransportFailure, describeFetchThrow } from './fetchTransport';
+export { classifyTransportFailure, describeFetchThrow } from './fetchTransport.ts';
 
 export interface ReceiptAiDeps {
   fetch: typeof fetch;

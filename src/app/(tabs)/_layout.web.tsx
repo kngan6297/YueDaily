@@ -1,20 +1,37 @@
 // ============================================================
-// P2.2 — Web tabs: Home / Reports / Settings only
-// Camera + Accounts deferred (receipt AI / Woori+VPBank).
+// Web tabs: Home / Reports / Camera FAB / Settings.
+// Camera (receipt scan via Edge AI) is enabled in P2.3.
+// Accounts stays deferred (Woori+VPBank).
 // ============================================================
 
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TAB_BAR_CONTENT_HEIGHT } from '../../constants/layout';
-import { ThemeColors, ThemeShadows, Typography } from '../../constants/theme';
+import { BorderRadius, ThemeColors, ThemeShadows, Typography } from '../../constants/theme';
 import { useAppTheme } from '../../context/ThemeContext';
 
 function TabBarBackground() {
   const { colors, shadows } = useAppTheme();
   const styles = useMemo(() => createStyles(colors, shadows), [colors, shadows]);
   return <View style={styles.tabBarBackground} />;
+}
+
+function CameraTabButton() {
+  const router = useRouter();
+  const { colors, shadows } = useAppTheme();
+  const styles = useMemo(() => createStyles(colors, shadows), [colors, shadows]);
+  return (
+    <TouchableOpacity
+      style={styles.cameraFab}
+      onPress={() => router.push('/camera')}
+      activeOpacity={0.85}
+      accessibilityLabel="Quét bill"
+    >
+      <Text style={styles.cameraFabIcon}>+</Text>
+    </TouchableOpacity>
+  );
 }
 
 function TabIcon({
@@ -81,7 +98,16 @@ export default function TabLayout() {
           ),
         }}
       />
-      <Tabs.Screen name="camera-tab" options={{ href: null }} />
+      <Tabs.Screen
+        name="camera-tab"
+        options={{
+          tabBarButton: ({ style }) => (
+            <View style={[style, styles.cameraFabSlot]}>
+              <CameraTabButton />
+            </View>
+          ),
+        }}
+      />
       <Tabs.Screen name="accounts" options={{ href: null }} />
       <Tabs.Screen
         name="settings"
@@ -139,6 +165,33 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     },
     tabLabelActive: {
       color: colors.action.selectedText,
+    },
+    cameraFabSlot: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      paddingBottom: 4,
+    },
+    cameraFab: {
+      width: 48,
+      height: 48,
+      marginTop: -20,
+      borderRadius: BorderRadius.full,
+      backgroundColor: colors.action.fabBackground,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: shadows.medium.shadowColor,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.18,
+      shadowRadius: 8,
+      elevation: 5,
+    },
+    cameraFabIcon: {
+      fontSize: 28,
+      color: colors.action.fabIcon,
+      fontWeight: '300',
+      lineHeight: 32,
+      marginTop: -1,
     },
   });
 }

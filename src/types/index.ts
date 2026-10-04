@@ -213,16 +213,8 @@ export interface Streak {
   last_logged_date: string; // YYYY-MM-DD
 }
 
-/** Kết quả phân tích AI từ Gemini */
-export interface GeminiAnalysisResult {
-  is_receipt?: boolean;
-  amount?: number;
-  /** Một câu ngắn dạng "[Hành động] tại [Tên quán]" */
-  description?: string;
-  location?: string;
-  category?: string;
-  note?: string;
-}
+/** Kết quả phân tích AI từ Gemini (định nghĩa tại receiptAi/resultTypes) */
+export type { GeminiAnalysisResult } from '../services/receiptAi/resultTypes';
 
 /** Dữ liệu form nhập liệu giao dịch */
 export interface TransactionFormData {

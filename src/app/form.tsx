@@ -48,6 +48,7 @@ import {
 import {
   consumePendingReceiptImage,
 } from '../services/receiptAi/pendingReceiptImage';
+import { consumePendingReceiptResult } from '../services/receiptAi/pendingReceiptResult';
 import type { ExpenseAudience } from '../types';
 import {
   DEFAULT_EXPENSE_AUDIENCE,
@@ -155,6 +156,7 @@ export default function TransactionForm() {
   const params = useLocalSearchParams<{
     imageUri?: string | string[];
     imageHandoff?: string | string[];
+    fromReceipt?: string | string[];
     transactionId?: string | string[];
     isEdit?: string;
     transactionDate?: string;
@@ -389,6 +391,24 @@ export default function TransactionForm() {
       );
     }
   }, [imageUri, analyze, blobUriToBase64, applyScanResult]);
+
+  // Web P2.3: kết quả quét bill đã có từ màn Quét bill (Edge AI) — chỉ điền form,
+  // không preprocess/analyze lại và không tự lưu giao dịch.
+  const hasConsumedReceiptResult = useRef(false);
+  const fromReceiptParam = Array.isArray(params.fromReceipt)
+    ? params.fromReceipt[0]
+    : params.fromReceipt;
+  useEffect(() => {
+    if (formMode !== 'create-complete' || hasConsumedReceiptResult.current) return;
+    hasConsumedReceiptResult.current = true;
+    // fromReceipt === '1' hoặc có kết quả đang chờ → consume một lần (null nếu không có/hết hạn).
+    const pendingResult = consumePendingReceiptResult();
+    if (!pendingResult) return;
+    const scanGeneration = ++scanGenerationRef.current;
+    applyScanResult(pendingResult, scanGeneration).catch((err) => {
+      Alert.alert('Không áp dụng được kết quả quét', userMessageForDataError(err, 'categories'));
+    });
+  }, [fromReceiptParam, formMode, applyScanResult]);
 
   // Tự quét khi mở form với ảnh mới (không phải chỉnh sửa)
   useEffect(() => {

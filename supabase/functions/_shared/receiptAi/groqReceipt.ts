@@ -1,26 +1,26 @@
-import type { GeminiAnalysisResult } from './resultTypes';
+import type { GeminiAnalysisResult } from './resultTypes.ts';
 import {
   GROQ_BASE_URL,
   GROQ_RECEIPT_MAX_COMPLETION_TOKENS,
   GROQ_RECEIPT_MODEL,
   GROQ_RECEIPT_TIMEOUT_MS,
-} from './config';
+} from './config.ts';
 import {
   classifyHttpFailure,
   ReceiptAiError,
   receiptAiErrorFromKind,
   type ReceiptAiErrorKind,
-} from './errors';
+} from './errors.ts';
 import {
   detectMimeType,
   parseReceiptAiJson,
   ReceiptAiParseError,
   SYSTEM_INSTRUCTION,
   USER_SCAN_PROMPT,
-} from './prompt';
+} from './prompt.ts';
 import {
   classifyTransportFailure,
-} from './fetchTransport';
+} from './fetchTransport.ts';
 
 export type GroqReceiptCallResult = {
   result: GeminiAnalysisResult;
