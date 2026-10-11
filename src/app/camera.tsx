@@ -452,7 +452,7 @@ function createStyles(colors: ThemeColors) {
     backgroundColor: colors.action.selectedBackground,
     borderColor: colors.action.selectedBorder,
   },
-  iconBtnText: { fontSize: 16 },
+  iconBtnText: { fontSize: Typography.fontSize.base },
 
   // Camera preview
   previewWrap: {
@@ -493,7 +493,7 @@ function createStyles(colors: ThemeColors) {
   cBR: { bottom: 0, right: 0, borderLeftWidth: 0, borderTopWidth: 0, borderBottomRightRadius: 10 },
   guideHint: {
     color: 'rgba(255,255,255,0.7)',
-    fontSize: 12,
+    fontSize: Typography.fontSize.sm,
     fontWeight: '600',
     textShadowColor: 'rgba(0,0,0,0.6)',
     textShadowOffset: { width: 0, height: 1 },

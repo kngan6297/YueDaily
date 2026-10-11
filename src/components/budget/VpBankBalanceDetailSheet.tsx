@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -205,8 +206,10 @@ export function VpBankBalanceDetailSheet({
           <View style={styles.header}>
             <Text style={styles.title}>{detail?.sourceName ?? 'VPBank'}</Text>
             {detail ? <Text style={styles.subtitle}>{detail.monthLabel}</Text> : null}
-            <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
-              <Text style={styles.closeText}>✕</Text>
+            <TouchableOpacity
+              hitSlop={8}
+              accessibilityLabel="Đóng" style={styles.closeBtn} onPress={onClose}>
+              <Ionicons name="close" style={styles.closeText} />
             </TouchableOpacity>
           </View>
 
@@ -491,7 +494,7 @@ function createStyles(colors: ThemeColors) {
       color: colors.neutral[800],
     },
     incomeText: { color: colors.success },
-    expenseText: { color: colors.pink[500] },
+    expenseText: { color: colors.expense },
     adjustText: { color: colors.info },
     currentRow: {
       marginTop: Spacing.xs,
@@ -605,7 +608,7 @@ function createStyles(colors: ThemeColors) {
     },
     sectionTitle: {
       fontSize: Typography.fontSize.sm,
-      fontWeight: '800',
+      fontWeight: '700',
       color: colors.neutral[700],
     },
     txnRow: {
@@ -632,7 +635,7 @@ function createStyles(colors: ThemeColors) {
     },
     txnAmount: {
       fontSize: Typography.fontSize.sm,
-      fontWeight: '800',
+      fontWeight: '700',
     },
     emptyText: {
       fontSize: Typography.fontSize.sm,

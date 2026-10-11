@@ -681,10 +681,10 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     },
     monthRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 },
     monthLabel: { fontSize: Typography.fontSize.sm, color: colors.neutral[500], fontWeight: '600' },
-    monthArrow: { fontSize: 22, color: colors.action.primaryBackground, fontWeight: '700' },
+    monthArrow: { fontSize: Typography.fontSize.lg, color: colors.action.primaryBackground, fontWeight: '700' },
     headerActions: { gap: 4 },
     headerBtn: { paddingVertical: 4, paddingHorizontal: 6 },
-    headerBtnText: { color: colors.action.primaryBackground, fontWeight: '600', fontSize: 13 },
+    headerBtnText: { color: colors.action.primaryBackground, fontWeight: '600', fontSize: Typography.fontSize.sm },
     presetScroll: { maxHeight: 44 },
     presetRow: { paddingHorizontal: Spacing.base, gap: 8, alignItems: 'center' },
     presetChip: {
@@ -703,12 +703,12 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
       borderWidth: 1,
       borderColor: colors.ui.cardBorder,
     },
-    presetChipText: { fontSize: 12, color: colors.neutral[700], fontWeight: '600' },
+    presetChipText: { fontSize: Typography.fontSize.sm, color: colors.neutral[700], fontWeight: '600' },
     listContent: { padding: Spacing.base, paddingBottom: 24, flexGrow: 1 },
     empty: { paddingTop: 48, alignItems: 'center', gap: 8 },
-    emptyTitle: { fontSize: 16, fontWeight: '700', color: colors.neutral[700] },
+    emptyTitle: { fontSize: Typography.fontSize.base, fontWeight: '700', color: colors.neutral[700] },
     emptySub: {
-      fontSize: 13,
+      fontSize: Typography.fontSize.sm,
       color: colors.neutral[400],
       textAlign: 'center',
       paddingHorizontal: 24,
@@ -728,7 +728,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
       borderColor: colors.ui.cardBorder,
     },
     bubbleError: { borderColor: colors.pink[400] },
-    bubbleText: { fontSize: 14, color: colors.neutral[800], lineHeight: 20 },
+    bubbleText: { fontSize: Typography.fontSize.sm, color: colors.neutral[800], lineHeight: 20 },
     bubbleTextUser: { color: colors.action.primaryText },
     evidenceChip: {
       marginTop: 10,
@@ -740,7 +740,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
       borderWidth: 1,
       borderColor: colors.ui.cardBorder,
     },
-    evidenceChipText: { fontSize: 12, fontWeight: '700', color: colors.action.primaryBackground },
+    evidenceChipText: { fontSize: Typography.fontSize.sm, fontWeight: '700', color: colors.action.primaryBackground },
     followUpRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
     followUpChip: {
       backgroundColor: colors.background.primary,
@@ -750,7 +750,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
       borderWidth: 1,
       borderColor: colors.ui.cardBorder,
     },
-    followUpText: { fontSize: 12, color: colors.neutral[600] },
+    followUpText: { fontSize: Typography.fontSize.sm, color: colors.neutral[600] },
     composer: {
       flexDirection: 'row',
       alignItems: 'flex-end',
@@ -772,7 +772,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
       paddingHorizontal: 12,
       paddingVertical: 10,
       color: colors.neutral[800],
-      fontSize: 14,
+      fontSize: Typography.fontSize.sm,
     },
     sendBtn: {
       backgroundColor: colors.action.primaryBackground,
@@ -796,7 +796,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
       gap: 8,
     },
     sheetTitle: {
-      fontSize: 16,
+      fontSize: Typography.fontSize.base,
       fontWeight: '700',
       color: colors.neutral[800],
       marginBottom: 4,
@@ -813,8 +813,8 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
       borderBottomColor: colors.ui.cardBorder,
       gap: 4,
     },
-    sheetRowTitle: { fontSize: 14, fontWeight: '600', color: colors.neutral[800] },
-    sheetRowBody: { fontSize: 12, color: colors.neutral[500] },
+    sheetRowTitle: { fontSize: Typography.fontSize.sm, fontWeight: '600', color: colors.neutral[800] },
+    sheetRowBody: { fontSize: Typography.fontSize.sm, color: colors.neutral[500] },
     sheetClose: {
       marginTop: 8,
       alignItems: 'center',
@@ -824,7 +824,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     },
     sheetCloseText: { color: colors.action.primaryText, fontWeight: '700' },
     pinActions: { flexDirection: 'row', gap: 16, marginTop: 6 },
-    pinActionText: { fontSize: 12, fontWeight: '600', color: colors.action.primaryBackground },
+    pinActionText: { fontSize: Typography.fontSize.sm, fontWeight: '600', color: colors.action.primaryBackground },
     pinInput: {
       borderWidth: 1,
       borderColor: colors.ui.cardBorder,

@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -342,14 +343,16 @@ export default function HomeScreen() {
               onPress={() => handleEditTxn(item)}
               activeOpacity={0.75}
             >
-              <Text style={styles.txnEditBtnText}>✏️  Sửa</Text>
+              <Ionicons name="create-outline" style={styles.txnEditBtnText} />
+              <Text style={styles.txnEditBtnText}>Sửa</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.txnDeleteBtn}
               onPress={() => handleDeleteTxn(item.id)}
               activeOpacity={0.75}
             >
-              <Text style={styles.txnDeleteBtnText}>🗑  Xoá</Text>
+              <Ionicons name="trash-outline" style={styles.txnDeleteBtnText} />
+              <Text style={styles.txnDeleteBtnText}>Xoá</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -361,11 +364,39 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* === HEADER === */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>{getGreeting()}</Text>
-          <Text style={styles.monthSummaryLine}>
-            Tháng {calMonth} · Đã chi {fmt(monthSummary.chi)}đ
-          </Text>
+        <View style={styles.headerTop}>
+          <View style={styles.headerTotal}>
+            <Text style={styles.greeting}>{getGreeting()}</Text>
+            <Text style={styles.monthTotalLabel}>Đã chi tháng {calMonth}</Text>
+            <Text style={styles.monthTotal} numberOfLines={1} adjustsFontSizeToFit>
+              {fmt(monthSummary.chi)}đ
+            </Text>
+          </View>
+          <View style={styles.monthNav}>
+            <TouchableOpacity
+              style={styles.calArrow}
+              onPress={prevMonth}
+              hitSlop={6}
+              accessibilityLabel="Tháng trước"
+            >
+              <Ionicons name="chevron-back" style={styles.calArrowText} />
+            </TouchableOpacity>
+            <Text style={styles.calMonthLabel}>
+              T{calMonth}/{calYear}
+            </Text>
+            <TouchableOpacity
+              style={[styles.calArrow, isCurrentMonth && styles.calArrowDisabled]}
+              onPress={nextMonth}
+              disabled={isCurrentMonth}
+              hitSlop={6}
+              accessibilityLabel="Tháng sau"
+            >
+              <Ionicons
+                name="chevron-forward"
+                style={[styles.calArrowText, isCurrentMonth && styles.calArrowTextDisabled]}
+              />
+            </TouchableOpacity>
+          </View>
         </View>
         <View style={styles.filterRow}>
           {HOME_SPEND_VIEW_OPTIONS.map((opt) => {
@@ -394,23 +425,6 @@ export default function HomeScreen() {
 
         {/* === CALENDAR === */}
         <View style={styles.calendarCard}>
-          {/* Month nav */}
-          <View style={styles.calHeader}>
-            <TouchableOpacity style={styles.calArrow} onPress={prevMonth}>
-              <Text style={styles.calArrowText}>‹</Text>
-            </TouchableOpacity>
-            <Text style={styles.calMonthLabel}>
-              tháng {calMonth} {calYear}
-            </Text>
-            <TouchableOpacity
-              style={[styles.calArrow, isCurrentMonth && styles.calArrowDisabled]}
-              onPress={nextMonth}
-              disabled={isCurrentMonth}
-            >
-              <Text style={[styles.calArrowText, isCurrentMonth && styles.calArrowTextDisabled]}>›</Text>
-            </TouchableOpacity>
-          </View>
-
           {/* Day headers */}
           <View style={styles.calDayHeaders}>
             {DAY_LABELS.map((d) => (
@@ -450,9 +464,10 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={styles.legendGear}
               onPress={openHeatSettings}
+              hitSlop={8}
               accessibilityLabel="Chỉnh mức chi"
             >
-              <Text style={styles.legendGearText}>⚙️</Text>
+              <Ionicons name="options-outline" style={styles.legendGearText} />
             </TouchableOpacity>
           </View>
         </View>
@@ -489,13 +504,15 @@ export default function HomeScreen() {
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>{selectedDayLabel}</Text>
                 <TouchableOpacity
+                  hitSlop={8}
+                  accessibilityLabel="Đóng"
                   style={styles.modalCloseBtn}
                   onPress={() => {
                     setActionError(null);
                     setShowDayModal(false);
                   }}
                 >
-                  <Text style={styles.modalCloseText}>✕</Text>
+                  <Ionicons name="close" style={styles.modalCloseText} />
                 </TouchableOpacity>
               </View>
 
@@ -618,18 +635,39 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows, cellW: number)
     paddingBottom: Spacing.md,
     gap: Spacing.sm,
   },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  headerTotal: { flex: 1, minWidth: 0 },
   greeting: {
-    fontSize: Typography.fontSize.lg,
+    fontSize: Typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.neutral[500],
+    marginBottom: Spacing.sm,
+  },
+  monthTotalLabel: {
+    fontSize: Typography.fontSize.xs,
+    fontWeight: '600',
+    color: colors.neutral[500],
+  },
+  monthTotal: {
+    fontSize: Typography.fontSize['2xl'],
     fontWeight: '800',
     color: colors.neutral[700],
   },
-  monthSummaryLine: {
-    marginTop: 2,
-    fontSize: Typography.fontSize.sm,
-    fontWeight: '600',
-    color: colors.neutral[400],
+  monthNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background.surface,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.ui.cardBorder,
+    paddingHorizontal: 2,
   },
-  expenseText: { color: colors.pink[500] },
+  expenseText: { color: colors.expense },
 
   // Filter
   filterRow: {
@@ -649,7 +687,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows, cellW: number)
     gap: 4,
   },
   filterTabEmoji: {
-    fontSize: 13,
+    fontSize: Typography.fontSize.sm,
   },
   filterTabActive: {
     backgroundColor: colors.action.selectedBackground,
@@ -677,23 +715,16 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows, cellW: number)
     borderColor: colors.ui.cardBorder,
     marginBottom: Spacing.base,
   },
-  calHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.sm,
-    marginBottom: Spacing.sm,
-  },
   calArrow: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
   calArrowDisabled: { opacity: 0.3 },
   calArrowText: {
-    fontSize: 26,
-    color: colors.blue[500],
+    fontSize: Typography.fontSize.lg,
+    color: colors.action.selectedText,
     fontWeight: '600',
   },
   calArrowTextDisabled: { color: colors.neutral[400] },
@@ -748,7 +779,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows, cellW: number)
   },
   dayNum: {
     fontSize: Typography.fontSize.sm,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.neutral[500],
   },
   dayNumToday: {
@@ -802,7 +833,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows, cellW: number)
     borderWidth: 1,
   },
   legendChipText: {
-    fontSize: 11,
+    fontSize: Typography.fontSize.xs,
     fontWeight: '700',
   },
   legendGear: {
@@ -814,7 +845,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows, cellW: number)
     justifyContent: 'center',
     backgroundColor: colors.neutral[100],
   },
-  legendGearText: { fontSize: 14 },
+  legendGearText: { fontSize: Typography.fontSize.base, color: colors.neutral[500] },
 
   // Heat settings sheet
   heatSheet: {
@@ -916,7 +947,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows, cellW: number)
     justifyContent: 'center',
   },
   modalCloseText: {
-    fontSize: 13,
+    fontSize: Typography.fontSize.base,
     fontWeight: '700',
     color: colors.neutral[500],
   },
@@ -987,7 +1018,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows, cellW: number)
     justifyContent: 'center',
     marginRight: Spacing.md,
   },
-  txnIconEmoji: { fontSize: 20 },
+  txnIconEmoji: { fontSize: Typography.fontSize.lg },
   txnThumb: {
     width: '100%',
     height: '100%',
@@ -1000,6 +1031,9 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows, cellW: number)
     paddingBottom: Spacing.sm,
   },
   txnEditBtn: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
     flex: 1,
     paddingVertical: 7,
     borderRadius: BorderRadius.lg,
@@ -1014,6 +1048,9 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows, cellW: number)
     color: colors.action.secondaryText,
   },
   txnDeleteBtn: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
     paddingVertical: 7,
     paddingHorizontal: Spacing.lg,
     borderRadius: BorderRadius.lg,
@@ -1025,7 +1062,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows, cellW: number)
   txnDeleteBtnText: {
     fontSize: Typography.fontSize.xs,
     fontWeight: '700',
-    color: colors.pink[500],
+    color: colors.expense,
   },
   txnInfo: { flex: 1, minWidth: 0 },
   txnName: {
@@ -1039,7 +1076,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows, cellW: number)
     marginTop: 2,
   },
   txnAudience: {
-    fontSize: 10,
+    fontSize: Typography.fontSize['2xs'],
     color: colors.neutral[400],
     marginTop: 1,
     fontWeight: '600',
@@ -1057,7 +1094,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows, cellW: number)
   payerWife: { backgroundColor: colors.pink[100] },
   payerHusband: { backgroundColor: colors.mint[100] },
   payerChipText: {
-    fontSize: 9,
+    fontSize: Typography.fontSize['2xs'],
     fontWeight: '700',
     color: colors.neutral[600],
   },

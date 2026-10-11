@@ -199,7 +199,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     },
     label: {
       fontSize: Typography.fontSize.xs,
-      fontWeight: '800',
+      fontWeight: '700',
       color: colors.neutral[500],
       letterSpacing: 0.4,
     },
@@ -251,7 +251,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
       fontSize: Typography.fontSize.base,
       fontWeight: '800',
     },
-    spentText: { color: colors.pink[500] },
+    spentText: { color: colors.expense },
     remainingText: { color: colors.success },
     overText: { color: colors.danger },
     progressTrack: {

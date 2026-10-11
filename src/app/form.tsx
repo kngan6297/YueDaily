@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
@@ -114,7 +115,7 @@ function DropdownPicker({
         <Text style={[styles.pillText, !selected && styles.pillPlaceholder]} numberOfLines={1}>
           {selected?.label ?? placeholder}
         </Text>
-        <Text style={styles.pillChevron}>▾</Text>
+        <Ionicons name="chevron-down" style={styles.pillChevron} />
       </TouchableOpacity>
 
       <BottomSheetModal visible={open} onClose={() => setOpen(false)}>
@@ -131,13 +132,13 @@ function DropdownPicker({
               >
                 {opt.icon && (
                   <View style={[styles.sheetOptionIcon, { backgroundColor: (opt.color ?? colors.pink[300]) + '22' }]}>
-                    <Text style={{ fontSize: 20 }}>{opt.icon}</Text>
+                    <Text style={{ fontSize: Typography.fontSize.lg }}>{opt.icon}</Text>
                   </View>
                 )}
                 <Text style={[styles.sheetOptionText, isActive && styles.sheetOptionTextActive]}>
                   {opt.label}
                 </Text>
-                {isActive && <Text style={styles.sheetCheck}>✓</Text>}
+                {isActive && <Ionicons name="checkmark" style={styles.sheetCheck} />}
               </TouchableOpacity>
             );
           })}
@@ -352,7 +353,7 @@ export default function TransactionForm() {
     const lines: string[] = [];
     if (result.amount && result.amount > 0) lines.push(`💰 ${result.amount.toLocaleString('vi-VN')}đ`);
     if (summary) lines.push(`📝 ${summary}`);
-    Alert.alert('Quét hoá đơn xong! ✨', lines.join('\n') || 'Kiểm tra lại và sửa nếu cần nhé!');
+    Alert.alert('Đã quét hoá đơn', lines.join('\n') || 'Kiểm tra lại và sửa nếu cần nhé!');
   }, [findCategoryByName]);
 
   // ── AI scan ──
@@ -422,19 +423,19 @@ export default function TransactionForm() {
   const validateCompleteTransaction = (): boolean => {
     const amountNum = parseInt(formData.amount.replace(/\D/g, ''), 10) || 0;
     if (amountNum <= 0) {
-      Alert.alert('Thiếu số tiền', 'Nhập số tiền trước nhé! 💰');
+      Alert.alert('Thiếu số tiền', 'Nhập số tiền trước nhé.');
       return false;
     }
     if (formData.category_id === null) {
-      Alert.alert('Thiếu danh mục', 'Chọn danh mục trước nhé! 🏷️');
+      Alert.alert('Thiếu danh mục', 'Chọn danh mục trước nhé.');
       return false;
     }
     if (formData.source_id === null) {
-      Alert.alert('Thiếu nguồn chi', 'Chọn nguồn chi trước nhé! 💳');
+      Alert.alert('Thiếu nguồn chi', 'Chọn nguồn chi trước nhé.');
       return false;
     }
     if (!formData.transaction_date) {
-      Alert.alert('Thiếu ngày', 'Chọn ngày giao dịch trước nhé! 📅');
+      Alert.alert('Thiếu ngày', 'Chọn ngày giao dịch trước nhé.');
       return false;
     }
     const today = formatLocalDate(new Date());
@@ -474,8 +475,8 @@ export default function TransactionForm() {
   }, [formMode, transactionId, formData, router, isSaving]);
 
   const primaryButtonLabel = formMode === 'create-complete'
-    ? 'Lưu giao dịch 🍓'
-    : 'Cập nhật giao dịch ✏️';
+    ? 'Lưu giao dịch'
+    : 'Cập nhật giao dịch';
 
   const displayAmount = formatAmount(formData.amount);
   const isDark = resolvedColorScheme === 'dark';
@@ -541,14 +542,19 @@ export default function TransactionForm() {
           <View style={[
             styles.bgOverlay,
             {
-              backgroundColor: isDark ? 'rgba(36, 25, 34, 0.42)' : 'rgba(244,132,168,0.52)',
+              backgroundColor: isDark ? 'rgba(36, 25, 34, 0.42)' : 'rgba(194,65,110,0.85)',
             },
           ]} />
 
           {/* Close + Quét lại */}
           <View style={styles.topBar}>
-            <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
-              <Text style={styles.closeBtnText}>✕</Text>
+            <TouchableOpacity
+              style={styles.closeBtn}
+              onPress={() => router.back()}
+              hitSlop={8}
+              accessibilityLabel="Đóng"
+            >
+              <Ionicons name="close" style={styles.closeBtnText} />
             </TouchableOpacity>
 
             <View style={{ flex: 1 }} />
@@ -561,7 +567,12 @@ export default function TransactionForm() {
               >
                 {isAiLoading
                   ? <ActivityIndicator size="small" color={isDark ? colors.neutral[700] : '#fff'} />
-                  : <Text style={styles.aiBtnText}>✨ Quét</Text>}
+                  : (
+                    <>
+                      <Ionicons name="sparkles" style={styles.aiBtnText} />
+                      <Text style={styles.aiBtnText}>Quét</Text>
+                    </>
+                  )}
               </TouchableOpacity>
             ) : <View style={{ width: 34 }} />}
           </View>
@@ -587,14 +598,14 @@ export default function TransactionForm() {
 
           {/* Mô tả — nằm cao trên màn hình để không bị bàn phím che */}
           <View style={styles.noteInputWrap}>
-            <Text style={styles.noteInputIcon}>✏️</Text>
+            <Ionicons name="create-outline" style={styles.noteInputIcon} />
             <TextInput
               ref={noteRef}
               style={styles.noteInput}
               value={formData.note}
               onChangeText={(t) => setFormData((p) => ({ ...p, note: t, location: '' }))}
               placeholder="Thêm mô tả..."
-              placeholderTextColor={isDark ? colors.neutral[400] : 'rgba(255,255,255,0.55)'}
+              placeholderTextColor={isDark ? colors.neutral[400] : 'rgba(255,255,255,0.75)'}
               multiline
               numberOfLines={2}
               maxLength={200}
@@ -674,14 +685,14 @@ export default function TransactionForm() {
                   onPress={() => setShowDatePicker(true)}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.pillIcon}>📅</Text>
+                  <Ionicons name="calendar-outline" style={styles.pillIcon} />
                   <Text
                     style={[styles.pillText, isBackdated && styles.datePillTextBackdated]}
                     numberOfLines={1}
                   >
                     {formatDateVi(formData.transaction_date)}
                   </Text>
-                  <Text style={styles.pillChevron}>▾</Text>
+                  <Ionicons name="chevron-down" style={styles.pillChevron} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -740,7 +751,7 @@ export default function TransactionForm() {
                 style={[styles.doneBtn, { marginHorizontal: Spacing.base }]}
                 onPress={() => setShowDatePicker(false)}
               >
-                <Text style={styles.doneBtnText}>Xong ✓</Text>
+                <Text style={styles.doneBtnText}>Xong</Text>
               </TouchableOpacity>
           </BottomSheetModal>
         )}
@@ -782,7 +793,7 @@ function createStyles(
   safeArea: { flex: 1, backgroundColor: colors.background.primary },
   container: { flex: 1 },
   webDateInput: {
-    fontSize: 16,
+    fontSize: Typography.fontSize.base,
     padding: 12,
     borderRadius: 12,
     borderWidth: 1,
@@ -825,11 +836,14 @@ function createStyles(
   },
   closeBtnText: {
     color: isDark ? colors.neutral[700] : '#fff',
-    fontSize: 15,
+    fontSize: Typography.fontSize.md,
     fontWeight: '700',
   },
   aiBtn: {
-    width: 60,
+    flexDirection: 'row',
+    gap: 4,
+    minWidth: 60,
+    paddingHorizontal: Spacing.sm,
     height: 30,
     borderRadius: BorderRadius.full,
     backgroundColor: isDark ? colors.background.surface : 'rgba(255,255,255,0.25)',
@@ -843,7 +857,7 @@ function createStyles(
   },
   aiBtnText: {
     color: isDark ? colors.neutral[700] : '#fff',
-    fontSize: 12,
+    fontSize: Typography.fontSize.sm,
     fontWeight: '700',
   },
   aiLoadingHint: {
@@ -872,7 +886,7 @@ function createStyles(
     letterSpacing: -1,
   },
   amountEmpty: {
-    color: isDark ? colors.neutral[400] : 'rgba(255,255,255,0.45)',
+    color: isDark ? colors.neutral[400] : 'rgba(255,255,255,0.7)',
   },
   amountUnit: {
     fontSize: Typography.fontSize.xl,
@@ -891,7 +905,11 @@ function createStyles(
     paddingHorizontal: Spacing.base,
     paddingBottom: Spacing.md,
   },
-  noteInputIcon: { fontSize: 14, marginTop: 4 },
+  noteInputIcon: {
+    fontSize: Typography.fontSize.base,
+    marginTop: 4,
+    color: isDark ? colors.neutral[400] : 'rgba(255,255,255,0.85)',
+  },
   noteInput: {
     flex: 1,
     fontSize: Typography.fontSize.sm,
@@ -947,7 +965,7 @@ function createStyles(
   },
   field: { gap: 6 },
   fieldLabel: {
-    fontSize: 12,
+    fontSize: Typography.fontSize.sm,
     fontWeight: '600',
     color: colors.neutral[500],
   },
@@ -984,7 +1002,7 @@ function createStyles(
     width: '100%',
     maxWidth: 320,
   },
-  pillIcon: { fontSize: 16 },
+  pillIcon: { fontSize: Typography.fontSize.base, color: colors.neutral[500] },
   pillText: {
     flex: 1,
     fontSize: Typography.fontSize.sm,
@@ -993,7 +1011,7 @@ function createStyles(
   },
   pillPlaceholder: { color: colors.neutral[400] },
   pillChevron: {
-    fontSize: 11,
+    fontSize: Typography.fontSize.sm,
     color: colors.neutral[400],
     marginLeft: 2,
   },

@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs, useRouter } from 'expo-router';
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -21,14 +22,18 @@ function CameraTabButton() {
       style={styles.cameraFab}
       onPress={() => router.push('/camera')}
       activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityLabel="Thêm chi tiêu"
     >
-      <Text style={styles.cameraFabIcon}>+</Text>
+      <Ionicons name="add" size={30} color={colors.action.fabIcon} />
     </TouchableOpacity>
   );
 }
 
-function TabIcon({ emoji, label, focused, badge }: {
-  emoji: string;
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
+function TabIcon({ icon, label, focused, badge }: {
+  icon: IoniconName;
   label: string;
   focused: boolean;
   badge?: number;
@@ -38,7 +43,11 @@ function TabIcon({ emoji, label, focused, badge }: {
   return (
     <View style={styles.tabItem}>
       <View>
-        <Text style={[styles.tabEmoji, focused && styles.tabEmojiActive]}>{emoji}</Text>
+        <Ionicons
+          name={focused ? icon : (`${icon}-outline` as IoniconName)}
+          size={24}
+          color={focused ? colors.action.selectedText : colors.neutral[400]}
+        />
         {(badge ?? 0) > 0 && (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{badge}</Text>
@@ -79,7 +88,7 @@ export default function TabLayout() {
         name="index"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="🏠" label="Trang chủ" focused={focused} />
+            <TabIcon icon="home" label="Trang chủ" focused={focused} />
           ),
         }}
       />
@@ -87,7 +96,7 @@ export default function TabLayout() {
         name="reports"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="📊" label="Thống kê" focused={focused} />
+            <TabIcon icon="stats-chart" label="Thống kê" focused={focused} />
           ),
         }}
       />
@@ -105,7 +114,7 @@ export default function TabLayout() {
         name="accounts"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="💳" label="Tài khoản" focused={focused} />
+            <TabIcon icon="wallet" label="Quỹ" focused={focused} />
           ),
         }}
       />
@@ -113,7 +122,7 @@ export default function TabLayout() {
         name="settings"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="⚙️" label="Cài đặt" focused={focused} />
+            <TabIcon icon="settings" label="Cài đặt" focused={focused} />
           ),
         }}
       />
@@ -151,13 +160,6 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
       gap: 2,
       width: 64,
     },
-    tabEmoji: {
-      fontSize: 22,
-      opacity: 0.4,
-    },
-    tabEmojiActive: {
-      opacity: 1,
-    },
     tabLabel: {
       fontSize: Typography.fontSize.xs,
       fontWeight: '600',
@@ -165,6 +167,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     },
     tabLabelActive: {
       color: colors.action.selectedText,
+      fontWeight: '700',
     },
     badge: {
       position: 'absolute',
@@ -180,7 +183,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     },
     badgeText: {
       color: colors.action.primaryText,
-      fontSize: 9,
+      fontSize: Typography.fontSize['2xs'],
       fontWeight: '800',
     },
     cameraFabSlot: {
@@ -202,13 +205,6 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
       shadowOpacity: 0.18,
       shadowRadius: 8,
       elevation: 5,
-    },
-    cameraFabIcon: {
-      fontSize: 28,
-      color: colors.action.fabIcon,
-      fontWeight: '300',
-      lineHeight: 32,
-      marginTop: -1,
     },
   });
 }

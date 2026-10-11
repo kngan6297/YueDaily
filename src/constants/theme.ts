@@ -81,8 +81,8 @@ const lightColors = {
     100: '#F0F1F6',
     200: '#DFE2EB',
     300: '#C5CAD8',
-    400: '#929BAF',
-    500: '#6E7890',
+    400: '#6A7389',
+    500: '#586178',
     600: '#4F5870',
     700: '#30384F',
     800: '#192036',
@@ -95,23 +95,26 @@ const lightColors = {
     high: { bg: '#FFDDE6', border: '#FFB8CB', text: '#C2416E', dot: '#F484A8' },
   },
 
+  // Số tiền chi — tách khỏi danger để số tiền không trông như lỗi
+  expense: '#C2416E',
+
   success: '#4BBFA0',
-  danger:  '#F484A8',
+  danger:  '#D6336C',
   warning: '#F9DC6A',
   info:    '#78B5F2',
 
   background: {
-    primary:  '#F4F5FA',
-    card:     '#F0F1F7',
-    surface:  '#FAFBFD',
-    modal:    '#FCFCFF',
+    primary:  '#EEF0F6',
+    card:     '#F5F6FA',
+    surface:  '#FFFFFF',
+    modal:    '#FFFFFF',
     overlay:  'rgba(28, 22, 40, 0.44)',
   },
 
   // Chrome — card outline vs field outline vs keypad (light giữ look hiện tại)
   ui: {
-    cardBorder:    '#E8ECF3',
-    fieldBorder:   '#E8ECF3',
+    cardBorder:    '#E3E7EF',
+    fieldBorder:   '#D6DBE6',
     keyBackground: '#EAF4FF',
     keyBorder:     '#BFDEFF',
     keyPressed:    '#D9ECFF',
@@ -127,8 +130,8 @@ const lightColors = {
 
   // ── Action — Moonlight Blue interaction ─────────────────────
   action: {
-    primaryBackground: '#78B5F2',
-    primaryPressed:    '#548ED1',
+    primaryBackground: '#3A78BE',
+    primaryPressed:    '#2F6399',
     primaryText:       '#FFFFFF',
 
     secondaryBackground: '#EAF4FF',
@@ -142,10 +145,10 @@ const lightColors = {
 
     destructiveBackground: '#FFF0F4',
     destructivePressed:    '#FFD5E2',
-    destructiveText:       '#C85A7E',
+    destructiveText:       '#C2416E',
 
-    fabBackground: '#78B5F2',
-    fabPressed:    '#548ED1',
+    fabBackground: '#3A78BE',
+    fabPressed:    '#2F6399',
     fabIcon:       '#FFFFFF',
   },
 } as const;
@@ -228,6 +231,8 @@ const darkColors = {
     mid:  { bg: '#3A2820', border: '#6B4A38', text: '#F5BE9A', dot: '#E8A078' },
     high: { bg: '#3D2633', border: '#623548', text: '#FFC2D5', dot: '#EE93B4' },
   },
+
+  expense: '#FFB3CB',
 
   success: '#72D5BA',
   danger:  '#EE93B4',
@@ -374,6 +379,7 @@ export const Typography = {
     bold:    undefined,
   },
   fontSize: {
+    '2xs': 10,
     xs:   11,
     sm:   13,
     base: 15,

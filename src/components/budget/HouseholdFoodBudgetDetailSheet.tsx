@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -212,8 +213,10 @@ export function HouseholdFoodBudgetDetailSheet({
                 {formatPeriodRangeShort(detail.period.period_start, detail.period.period_end)}
               </Text>
             ) : null}
-            <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
-              <Text style={styles.closeText}>✕</Text>
+            <TouchableOpacity
+              hitSlop={8}
+              accessibilityLabel="Đóng" style={styles.closeBtn} onPress={onClose}>
+              <Ionicons name="close" style={styles.closeText} />
             </TouchableOpacity>
           </View>
 
@@ -532,7 +535,7 @@ function createStyles(colors: ThemeColors) {
       fontWeight: '800',
       color: colors.neutral[800],
     },
-    spentText: { color: colors.pink[500] },
+    spentText: { color: colors.expense },
     carryoverText: { color: colors.info },
     adjustmentText: { color: colors.info },
     remainingText: { color: colors.success },
@@ -622,7 +625,7 @@ function createStyles(colors: ThemeColors) {
     contributionTitle: {
       marginTop: Spacing.sm,
       fontSize: Typography.fontSize.xs,
-      fontWeight: '800',
+      fontWeight: '700',
       color: colors.neutral[500],
     },
     contributionLine: {
@@ -642,7 +645,7 @@ function createStyles(colors: ThemeColors) {
     },
     sectionTitle: {
       fontSize: Typography.fontSize.sm,
-      fontWeight: '800',
+      fontWeight: '700',
       color: colors.neutral[700],
     },
     breakdownRow: {
@@ -651,7 +654,7 @@ function createStyles(colors: ThemeColors) {
       gap: Spacing.sm,
       paddingVertical: Spacing.xs,
     },
-    breakdownIcon: { fontSize: 20 },
+    breakdownIcon: { fontSize: Typography.fontSize.lg },
     breakdownMeta: { flex: 1, gap: 2 },
     breakdownName: {
       fontSize: Typography.fontSize.sm,
@@ -664,7 +667,7 @@ function createStyles(colors: ThemeColors) {
     },
     breakdownAmount: {
       fontSize: Typography.fontSize.sm,
-      fontWeight: '800',
+      fontWeight: '700',
       color: colors.neutral[800],
     },
     txnRow: {
@@ -691,8 +694,8 @@ function createStyles(colors: ThemeColors) {
     },
     txnAmount: {
       fontSize: Typography.fontSize.sm,
-      fontWeight: '800',
-      color: colors.pink[500],
+      fontWeight: '700',
+      color: colors.expense,
     },
     emptyText: {
       fontSize: Typography.fontSize.sm,

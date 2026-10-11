@@ -153,7 +153,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     },
     label: {
       fontSize: Typography.fontSize.xs,
-      fontWeight: '800',
+      fontWeight: '700',
       color: colors.neutral[500],
       letterSpacing: 0.4,
     },
@@ -189,7 +189,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     },
     enterBtnText: {
       fontSize: Typography.fontSize.sm,
-      fontWeight: '800',
+      fontWeight: '700',
       color: '#fff',
     },
     summaryRow: {
@@ -204,11 +204,11 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     },
     summaryValue: {
       fontSize: Typography.fontSize.sm,
-      fontWeight: '800',
+      fontWeight: '700',
       color: colors.neutral[800],
     },
     incomeText: { color: colors.success },
-    expenseText: { color: colors.pink[500] },
+    expenseText: { color: colors.expense },
     adjustText: { color: colors.info },
     currentRow: {
       marginTop: Spacing.xs,
