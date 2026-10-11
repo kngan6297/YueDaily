@@ -1,13 +1,13 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Dimensions,
   Image,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   useWindowDimensions,
   View,
@@ -35,9 +35,21 @@ import {
 import type { EntityId, FinanceTransaction } from '../../repositories/types';
 import { EXPENSE_AUDIENCE_LABELS } from '../../types';
 import { formatDateVi } from '../../utils/date';
+import {
+  DEFAULT_SPEND_THRESHOLDS,
+  formatCompactVnd,
+  isValidThresholds,
+  spendTier,
+  type SpendThresholds,
+} from '../../utils/spendHeat';
+import { getSpendThresholds, setSpendThresholds } from '../../utils/spendHeatSettings';
 
-const { width: SCREEN_W } = Dimensions.get('window');
-const CELL_SIZE = Math.floor((SCREEN_W - Spacing.base * 2 - Spacing.xs * 6) / 7);
+const CELL_GAP = 4;
+const CAL_PAD_X = Spacing.sm;
+
+function cellWidthFor(windowWidth: number): number {
+  return Math.floor((windowWidth - Spacing.base * 2 - CAL_PAD_X * 2 - CELL_GAP * 6) / 7);
+}
 
 const fmt = (n: number) => n.toLocaleString('vi-VN');
 const DAY_LABELS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
@@ -54,8 +66,9 @@ const getGreeting = () => {
 
 export default function HomeScreen() {
   const { colors, shadows } = useAppTheme();
-  const styles = useMemo(() => createStyles(colors, shadows), [colors, shadows]);
-  const { height: windowHeight } = useWindowDimensions();
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
+  const cellW = cellWidthFor(windowWidth);
+  const styles = useMemo(() => createStyles(colors, shadows, cellW), [colors, shadows, cellW]);
   const sheetBottomInset = useModalBottomInset();
   const daySheetHeaderH = useRef(0);
   const daySheetFooterH = useRef(0);
@@ -83,6 +96,10 @@ export default function HomeScreen() {
   const [monthTxns, setMonthTxns] = useState<TxnWithMeta[]>([]);
   const [spendView, setSpendView] = useState<HomeSpendView>('all');
   const [actionError, setActionError] = useState<string | null>(null);
+  const [thresholds, setThresholds] = useState<SpendThresholds>(DEFAULT_SPEND_THRESHOLDS);
+  const [showHeatSettings, setShowHeatSettings] = useState(false);
+  const [draftLow, setDraftLow] = useState('');
+  const [draftHigh, setDraftHigh] = useState('');
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -102,6 +119,30 @@ export default function HomeScreen() {
       loadData();
     }, [loadData])
   );
+
+  useEffect(() => {
+    getSpendThresholds().then(setThresholds);
+  }, []);
+
+  const openHeatSettings = () => {
+    setDraftLow(String(thresholds.low / 1000));
+    setDraftHigh(String(thresholds.high / 1000));
+    setShowHeatSettings(true);
+  };
+
+  const saveHeatSettings = () => {
+    const next = {
+      low: (parseInt(draftLow.replace(/\D/g, ''), 10) || 0) * 1000,
+      high: (parseInt(draftHigh.replace(/\D/g, ''), 10) || 0) * 1000,
+    };
+    if (!isValidThresholds(next)) {
+      Alert.alert('Mức chưa hợp lệ', 'Mức thấp phải lớn hơn 0 và nhỏ hơn mức cao.');
+      return;
+    }
+    setThresholds(next);
+    setSpendThresholds(next);
+    setShowHeatSettings(false);
+  };
 
   const monthSummary = useMemo(() => ({
     chi: monthTxns.filter((t) => t.type === 'chi').reduce((s, t) => s + t.amount, 0),
@@ -128,6 +169,14 @@ export default function HomeScreen() {
     }
     return map;
   }, [monthTxns, calYear, calMonth]);
+
+  const dayTotals = useMemo(() => {
+    const totals: Record<number, number> = {};
+    for (const [day, txns] of Object.entries(txnsByDay)) {
+      totals[Number(day)] = txns.reduce((s, t) => s + t.amount, 0);
+    }
+    return totals;
+  }, [txnsByDay]);
 
   // Giao dịch của ngày được chọn (đã được lọc sẵn trong txnsByDay)
   const selectedTxns = useMemo(() => {
@@ -204,58 +253,47 @@ export default function HomeScreen() {
   while (calCells.length % 7 !== 0) calCells.push(null);
 
   const renderDayCell = (day: number | null, idx: number) => {
-    if (!day) return <View key={`empty-${idx}`} style={[styles.dayCell, styles.dayCellEmpty]} />;
+    if (!day) return <View key={`empty-${idx}`} style={styles.dayCellEmpty} />;
 
     const txns = txnsByDay[day] ?? [];
+    const total = dayTotals[day] ?? 0;
+    const tier = spendTier(total, thresholds);
+    const heat = tier === 'none' ? null : colors.heat[tier];
     const isToday = isCurrentMonth && day === now.getDate();
-    const isSelected = day === selectedDay;
     const imgTxn = txns.find((t) => t.image_uri);
-    const hasTxns = txns.length > 0;
 
     return (
       <TouchableOpacity
         key={day}
-        style={styles.dayCell}
+        style={[
+          styles.dayCell,
+          heat && { backgroundColor: heat.bg, borderColor: heat.border },
+          isToday && styles.dayCellToday,
+        ]}
         onPress={() => {
           setSelectedDay(day);
           setShowDayModal(true);
         }}
         activeOpacity={0.75}
+        accessibilityLabel={`Ngày ${day}${total > 0 ? `, đã chi ${fmt(total)} đồng` : ''}`}
       >
-        <View style={[
-          styles.dayCircle,
-          hasTxns && styles.dayCircleHasTxn,
-          isSelected && styles.dayCircleSelected,
-          isToday && !isSelected && styles.dayCircleToday,
-        ]}>
-          {imgTxn?.image_uri ? (
-            <Image
-              source={{ uri: imgTxn.image_uri }}
-              style={styles.dayThumb}
-            />
-          ) : hasTxns ? (
-            <Text style={styles.dayCategoryIcon}>
-              {txns[0].category_icon ?? '💸'}
-            </Text>
-          ) : null}
-
-          {/* txn count badge */}
-          {txns.length > 1 && (
-            <View style={styles.dayBadge}>
-              <Text style={styles.dayBadgeText}>+{txns.length - 1}</Text>
-            </View>
-          )}
-        </View>
-
-        <Text style={[
-          styles.dayNum,
-          isToday && styles.dayNumToday,
-          isSelected && styles.dayNumSelected,
-        ]}>
+        <Text style={[styles.dayNum, heat && { color: heat.text }, isToday && styles.dayNumToday]}>
           {day}
         </Text>
+        {total > 0 ? (
+          <Text
+            style={[styles.dayAmount, heat && { color: heat.text }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+          >
+            {formatCompactVnd(total)}
+          </Text>
+        ) : null}
+        {heat ? <View style={[styles.dayDot, { backgroundColor: heat.dot }]} /> : null}
 
-        {isToday && <View style={styles.todayDot} />}
+        {imgTxn?.image_uri ? (
+          <Image source={{ uri: imgTxn.image_uri }} style={styles.dayThumb} />
+        ) : null}
       </TouchableOpacity>
     );
   };
@@ -376,7 +414,7 @@ export default function HomeScreen() {
           {/* Day headers */}
           <View style={styles.calDayHeaders}>
             {DAY_LABELS.map((d) => (
-              <View key={d} style={styles.dayCell}>
+              <View key={d} style={styles.dayHeaderCell}>
                 <Text style={[styles.dayHeaderText, d === 'CN' && styles.dayHeaderSun]}>{d}</Text>
               </View>
             ))}
@@ -390,6 +428,33 @@ export default function HomeScreen() {
               {calCells.map((day, idx) => renderDayCell(day, idx))}
             </View>
           )}
+
+          <View style={styles.legendRow}>
+            <Text style={styles.legendLabel}>Mức chi:</Text>
+            {([
+              ['low', `<${formatCompactVnd(thresholds.low)}`],
+              ['mid', `${formatCompactVnd(thresholds.low)}–${formatCompactVnd(thresholds.high)}`],
+              ['high', `>${formatCompactVnd(thresholds.high)}`],
+            ] as const).map(([tier, label]) => (
+              <View
+                key={tier}
+                style={[
+                  styles.legendChip,
+                  { backgroundColor: colors.heat[tier].bg, borderColor: colors.heat[tier].border },
+                ]}
+              >
+                <View style={[styles.dayDot, { backgroundColor: colors.heat[tier].dot }]} />
+                <Text style={[styles.legendChipText, { color: colors.heat[tier].text }]}>{label}</Text>
+              </View>
+            ))}
+            <TouchableOpacity
+              style={styles.legendGear}
+              onPress={openHeatSettings}
+              accessibilityLabel="Chỉnh mức chi"
+            >
+              <Text style={styles.legendGearText}>⚙️</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {!isLoading && monthTxns.length === 0 ? (
@@ -502,11 +567,47 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
       </BottomSheetModal>
+
+      {/* === HEATMAP THRESHOLDS === */}
+      <BottomSheetModal visible={showHeatSettings} onClose={() => setShowHeatSettings(false)}>
+        <View style={styles.modalHandle} />
+        <View style={styles.heatSheet}>
+          <Text style={styles.modalTitle}>Mức chi theo ngày</Text>
+          <Text style={styles.heatHint}>
+            Đơn vị: nghìn đồng. Ngày chi dưới mức thấp tô xanh, trên mức cao tô hồng.
+          </Text>
+          <View style={styles.heatInputRow}>
+            <View style={styles.heatInputBox}>
+              <Text style={styles.daySummaryLabel}>Mức thấp (k)</Text>
+              <TextInput
+                style={styles.heatInput}
+                value={draftLow}
+                onChangeText={setDraftLow}
+                keyboardType="number-pad"
+                selectTextOnFocus
+              />
+            </View>
+            <View style={styles.heatInputBox}>
+              <Text style={styles.daySummaryLabel}>Mức cao (k)</Text>
+              <TextInput
+                style={styles.heatInput}
+                value={draftHigh}
+                onChangeText={setDraftHigh}
+                keyboardType="number-pad"
+                selectTextOnFocus
+              />
+            </View>
+          </View>
+          <TouchableOpacity style={styles.modalAddBtn} onPress={saveHeatSettings} activeOpacity={0.85}>
+            <Text style={styles.modalAddBtnText}>Lưu</Text>
+          </TouchableOpacity>
+        </View>
+      </BottomSheetModal>
     </SafeAreaView>
   );
 }
 
-function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
+function createStyles(colors: ThemeColors, shadows: ThemeShadows, cellW: number) {
   return StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background.primary },
   scroll: { paddingBottom: 8 },
@@ -571,7 +672,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     backgroundColor: colors.background.surface,
     borderRadius: BorderRadius['2xl'],
     paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.xs,
+    paddingHorizontal: CAL_PAD_X,
     borderWidth: 1,
     borderColor: colors.ui.cardBorder,
     marginBottom: Spacing.base,
@@ -604,7 +705,8 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
   },
   calDayHeaders: {
     flexDirection: 'row',
-    marginBottom: 4,
+    gap: CELL_GAP,
+    marginBottom: 6,
   },
   dayHeaderText: {
     fontSize: Typography.fontSize.xs,
@@ -617,82 +719,129 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
   calGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: CELL_GAP,
   },
 
-  // Day cell
+  // Day cell — heatmap tile
+  dayHeaderCell: {
+    width: cellW,
+    alignItems: 'center',
+  },
+  dayCellEmpty: {
+    width: cellW,
+    height: Math.round(cellW * 1.15),
+  },
   dayCell: {
-    width: CELL_SIZE,
-    alignItems: 'center',
-    paddingVertical: 4,
-    gap: 2,
-  },
-  dayCellEmpty: {},
-  dayCircle: {
-    width: CELL_SIZE - 6,
-    height: CELL_SIZE - 6,
-    borderRadius: (CELL_SIZE - 6) / 2,
-    backgroundColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  dayCircleHasTxn: {
-    backgroundColor: colors.background.card,
+    width: cellW,
+    height: Math.round(cellW * 1.15),
+    borderRadius: BorderRadius.md,
     borderWidth: 1,
     borderColor: colors.ui.cardBorder,
+    backgroundColor: colors.background.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 1,
   },
-  dayCircleSelected: {
-    borderColor: colors.action.selectedBorder,
+  dayCellToday: {
     borderWidth: 2,
-    backgroundColor: colors.action.selectedBackground,
-  },
-  dayCircleToday: {
-    borderColor: colors.lavender[300],
-    borderWidth: 1.5,
-    backgroundColor: colors.lavender[50],
-  },
-  dayThumb: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  dayCategoryIcon: {
-    fontSize: CELL_SIZE > 42 ? 18 : 14,
-  },
-  dayBadge: {
-    position: 'absolute',
-    bottom: 1,
-    right: 1,
-    backgroundColor: colors.action.primaryBackground,
-    borderRadius: 6,
-    paddingHorizontal: 3,
-    paddingVertical: 1,
-  },
-  dayBadgeText: {
-    fontSize: 8,
-    fontWeight: '800',
-    color: colors.action.primaryText,
+    borderColor: colors.neutral[700],
   },
   dayNum: {
-    fontSize: 10,
-    fontWeight: '600',
+    fontSize: Typography.fontSize.sm,
+    fontWeight: '800',
     color: colors.neutral[500],
   },
   dayNumToday: {
-    color: colors.lavender[400],
-    fontWeight: '800',
+    color: colors.neutral[700],
   },
-  dayNumSelected: {
-    color: colors.action.selectedText,
-    fontWeight: '800',
+  dayAmount: {
+    fontSize: cellW > 44 ? 11 : 10,
+    fontWeight: '700',
+    color: colors.neutral[500],
+    maxWidth: cellW - 4,
   },
-  todayDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.action.primaryBackground,
+  dayDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+  },
+  dayThumb: {
     position: 'absolute',
-    bottom: 2,
+    top: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.background.surface,
+  },
+
+  // Legend
+  legendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.neutral[100],
+  },
+  legendLabel: {
+    fontSize: Typography.fontSize.xs,
+    fontWeight: '600',
+    color: colors.neutral[400],
+  },
+  legendChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+  },
+  legendChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  legendGear: {
+    marginLeft: 'auto',
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.neutral[100],
+  },
+  legendGearText: { fontSize: 14 },
+
+  // Heat settings sheet
+  heatSheet: {
+    paddingHorizontal: Spacing.base,
+    paddingBottom: Spacing.base,
+    gap: Spacing.md,
+  },
+  heatHint: {
+    fontSize: Typography.fontSize.xs,
+    color: colors.neutral[400],
+    fontWeight: '500',
+  },
+  heatInputRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  heatInputBox: { flex: 1, gap: 4 },
+  heatInput: {
+    borderWidth: 1,
+    borderColor: colors.ui.fieldBorder,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    fontSize: Typography.fontSize.base,
+    fontWeight: '700',
+    color: colors.neutral[700],
+    backgroundColor: colors.background.surface,
   },
 
   // Day modal (sheet styles — container do BottomSheetModal)

@@ -88,6 +88,13 @@ const lightColors = {
     800: '#192036',
   },
 
+  // ── Calendar heatmap — mức chi theo ngày ─────────────────────
+  heat: {
+    low:  { bg: '#DDF3EA', border: '#BEE6D6', text: '#2E7D66', dot: '#4BBFA0' },
+    mid:  { bg: '#FFEBDD', border: '#FFCBA8', text: '#B8622E', dot: '#FFAA75' },
+    high: { bg: '#FFDDE6', border: '#FFB8CB', text: '#C2416E', dot: '#F484A8' },
+  },
+
   success: '#4BBFA0',
   danger:  '#F484A8',
   warning: '#F9DC6A',
@@ -214,6 +221,12 @@ const darkColors = {
     600: '#D4CEDC',
     700: '#F0ECF4',
     800: '#FBFAFC',
+  },
+
+  heat: {
+    low:  { bg: '#1A332C', border: '#2A5246', text: '#9BE5CF', dot: '#72D5BA' },
+    mid:  { bg: '#3A2820', border: '#6B4A38', text: '#F5BE9A', dot: '#E8A078' },
+    high: { bg: '#3D2633', border: '#623548', text: '#FFC2D5', dot: '#EE93B4' },
   },
 
   success: '#72D5BA',
