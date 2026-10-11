@@ -9,6 +9,7 @@ import {
   insertTransaction as insertNative,
   updateTransaction as updateNative,
 } from '../database/transactions';
+import { deleteArchivedReceipt, persistReceiptImage } from '../services/receiptStorage';
 import type { SourceSpendingGroup, TransactionFormData } from '../types';
 import { mapNativeTransaction, requireNativeId } from './mappers';
 import type { EntityId, FinanceTransaction, FinanceTransactionInput } from './types';
@@ -43,7 +44,8 @@ export async function getTransactionsByMonth(
 }
 
 export async function insertTransaction(data: FinanceTransactionInput): Promise<EntityId> {
-  const id = await insertNative(toNativeForm(data));
+  const imageUri = await persistReceiptImage(data.image_uri);
+  const id = await insertNative({ ...toNativeForm(data), image_uri: imageUri });
   return String(id);
 }
 
@@ -52,5 +54,8 @@ export async function updateTransaction(id: EntityId, data: FinanceTransactionIn
 }
 
 export async function deleteTransaction(id: EntityId): Promise<void> {
-  await deleteNative(requireNativeId(id));
+  const nativeId = requireNativeId(id);
+  const existing = await getNativeById(nativeId);
+  await deleteNative(nativeId);
+  deleteArchivedReceipt(existing?.image_uri);
 }

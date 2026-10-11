@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { initializeDatabase } from '../database/initDb';
+import { migrateCachedReceiptImages } from '../database/receiptArchiveMigration';
 import type { UseDatabaseResult } from './useDatabaseTypes';
 
 export type { UseDatabaseResult } from './useDatabaseTypes';
@@ -30,6 +31,9 @@ export function useDatabase(): UseDatabaseResult {
 
     try {
       await initializeDatabase();
+      migrateCachedReceiptImages().catch((err) => {
+        console.warn('Không chuyển được ảnh hoá đơn cũ:', err);
+      });
       if (mountedRef.current) {
         setIsReady(true);
         setError(null);
