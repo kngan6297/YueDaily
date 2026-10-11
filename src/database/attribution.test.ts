@@ -223,6 +223,12 @@ describe('buildReportFilterClauses', () => {
     assert.deepEqual(params, [1, 'couple']);
   });
 
+  it('filters by source spending group via subquery', () => {
+    const { clause, params } = buildReportFilterClauses({ spendingGroup: 'household', audience: 'wife' });
+    assert.match(clause, /t\.source_id IN \(SELECT id FROM sources WHERE spending_group = \?\)/);
+    assert.deepEqual(params, ['household', 'wife']);
+  });
+
   it('omits source clause for Tất cả', () => {
     const { clause, params } = buildReportFilterClauses({ sourceId: 'all', audience: 'all' });
     assert.equal(clause, '');

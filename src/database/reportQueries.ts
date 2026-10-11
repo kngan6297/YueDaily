@@ -19,7 +19,7 @@ import {
 } from './reportCalculations';
 import { getDatabase } from './initDb';
 import { normalizeExpenseAudience } from '../types';
-import type { ExpenseAudience, Transaction } from '../types';
+import type { ExpenseAudience, SourceSpendingGroup, Transaction } from '../types';
 import { TRANSACTION_STATUS_COMPLETE } from '../types';
 
 export type { ReportPeriodKind, ReportRange, ResolvedReportRange, DailyAmount, NamedAmount };
@@ -40,6 +40,7 @@ export interface ReportFilters {
   sourceId?: number | 'all' | null;
   audience?: ExpenseAudience | 'all';
   search?: string;
+  spendingGroup?: SourceSpendingGroup | null;
   /** Legacy — UI P1.5 không dùng làm primary filter */
   payer?: string;
 }

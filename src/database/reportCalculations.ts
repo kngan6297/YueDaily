@@ -6,7 +6,7 @@ import {
   normalizeCustomRange,
   todayLocal,
 } from '../utils/date';
-import type { ExpenseAudience } from '../types/index';
+import type { ExpenseAudience, SourceSpendingGroup } from '../types/index';
 import { EXPENSE_AUDIENCE_LABELS, normalizeExpenseAudience } from '../types/index';
 
 export type ReportPeriodKind = 'day' | 'month' | 'custom';
@@ -162,6 +162,8 @@ export interface ReportFilterInput {
   /** Legacy — UI P1.5 không gửi; giữ để query layer tương thích */
   payer?: string;
   search?: string;
+  /** Nhóm nguồn chi (Cá nhân / Quỹ chung) — null = Tất cả */
+  spendingGroup?: SourceSpendingGroup | null;
 }
 
 export interface NamedAmount {
@@ -182,6 +184,12 @@ export function buildReportFilterClauses(filters: ReportFilterInput): {
   if (typeof filters.sourceId === 'number') {
     clause += ' AND t.source_id = ?';
     params.push(filters.sourceId);
+  }
+
+  if (filters.spendingGroup) {
+    // Subquery: không phụ thuộc query có JOIN sources hay không
+    clause += ' AND t.source_id IN (SELECT id FROM sources WHERE spending_group = ?)';
+    params.push(filters.spendingGroup);
   }
 
   if (filters.audience && filters.audience !== 'all') {

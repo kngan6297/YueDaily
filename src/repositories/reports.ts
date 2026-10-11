@@ -17,7 +17,7 @@ import {
 } from '../database/reportQueries';
 import { mapNativeTransaction, requireNativeId } from './mappers';
 import type { EntityId, FinanceTransaction } from './types';
-import type { ExpenseAudience } from '../types';
+import type { ExpenseAudience, SourceSpendingGroup } from '../types';
 
 export type { DailyAmount, ExpenseSummary, NamedAmount, ReportRange };
 
@@ -25,6 +25,7 @@ export interface ReportFilters {
   sourceId?: EntityId | 'all' | null;
   audience?: ExpenseAudience | 'all';
   search?: string;
+  spendingGroup?: SourceSpendingGroup | null;
 }
 
 function toNativeFilters(filters?: ReportFilters): NativeReportFilters | undefined {
@@ -39,6 +40,7 @@ function toNativeFilters(filters?: ReportFilters): NativeReportFilters | undefin
     sourceId,
     audience: filters.audience,
     search: filters.search,
+    spendingGroup: filters.spendingGroup,
   };
 }
 
