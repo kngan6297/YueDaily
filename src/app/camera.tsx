@@ -225,8 +225,7 @@ function NativeCameraScreen() {
   }, [isTakingPhoto, router, formParams]);
 
   const handleGallery = useCallback(async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') return;
+    // System photo picker — no media permission needed (expo-image-picker docs).
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: 'images',
       quality: 0.85,

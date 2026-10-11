@@ -22,18 +22,18 @@
       "predictiveBackGestureEnabled": false,
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.RECEIVE_BOOT_COMPLETED",
-        "android.permission.VIBRATE",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
-        "android.permission.READ_MEDIA_VIDEO",
-        "android.permission.READ_MEDIA_AUDIO"
+        "android.permission.CAMERA"
       ],
-      "package": "com.kngan6297.Yozakura"
+      "package": "com.kngan6297.Yozakura",
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.ACCESS_MEDIA_LOCATION"
+      ]
     },
     "plugins": [
       [
@@ -49,20 +49,15 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "YueDaily cần truy cập camera để chụp ảnh hoá đơn."
+          "cameraPermission": "YueDaily cần truy cập camera để chụp ảnh hoá đơn.",
+          "recordAudioAndroid": false
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "YueDaily cần truy cập thư viện ảnh của bạn."
-        }
-      ],
-      [
-        "expo-media-library",
-        {
-          "photosPermission": "YueDaily cần truy cập thư viện ảnh.",
-          "savePhotosPermission": "YueDaily cần quyền lưu ảnh."
+          "photosPermission": "YueDaily cần truy cập thư viện ảnh của bạn.",
+          "microphonePermission": false
         }
       ],
       [
