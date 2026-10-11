@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState, useMemo } from 'react';
 import {
@@ -61,10 +62,14 @@ import {
 
 type EditKind = 'source' | 'category';
 
-const APPEARANCE_OPTIONS: { id: AppearanceMode; label: string; hint: string }[] = [
-  { id: 'system', label: 'Theo hệ thống', hint: 'Tự theo chế độ máy' },
-  { id: 'light', label: 'Sáng', hint: 'Moonlit Sakura dịu' },
-  { id: 'dark', label: 'Tối', hint: 'Hoàng hôn sakura' },
+const APPEARANCE_OPTIONS: {
+  id: AppearanceMode;
+  label: string;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+}[] = [
+  { id: 'system', label: 'Theo máy', icon: 'phone-portrait-outline' },
+  { id: 'light', label: 'Sáng', icon: 'sunny-outline' },
+  { id: 'dark', label: 'Tối', icon: 'moon-outline' },
 ];
 
 interface EditState {
@@ -332,7 +337,7 @@ export default function SettingsScreen() {
               setImporting(true);
               const result = await importBackup();
               if (result.success) {
-                Alert.alert('Thành công! 🌸', result.message);
+                Alert.alert('Đã khôi phục', result.message);
                 await loadData();
               } else if (result.message !== 'Đã hủy') {
                 Alert.alert('Khôi phục thất bại', result.message);
@@ -368,47 +373,8 @@ export default function SettingsScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>⚙️ Cài đặt</Text>
-          <Text style={styles.headerSub}>Quản lý nguồn chi và danh mục</Text>
-        </View>
-
-        {/* ── Giao diện ── */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🎨 Giao diện</Text>
-          <View style={styles.card}>
-            {APPEARANCE_OPTIONS.map((opt, idx) => {
-              const active = appearanceMode === opt.id;
-              return (
-                <View key={opt.id}>
-                  <TouchableOpacity
-                    style={[styles.appearanceRow, active && styles.appearanceRowActive]}
-                    onPress={() => setAppearanceMode(opt.id)}
-                    activeOpacity={0.75}
-                  >
-                    <View style={styles.appearanceInfo}>
-                      <Text style={[styles.appearanceLabel, active && styles.appearanceLabelActive]}>
-                        {opt.label}
-                      </Text>
-                      <Text style={styles.appearanceHint}>{opt.hint}</Text>
-                    </View>
-                    <View style={[styles.appearanceRadio, active && styles.appearanceRadioActive]}>
-                      {active ? <View style={styles.appearanceRadioDot} /> : null}
-                    </View>
-                  </TouchableOpacity>
-                  {idx < APPEARANCE_OPTIONS.length - 1 && <View style={styles.divider} />}
-                </View>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* ── Tóm tắt nhanh ── */}
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statEmoji}>🔒</Text>
-            <Text style={styles.statValue}>100%</Text>
-            <Text style={styles.statLabel}>Bảo mật</Text>
-          </View>
+          <Text style={styles.headerTitle}>Cài đặt</Text>
+          <Text style={styles.headerSub}>Nguồn chi, danh mục, giao diện và sao lưu</Text>
         </View>
 
         {loading ? (
@@ -427,7 +393,7 @@ export default function SettingsScreen() {
             {/* ── Nguồn chi ── */}
             <View style={styles.section}>
               <View style={styles.sectionHead}>
-                <Text style={styles.sectionTitle}>💳 Nguồn chi</Text>
+                <Text style={styles.sectionTitle}>Nguồn chi</Text>
                 <TouchableOpacity style={styles.addChip} onPress={() => openAdd('source')}>
                   <Text style={styles.addChipText}>+ Thêm</Text>
                 </TouchableOpacity>
@@ -491,7 +457,7 @@ export default function SettingsScreen() {
             {/* ── Danh mục ── */}
             <View style={styles.section}>
               <View style={styles.sectionHead}>
-                <Text style={styles.sectionTitle}>🏷️ Danh mục</Text>
+                <Text style={styles.sectionTitle}>Danh mục</Text>
                 <TouchableOpacity style={styles.addChip} onPress={() => openAdd('category')}>
                   <Text style={styles.addChipText}>+ Thêm</Text>
                 </TouchableOpacity>
@@ -528,10 +494,38 @@ export default function SettingsScreen() {
           </>
         )}
 
+        {/* ── Giao diện ── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Giao diện</Text>
+          <View style={styles.appearanceSegment}>
+            {APPEARANCE_OPTIONS.map((opt) => {
+              const active = appearanceMode === opt.id;
+              return (
+                <TouchableOpacity
+                  key={opt.id}
+                  style={[styles.appearanceTab, active && styles.appearanceTabActive]}
+                  onPress={() => setAppearanceMode(opt.id)}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                >
+                  <Ionicons
+                    name={opt.icon}
+                    style={[styles.appearanceTabIcon, active && styles.appearanceTabTextActive]}
+                  />
+                  <Text style={[styles.appearanceTabText, active && styles.appearanceTabTextActive]}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
         {/* ── Backup (Android SQLite v8; hidden on Web P2.2) ── */}
         {BACKUP_UI_ENABLED ? (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>💾 Sao lưu & Khôi phục</Text>
+            <Text style={styles.sectionTitle}>Sao lưu & khôi phục</Text>
             <View style={[styles.card, styles.cardPadded]}>
               <Text style={styles.backupHint}>
                 Xuất dữ liệu ra file JSON để lưu vào Google Drive, máy tính, hoặc bất kỳ đâu. Khi cần, nhập lại để khôi phục toàn bộ giao dịch, danh mục, nguồn chi và dữ liệu lịch sử.
@@ -548,11 +542,11 @@ export default function SettingsScreen() {
                 {exporting ? (
                   <ActivityIndicator size="small" color={colors.action.primaryText} />
                 ) : (
-                  <Text style={styles.backupBtnIcon}>📤</Text>
+                  <Ionicons name="cloud-upload-outline" style={styles.backupBtnIcon} />
                 )}
                 <View style={styles.backupBtnText}>
                   <Text style={styles.backupBtnLabel}>Xuất backup</Text>
-                  <Text style={styles.backupBtnSub}>Lưu file JSON ra ngoài</Text>
+                  <Text style={[styles.backupBtnSub, styles.backupBtnSubOnPrimary]}>Lưu file JSON ra ngoài</Text>
                 </View>
               </TouchableOpacity>
 
@@ -565,7 +559,10 @@ export default function SettingsScreen() {
                 {importing ? (
                   <ActivityIndicator size="small" color={colors.neutral[700]} />
                 ) : (
-                  <Text style={styles.backupBtnIcon}>📥</Text>
+                  <Ionicons
+                    name="cloud-download-outline"
+                    style={[styles.backupBtnIcon, styles.backupBtnLabelDark]}
+                  />
                 )}
                 <View style={styles.backupBtnText}>
                   <Text style={[styles.backupBtnLabel, styles.backupBtnLabelDark]}>Nhập backup</Text>
@@ -737,49 +734,34 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     fontWeight: '700',
     color: colors.neutral[700],
   },
-  appearanceRow: {
+  appearanceSegment: {
+    flexDirection: 'row',
+    backgroundColor: colors.neutral[100],
+    borderRadius: BorderRadius.xl,
+    padding: 3,
+    gap: 3,
+  },
+  appearanceTab: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.base,
-    paddingVertical: Spacing.md,
-    gap: Spacing.md,
-  },
-  appearanceRowActive: {
-    backgroundColor: colors.action.selectedBackground,
-  },
-  appearanceInfo: { flex: 1, gap: 2 },
-  appearanceLabel: {
-    fontSize: Typography.fontSize.base,
-    fontWeight: '600',
-    color: colors.neutral[700],
-  },
-  appearanceLabelActive: {
-    color: colors.action.selectedText,
-    fontWeight: '700',
-  },
-  appearanceHint: {
-    fontSize: Typography.fontSize.xs,
-    color: colors.neutral[400],
-    fontWeight: '500',
-  },
-  appearanceRadio: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: colors.neutral[300],
-    alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.lg,
   },
-  appearanceRadioActive: {
+  appearanceTabActive: {
+    backgroundColor: colors.background.surface,
+    borderWidth: 1,
     borderColor: colors.action.selectedBorder,
   },
-  appearanceRadioDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.action.selectedBorder,
+  appearanceTabIcon: { fontSize: 16, color: colors.neutral[500] },
+  appearanceTabText: {
+    fontSize: Typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.neutral[500],
   },
+  appearanceTabTextActive: { color: colors.action.selectedText, fontWeight: '700' },
   addChip: {
     backgroundColor: colors.action.secondaryBackground,
     borderRadius: BorderRadius.full,
@@ -819,7 +801,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  itemIconText: { fontSize: 20 },
+  itemIconText: { fontSize: Typography.fontSize.lg },
   itemInfo: { flex: 1, gap: 2 },
   itemName: {
     fontSize: Typography.fontSize.base,
@@ -879,53 +861,6 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     fontSize: Typography.fontSize.sm,
   },
 
-  filterRow: {
-    flexDirection: 'row',
-    gap: Spacing.xs,
-  },
-  filterChip: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 6,
-    borderRadius: BorderRadius.full,
-    backgroundColor: colors.neutral[100],
-  },
-  filterChipActive: {
-    backgroundColor: colors.action.selectedBackground,
-    borderWidth: 1,
-    borderColor: colors.action.selectedBorder,
-  },
-  filterChipText: {
-    fontSize: Typography.fontSize.xs,
-    fontWeight: '600',
-    color: colors.neutral[400],
-  },
-  filterChipTextActive: { color: colors.action.selectedText },
-
-  statsRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: colors.background.surface,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.md,
-    alignItems: 'center',
-    gap: 4,
-    borderWidth: 1,
-    borderColor: colors.ui.cardBorder,
-  },
-  statEmoji: { fontSize: 22 },
-  statValue: {
-    fontSize: Typography.fontSize.md,
-    fontWeight: '800',
-    color: colors.neutral[700],
-  },
-  statLabel: {
-    fontSize: Typography.fontSize.xs,
-    color: colors.neutral[400],
-    fontWeight: '500',
-  },
 
   backupHint: {
     fontSize: Typography.fontSize.sm,
@@ -955,7 +890,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     borderColor: colors.action.secondaryBorder,
     ...shadows.soft,
   },
-  backupBtnIcon: { fontSize: 22 },
+  backupBtnIcon: { fontSize: Typography.fontSize.lg, color: colors.action.primaryText },
   backupBtnText: { flex: 1, gap: 2 },
   backupBtnLabel: {
     fontSize: Typography.fontSize.sm,
@@ -968,6 +903,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     color: colors.neutral[600],
     fontWeight: '500',
   },
+  backupBtnSubOnPrimary: { color: colors.action.primaryText, opacity: 0.85 },
 
   sheetHandle: {
     width: 40,
@@ -993,7 +929,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     paddingHorizontal: Spacing.base,
     paddingVertical: Spacing.sm,
   },
-  editPreviewIcon: { fontSize: 22 },
+  editPreviewIcon: { fontSize: Typography.fontSize.lg },
   editPreviewName: {
     fontSize: Typography.fontSize.sm,
     fontWeight: '700',

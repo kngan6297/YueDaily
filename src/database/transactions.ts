@@ -197,65 +197,6 @@ export async function getMonthSummary(
   return { chi: row?.total ?? 0 };
 }
 
-// ── Period filter helper ─────────────────────────────────────
-type Period = 'month' | 'year' | 'all';
-
-function periodWhere(period: Period): { clause: string; params: string[] } {
-  const now = new Date();
-  if (period === 'month') {
-    const m = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    return { clause: `AND strftime('%Y-%m', created_at) = ?`, params: [m] };
-  }
-  if (period === 'year') {
-    return { clause: `AND strftime('%Y', created_at) = ?`, params: [String(now.getFullYear())] };
-  }
-  return { clause: '', params: [] };
-}
-
-/** Tổng chi theo kỳ (báo cáo nguồn chi) */
-export async function getAccountSummary(
-  period: Period = 'month'
-): Promise<{ chi: number }> {
-  const db = await getDatabase();
-  const { clause, params } = periodWhere(period);
-  const row = await db.getFirstAsync<{ total: number }>(
-    `SELECT COALESCE(SUM(amount), 0) as total
-     FROM transactions
-     WHERE status = '${TRANSACTION_STATUS_COMPLETE}' AND type = 'chi' ${clause};`,
-    params
-  );
-  return { chi: row?.total ?? 0 };
-}
-
-/** Chi theo từng nguồn chi trong kỳ */
-export async function getSourceBalances(period: Period = 'month'): Promise<
-  Array<{ source_id: number | null; source_name: string; chi: number }>
-> {
-  const db = await getDatabase();
-  const { clause, params } = periodWhere(period);
-  const rows = await db.getAllAsync<{
-    source_id: number | null;
-    source_name: string;
-    total: number;
-  }>(
-    `SELECT t.source_id,
-            COALESCE(s.name, 'Không rõ nguồn') as source_name,
-            SUM(t.amount) as total
-     FROM transactions t
-     LEFT JOIN sources s ON t.source_id = s.id
-     WHERE t.status = '${TRANSACTION_STATUS_COMPLETE}' AND t.type = 'chi' ${clause}
-     GROUP BY t.source_id
-     ORDER BY total DESC;`,
-    params
-  );
-
-  return rows.map((r) => ({
-    source_id: r.source_id,
-    source_name: r.source_name,
-    chi: r.total,
-  }));
-}
-
 /** Lấy giao dịch theo năm */
 export async function getTransactionsByYear(year: number): Promise<Transaction[]> {
   const db = await getDatabase();

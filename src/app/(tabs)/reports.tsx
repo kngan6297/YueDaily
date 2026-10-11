@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -14,11 +15,16 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Circle, G, Rect, Svg, Text as SvgText } from 'react-native-svg';
+import { Circle, G, Svg, Text as SvgText } from 'react-native-svg';
 import { BottomSheetModal } from '../../components/ui/BottomSheetModal';
 import { TAB_BAR_CONTENT_HEIGHT } from '../../constants/layout';
 import { BorderRadius, Spacing, ThemeColors, ThemeShadows, Typography } from '../../constants/theme';
 import { useAppTheme } from '../../context/ThemeContext';
+import {
+  HOME_SPEND_VIEW_OPTIONS,
+  spendingGroupForHomeSpendView,
+  type HomeSpendView,
+} from '../../database/homeSpendView';
 import {
   buildMonthDailySeries,
   highestSpendingDay,
@@ -55,7 +61,7 @@ import {
 } from '../../utils/date';
 
 // ─── Types ───────────────────────────────────────────────────
-type PeriodKind = 'day' | 'month' | 'custom';
+type PeriodKind = 'month' | 'custom';
 type SourceFilter = EntityId | 'all';
 type AudienceFilter = 'all' | ExpenseAudience;
 
@@ -80,67 +86,6 @@ const MONTH_NAMES = [
   '', 'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6',
   'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12',
 ];
-
-// ─── Filter dropdown ─────────────────────────────────────────
-function FilterDropdown({
-  label,
-  value,
-  options,
-  onSelect,
-}: {
-  label: string;
-  value: string;
-  options: FilterOption[];
-  onSelect: (id: string) => void;
-}) {
-  const { colors, shadows } = useAppTheme();
-  const styles = useMemo(() => createStyles(colors, shadows), [colors, shadows]);
-  const [open, setOpen] = useState(false);
-  const selected = options.find((o) => o.id === value);
-
-  return (
-    <View style={styles.filterField}>
-      <Text style={styles.filterLabel}>{label}</Text>
-      <TouchableOpacity
-        style={[styles.filterPill, open && styles.filterPillFocused]}
-        onPress={() => setOpen(true)}
-        activeOpacity={0.8}
-      >
-        {selected?.icon ? <Text style={styles.filterPillIcon}>{selected.icon}</Text> : null}
-        <Text style={styles.filterPillText} numberOfLines={1}>
-          {selected?.shortLabel ?? 'Tất cả'}
-        </Text>
-        <Text style={styles.filterPillChevron}>▾</Text>
-      </TouchableOpacity>
-      <BottomSheetModal visible={open} onClose={() => setOpen(false)}>
-        <View style={styles.sheetHandle} />
-        <Text style={styles.sheetTitle}>{label}</Text>
-        <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
-          {options.map((opt) => {
-            const isActive = opt.id === value;
-            return (
-              <TouchableOpacity
-                key={opt.id}
-                style={[styles.sheetOption, isActive && styles.sheetOptionActive]}
-                onPress={() => { onSelect(opt.id); setOpen(false); }}
-              >
-                {opt.icon ? (
-                  <View style={styles.sheetOptionIcon}>
-                    <Text style={{ fontSize: 18 }}>{opt.icon}</Text>
-                  </View>
-                ) : null}
-                <Text style={[styles.sheetOptionText, isActive && styles.sheetOptionTextActive]}>
-                  {opt.fullLabel}
-                </Text>
-                {isActive ? <Text style={styles.sheetCheck}>✓</Text> : null}
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </BottomSheetModal>
-    </View>
-  );
-}
 
 // ─── Donut chart ─────────────────────────────────────────────
 const SCREEN_W = Dimensions.get('window').width;
@@ -188,35 +133,6 @@ function DonutChart({
           {centerSub}
         </SvgText>
       </G>
-    </Svg>
-  );
-}
-
-// ─── Daily bar chart (month) ─────────────────────────────────
-function DailyBarChart({ series, color }: { series: DailyAmount[]; color: string }) {
-  const chartW = SCREEN_W - Spacing.base * 4;
-  const chartH = 88;
-  const maxAmount = Math.max(...series.map((d) => d.amount), 1);
-  const gap = series.length > 20 ? 1 : 2;
-  const barW = Math.max(2, (chartW - gap * series.length) / series.length);
-
-  return (
-    <Svg width={chartW} height={chartH + 16}>
-      {series.map((d, i) => {
-        const h = d.amount > 0 ? Math.max(2, (d.amount / maxAmount) * chartH) : 0;
-        const x = i * (barW + gap);
-        return (
-          <Rect
-            key={d.date}
-            x={x}
-            y={chartH - h}
-            width={barW}
-            height={h}
-            fill={d.amount > 0 ? color : 'transparent'}
-            rx={2}
-          />
-        );
-      })}
     </Svg>
   );
 }
@@ -279,9 +195,11 @@ function BreakdownSection({
 function TransactionList({
   items,
   emptyMessage = 'Không có giao dịch phù hợp',
+  onPressItem,
 }: {
   items: FinanceTransaction[];
   emptyMessage?: string;
+  onPressItem: (item: FinanceTransaction) => void;
 }) {
   const { colors, shadows } = useAppTheme();
   const styles = useMemo(() => createStyles(colors, shadows), [colors, shadows]);
@@ -299,7 +217,13 @@ function TransactionList({
     <View style={styles.txnList}>
       {items.map((item, idx) => (
         <View key={item.id}>
-          <View style={styles.txnRow}>
+          <TouchableOpacity
+            style={styles.txnRow}
+            onPress={() => onPressItem(item)}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityHint="Mở để sửa giao dịch"
+          >
             <View style={[
               styles.txnIcon,
               { backgroundColor: (item.category_color ?? colors.pink[300]) + '22' },
@@ -327,7 +251,7 @@ function TransactionList({
                 {formatDateVi(item.created_at.slice(0, 10))}
               </Text>
             </View>
-          </View>
+          </TouchableOpacity>
           {idx < items.length - 1 && <View style={styles.txnDivider} />}
         </View>
       ))}
@@ -346,7 +270,6 @@ export default function ReportsScreen() {
   const today = todayLocal();
 
   const [period, setPeriod] = useState<PeriodKind>('month');
-  const [navDate, setNavDate] = useState(today);
   const [navMonth, setNavMonth] = useState(now.getMonth() + 1);
   const [navYear, setNavYear] = useState(now.getFullYear());
   const [customFrom, setCustomFrom] = useState(() => {
@@ -359,6 +282,8 @@ export default function ReportsScreen() {
   const [audience, setAudience] = useState<AudienceFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const [spendView, setSpendView] = useState<HomeSpendView>('all');
+  const [showFilters, setShowFilters] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [transactions, setTransactions] = useState<FinanceTransaction[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -368,7 +293,7 @@ export default function ReportsScreen() {
   const [audienceStats, setAudienceStats] = useState<NamedAmount[]>([]);
   const [categoryRows, setCategoryRows] = useState<NamedAmount[]>([]);
   const [sources, setSources] = useState<Array<{ id: EntityId; name: string }>>([]);
-  const [datePicker, setDatePicker] = useState<'day' | 'from' | 'to' | null>(null);
+  const [datePicker, setDatePicker] = useState<'from' | 'to' | null>(null);
 
   const customRange = useMemo(
     () => normalizeCustomRange(customFrom, customTo),
@@ -389,16 +314,16 @@ export default function ReportsScreen() {
   }, []);
 
   const reportRange = useMemo((): ReportRange => {
-    if (period === 'day') return { kind: 'day', date: navDate };
     if (period === 'month') return { kind: 'month', year: navYear, month: navMonth };
     return { kind: 'custom', fromDate: customRange.fromDate, toDate: customRange.toDate };
-  }, [period, navDate, navYear, navMonth, customRange]);
+  }, [period, navYear, navMonth, customRange]);
 
   const filters = useMemo(() => ({
     sourceId,
     audience,
     search: searchQuery,
-  }), [sourceId, audience, searchQuery]);
+    spendingGroup: spendingGroupForHomeSpendView(spendView),
+  }), [sourceId, audience, searchQuery, spendView]);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -444,40 +369,38 @@ export default function ReportsScreen() {
   }, [loadData]);
 
   const prevPeriod = () => {
-    if (period === 'day') {
-      const d = parseLocalDate(navDate);
-      d.setDate(d.getDate() - 1);
-      setNavDate(formatLocalDate(d));
-    } else if (period === 'month') {
-      if (navMonth === 1) { setNavMonth(12); setNavYear((y) => y - 1); }
-      else setNavMonth((m) => m - 1);
-    }
+    if (navMonth === 1) { setNavMonth(12); setNavYear((y) => y - 1); }
+    else setNavMonth((m) => m - 1);
   };
 
   const nextPeriod = () => {
-    if (period === 'day') {
-      const d = parseLocalDate(navDate);
-      d.setDate(d.getDate() + 1);
-      const next = formatLocalDate(d);
-      if (next <= today) setNavDate(next);
-    } else if (period === 'month') {
-      if (navYear === now.getFullYear() && navMonth === now.getMonth() + 1) return;
-      if (navMonth === 12) { setNavMonth(1); setNavYear((y) => y + 1); }
-      else setNavMonth((m) => m + 1);
-    }
+    if (navYear === now.getFullYear() && navMonth === now.getMonth() + 1) return;
+    if (navMonth === 12) { setNavMonth(1); setNavYear((y) => y + 1); }
+    else setNavMonth((m) => m + 1);
   };
 
-  const isAtLatest = period === 'day'
-    ? navDate >= today
-    : period === 'month'
-      ? (navYear === now.getFullYear() && navMonth === now.getMonth() + 1)
-      : true;
+  const isAtLatest = navYear === now.getFullYear() && navMonth === now.getMonth() + 1;
+  const navLabel = `${MONTH_NAMES[navMonth]} ${navYear}`;
 
-  const navLabel = period === 'day'
-    ? formatDateVi(navDate)
-    : period === 'month'
-      ? `${MONTH_NAMES[navMonth]} ${navYear}`
-      : `${formatDateVi(customRange.fromDate)} – ${formatDateVi(customRange.toDate)}`;
+  const handleEditTxn = useCallback((item: FinanceTransaction) => {
+    router.push({
+      pathname: '/form',
+      params: {
+        transactionId: String(item.id),
+        isEdit: 'true',
+        ...(item.image_uri ? { imageUri: item.image_uri } : {}),
+      },
+    });
+  }, [router]);
+
+  const openSpendingChat = () => {
+    const y = period === 'month' ? navYear : now.getFullYear();
+    const m = period === 'month' ? navMonth : now.getMonth() + 1;
+    router.push({
+      pathname: '/spending-chat',
+      params: { year: String(y), month: String(m) },
+    });
+  };
 
   const totalChi = summary?.totalChi ?? 0;
   const categoryStats = useMemo(() => {
@@ -488,8 +411,18 @@ export default function ReportsScreen() {
   }, [categoryRows, totalChi]);
   const peakDay = useMemo(() => highestSpendingDay(dailySeries), [dailySeries]);
 
-  const hasActiveFilters =
-    sourceId !== 'all' || audience !== 'all' || searchQuery.trim().length > 0;
+  const trimmedSearch = searchQuery.trim();
+  const activeFilterLabels = [
+    sourceId !== 'all' ? sources.find((s) => String(s.id) === String(sourceId))?.name : null,
+    audience !== 'all' ? EXPENSE_AUDIENCE_LABELS[audience] : null,
+    trimmedSearch ? `“${trimmedSearch}”` : null,
+  ].filter((v): v is string => !!v);
+  const hasActiveFilters = spendView !== 'all' || activeFilterLabels.length > 0;
+  const clearExtraFilters = () => {
+    setSourceId('all');
+    setAudience('all');
+    setSearchQuery('');
+  };
   const filteredEmptyMessage = 'Không có giao dịch phù hợp';
   const periodEmptyMessage = 'Chưa có chi tiêu nào\n trong kỳ này';
 
@@ -503,12 +436,11 @@ export default function ReportsScreen() {
   }, [categoryStats, colors.pink]);
 
   const sourceOptions: FilterOption[] = useMemo(() => [
-    { id: 'all', shortLabel: 'Tất cả', fullLabel: 'Tất cả', icon: '🗂' },
+    { id: 'all', shortLabel: 'Tất cả', fullLabel: 'Tất cả' },
     ...sources.map((s) => ({
       id: String(s.id),
       shortLabel: s.name,
       fullLabel: s.name,
-      icon: '💳',
     })),
   ], [sources]);
 
@@ -530,7 +462,6 @@ export default function ReportsScreen() {
     if (Platform.OS === 'android') setDatePicker(null);
     if (event.type === 'dismissed' || !date || !datePicker) return;
     const picked = clampDateToToday(formatLocalDate(date));
-    if (datePicker === 'day') setNavDate(picked);
     if (datePicker === 'from') applyCustomRange(picked, customRange.toDate);
     if (datePicker === 'to') applyCustomRange(customRange.fromDate, picked);
   };
@@ -538,23 +469,13 @@ export default function ReportsScreen() {
   const handleWebDatePick = (value: string) => {
     if (!value || !datePicker) return;
     const picked = clampDateToToday(value);
-    if (datePicker === 'day') setNavDate(picked);
     if (datePicker === 'from') applyCustomRange(picked, customRange.toDate);
     if (datePicker === 'to') applyCustomRange(customRange.fromDate, picked);
     setDatePicker(null);
   };
 
-  const webPickerValue = datePicker === 'day'
-    ? navDate
-    : datePicker === 'from'
-      ? customRange.fromDate
-      : customRange.toDate;
-
-  const pickerValue = datePicker === 'day'
-    ? parseLocalDate(navDate)
-    : datePicker === 'from'
-      ? parseLocalDate(customRange.fromDate)
-      : parseLocalDate(customRange.toDate);
+  const webPickerValue = datePicker === 'from' ? customRange.fromDate : customRange.toDate;
+  const pickerValue = parseLocalDate(webPickerValue);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -563,9 +484,26 @@ export default function ReportsScreen() {
         contentContainerStyle={[styles.scroll, { paddingBottom: scrollBottomPad }]}
         keyboardShouldPersistTaps="handled"
       >
+        {/* Header */}
+        <View style={styles.headerRow}>
+          <Text style={styles.headerTitle}>Thống kê</Text>
+          {SPENDING_CHAT_ENABLED ? (
+            <TouchableOpacity
+              style={styles.aiChatCta}
+              onPress={openSpendingChat}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Hỏi AI về chi tiêu"
+            >
+              <Ionicons name="sparkles" style={styles.aiChatCtaText} />
+              <Text style={styles.aiChatCtaText}>Hỏi AI</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
         {/* Kỳ */}
         <View style={styles.periodRow}>
-          {(['day', 'month', 'custom'] as PeriodKind[]).map((p) => (
+          {(['month', 'custom'] as PeriodKind[]).map((p) => (
             <TouchableOpacity
               key={p}
               style={[styles.periodTab, period === p && styles.periodTabActive]}
@@ -573,13 +511,13 @@ export default function ReportsScreen() {
               activeOpacity={0.8}
             >
               <Text style={[styles.periodTabText, period === p && styles.periodTabTextActive]}>
-                {p === 'day' ? 'Ngày' : p === 'month' ? 'Tháng' : 'Khoảng'}
+                {p === 'month' ? 'Theo tháng' : 'Khoảng ngày'}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Điều hướng / chọn ngày */}
+        {/* Điều hướng tháng / chọn khoảng */}
         {period === 'custom' ? (
           <View style={styles.customRangeRow}>
             <TouchableOpacity
@@ -600,41 +538,79 @@ export default function ReportsScreen() {
           </View>
         ) : (
           <View style={styles.navRow}>
-            <TouchableOpacity style={styles.navArrow} onPress={prevPeriod}>
-              <Text style={styles.navArrowText}>‹</Text>
-            </TouchableOpacity>
             <TouchableOpacity
-              style={styles.navLabelBtn}
-              onPress={() => period === 'day' && setDatePicker('day')}
-              disabled={period !== 'day'}
+              style={styles.navArrow}
+              onPress={prevPeriod}
+              hitSlop={8}
+              accessibilityLabel="Tháng trước"
             >
-              <Text style={styles.navLabel}>{navLabel}</Text>
+              <Ionicons name="chevron-back" style={styles.navArrowText} />
             </TouchableOpacity>
+            <Text style={[styles.navLabel, styles.navLabelBtn]}>{navLabel}</Text>
             <TouchableOpacity
               style={[styles.navArrow, isAtLatest && styles.navArrowDisabled]}
               onPress={nextPeriod}
               disabled={isAtLatest}
+              hitSlop={8}
+              accessibilityLabel="Tháng sau"
             >
-              <Text style={[styles.navArrowText, isAtLatest && { opacity: 0.3 }]}>›</Text>
+              <Ionicons
+                name="chevron-forward"
+                style={[styles.navArrowText, isAtLatest && { opacity: 0.3 }]}
+              />
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Search */}
-        <View style={[styles.searchWrap, searchFocused && styles.fieldFocused]}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Tìm mô tả, số tiền, danh mục..."
-            placeholderTextColor={colors.neutral[400]}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onFocus={() => setSearchFocused(true)}
-            onBlur={() => setSearchFocused(false)}
-            returnKeyType="search"
-            clearButtonMode="while-editing"
-          />
+        {/* Nhóm chi (giống Trang chủ) + bộ lọc chi tiết */}
+        <View style={styles.groupRow}>
+          <View style={styles.groupSegment}>
+            {HOME_SPEND_VIEW_OPTIONS.map((opt) => {
+              const active = spendView === opt.id;
+              return (
+                <TouchableOpacity
+                  key={opt.id}
+                  style={[styles.groupTab, active && styles.groupTabActive]}
+                  onPress={() => setSpendView(opt.id)}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[styles.groupTabText, active && styles.groupTabTextActive]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                  >
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <TouchableOpacity
+            style={[styles.filterBtn, activeFilterLabels.length > 0 && styles.fieldFocused]}
+            onPress={() => setShowFilters(true)}
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel="Bộ lọc: nguồn chi, chi cho ai, tìm kiếm"
+          >
+            <Ionicons name="options-outline" style={styles.filterBtnIcon} />
+            {activeFilterLabels.length > 0 ? (
+              <View style={styles.filterBadge}>
+                <Text style={styles.filterBadgeText}>{activeFilterLabels.length}</Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
         </View>
+
+        {activeFilterLabels.length > 0 ? (
+          <View style={styles.activeFilterRow}>
+            <Text style={styles.activeFilterText} numberOfLines={1}>
+              Đang lọc: {activeFilterLabels.join(' · ')}
+            </Text>
+            <TouchableOpacity onPress={clearExtraFilters} hitSlop={8}>
+              <Text style={styles.activeFilterClear}>Xoá lọc</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {isLoading ? (
           <ActivityIndicator color={colors.blue[400]} style={{ paddingVertical: 28 }} />
@@ -661,73 +637,19 @@ export default function ReportsScreen() {
                     · TB {fmt(Math.round(summary?.averagePerTransaction ?? 0))}/GD
                   </Text>
                 )}
-                {period !== 'day' && (
-                  <Text style={styles.summaryMeta}>
-                    · TB {fmt(Math.round(summary?.averagePerDay ?? 0))}/ngày
-                  </Text>
-                )}
+                <Text style={styles.summaryMeta}>
+                  · TB {fmt(Math.round(summary?.averagePerDay ?? 0))}/ngày
+                </Text>
               </View>
-              {SPENDING_CHAT_ENABLED ? (
-                <TouchableOpacity
-                  style={styles.aiChatCta}
-                  onPress={() => {
-                    const y = period === 'month' ? navYear : now.getFullYear();
-                    const m = period === 'month' ? navMonth : now.getMonth() + 1;
-                    router.push({
-                      pathname: '/spending-chat',
-                      params: { year: String(y), month: String(m) },
-                    });
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.aiChatCtaText}>Hỏi AI về chi tiêu</Text>
-                </TouchableOpacity>
+              {peakDay && peakDay.amount > 0 ? (
+                <Text style={styles.summaryMeta}>
+                  Ngày chi nhiều nhất: {peakDay.day}/{navMonth} · {fmt(peakDay.amount)}
+                </Text>
               ) : null}
             </View>
 
-            {/* Filters */}
-            <View style={styles.filterRow}>
-              <FilterDropdown
-                label="Nguồn chi"
-                value={sourceId === 'all' ? 'all' : String(sourceId)}
-                options={sourceOptions}
-                onSelect={(id) => setSourceId(id === 'all' ? 'all' : id)}
-              />
-              <FilterDropdown
-                label="Chi cho"
-                value={audience}
-                options={audienceOptions}
-                onSelect={(id) => setAudience(id as AudienceFilter)}
-              />
-            </View>
-
-            {/* Month: daily chart + insights */}
-            {period === 'month' && dailySeries.length > 0 && (
-              <View style={styles.chartCard}>
-                <Text style={styles.chartTitle}>Chi tiêu theo ngày</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <DailyBarChart series={dailySeries} color={colors.pink[400]} />
-                </ScrollView>
-                {peakDay && peakDay.amount > 0 && (
-                  <Text style={styles.chartInsight}>
-                    Ngày cao nhất: {peakDay.day}/{navMonth} · {fmt(peakDay.amount)}
-                  </Text>
-                )}
-              </View>
-            )}
-
-            {/* Day: breakdowns */}
-            {period === 'day' && (
-              <>
-                <BreakdownSection title="Chi theo danh mục" rows={categoryStats} total={totalChi} />
-                <BreakdownSection title="Chi theo nguồn" rows={sourceStats} total={totalChi} />
-                <BreakdownSection title="Chi cho ai" rows={audienceStats} total={totalChi} />
-              </>
-            )}
-
-            {/* Month/custom: category donut */}
-            {period !== 'day' && (
-              categoryStats.length === 0 ? (
+            {/* Category donut */}
+            {categoryStats.length === 0 ? (
                 <View style={styles.empty}>
                   <Text style={styles.emptyIcon}>📊</Text>
                   <Text style={styles.emptyText}>
@@ -775,25 +697,95 @@ export default function ReportsScreen() {
                     ))}
                   </View>
                 </View>
-              )
-            )}
+              )}
 
-            {period !== 'day' && (sourceStats.length > 0 || audienceStats.length > 0) && (
-              <>
-                <BreakdownSection title="Chi theo nguồn" rows={sourceStats} total={totalChi} />
-                <BreakdownSection title="Chi cho ai" rows={audienceStats} total={totalChi} />
-              </>
-            )}
+            <BreakdownSection title="Chi theo nguồn" rows={sourceStats} total={totalChi} />
+            <BreakdownSection title="Chi cho ai" rows={audienceStats} total={totalChi} />
 
             {/* Transaction list */}
             <Text style={styles.listHeading}>Giao dịch</Text>
             <TransactionList
               items={transactions}
+              onPressItem={handleEditTxn}
               emptyMessage={hasActiveFilters ? filteredEmptyMessage : periodEmptyMessage}
             />
           </>
         )}
       </ScrollView>
+
+      {/* Bộ lọc chi tiết */}
+      <BottomSheetModal visible={showFilters} onClose={() => setShowFilters(false)}>
+        <View style={styles.sheetHandle} />
+        <Text style={styles.sheetTitle}>Bộ lọc</Text>
+        <ScrollView
+          style={styles.sheetScroll}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.filterSheetBody}>
+            <View style={[styles.searchWrap, searchFocused && styles.fieldFocused]}>
+              <Ionicons name="search" style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Tìm mô tả, số tiền, danh mục..."
+                placeholderTextColor={colors.neutral[400]}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+                returnKeyType="search"
+              />
+            </View>
+
+            <Text style={styles.filterLabel}>Nguồn chi</Text>
+            <View style={styles.chipWrap}>
+              {sourceOptions.map((opt) => {
+                const active = opt.id === (sourceId === 'all' ? 'all' : String(sourceId));
+                return (
+                  <TouchableOpacity
+                    key={opt.id}
+                    style={[styles.chip, active && styles.chipActive]}
+                    onPress={() => setSourceId(opt.id === 'all' ? 'all' : opt.id)}
+                  >
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                      {opt.fullLabel}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={styles.filterLabel}>Chi cho</Text>
+            <View style={styles.chipWrap}>
+              {audienceOptions.map((opt) => {
+                const active = opt.id === audience;
+                return (
+                  <TouchableOpacity
+                    key={opt.id}
+                    style={[styles.chip, active && styles.chipActive]}
+                    onPress={() => setAudience(opt.id as AudienceFilter)}
+                  >
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                      {opt.fullLabel}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </ScrollView>
+        <View style={styles.filterSheetFooter}>
+          <TouchableOpacity style={styles.filterClearBtn} onPress={clearExtraFilters}>
+            <Text style={styles.filterClearBtnText}>Xoá lọc</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.dateDoneBtn, styles.filterDoneBtn]}
+            onPress={() => setShowFilters(false)}
+          >
+            <Text style={styles.dateDoneBtnText}>Xong</Text>
+          </TouchableOpacity>
+        </View>
+      </BottomSheetModal>
 
       {/* Date picker */}
       {datePicker && Platform.OS === 'android' && (
@@ -817,7 +809,7 @@ export default function ReportsScreen() {
             onChange={handleDateChange}
           />
           <TouchableOpacity style={styles.dateDoneBtn} onPress={() => setDatePicker(null)}>
-            <Text style={styles.dateDoneBtnText}>Xong ✓</Text>
+            <Text style={styles.dateDoneBtnText}>Xong</Text>
           </TouchableOpacity>
         </BottomSheetModal>
       )}
@@ -857,6 +849,133 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     gap: Spacing.sm,
   },
 
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.xs,
+  },
+  headerTitle: {
+    fontSize: Typography.fontSize.lg,
+    fontWeight: '800',
+    color: colors.neutral[700],
+  },
+
+  groupRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  groupSegment: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: colors.neutral[100],
+    borderRadius: BorderRadius.xl,
+    padding: 3,
+    gap: 3,
+  },
+  groupTab: {
+    flex: 1,
+    paddingVertical: 7,
+    borderRadius: BorderRadius.lg,
+    alignItems: 'center',
+  },
+  groupTabActive: {
+    backgroundColor: colors.action.selectedBackground,
+    borderWidth: 1,
+    borderColor: colors.action.selectedBorder,
+  },
+  groupTabText: {
+    fontSize: Typography.fontSize.xs,
+    fontWeight: '600',
+    color: colors.neutral[500],
+  },
+  groupTabTextActive: { color: colors.action.selectedText, fontWeight: '700' },
+  filterBtn: {
+    width: 40,
+    height: 38,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.ui.fieldBorder,
+    backgroundColor: colors.background.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterBtnIcon: { fontSize: 18, color: colors.neutral[600] },
+  filterBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    backgroundColor: colors.action.primaryBackground,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterBadgeText: {
+    fontSize: Typography.fontSize['2xs'],
+    fontWeight: '700',
+    color: colors.action.primaryText,
+  },
+  activeFilterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.xs,
+  },
+  activeFilterText: {
+    flex: 1,
+    fontSize: Typography.fontSize.xs,
+    fontWeight: '600',
+    color: colors.neutral[500],
+  },
+  activeFilterClear: {
+    fontSize: Typography.fontSize.xs,
+    fontWeight: '700',
+    color: colors.action.selectedText,
+  },
+
+  filterSheetBody: { gap: Spacing.sm, paddingBottom: Spacing.sm },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chip: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 7,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.ui.fieldBorder,
+    backgroundColor: colors.background.surface,
+  },
+  chipActive: {
+    backgroundColor: colors.action.selectedBackground,
+    borderColor: colors.action.selectedBorder,
+  },
+  chipText: {
+    fontSize: Typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.neutral[600],
+  },
+  chipTextActive: { color: colors.action.selectedText, fontWeight: '700' },
+  filterSheetFooter: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.base,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.base,
+  },
+  filterClearBtn: {
+    marginTop: Spacing.sm,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.ui.fieldBorder,
+    alignItems: 'center',
+  },
+  filterClearBtnText: {
+    fontSize: Typography.fontSize.base,
+    fontWeight: '700',
+    color: colors.neutral[600],
+  },
+  filterDoneBtn: { flex: 1, marginHorizontal: 0 },
+
   periodRow: {
     flexDirection: 'row',
     backgroundColor: colors.neutral[100],
@@ -871,15 +990,16 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     alignItems: 'center',
   },
   periodTabActive: {
-    backgroundColor: colors.action.primaryBackground,
-    ...shadows.soft,
+    backgroundColor: colors.action.selectedBackground,
+    borderWidth: 1,
+    borderColor: colors.action.selectedBorder,
   },
   periodTabText: {
     fontSize: Typography.fontSize.sm,
     fontWeight: '700',
     color: colors.neutral[500],
   },
-  periodTabTextActive: { color: colors.action.primaryText },
+  periodTabTextActive: { color: colors.action.selectedText },
 
   navRow: {
     flexDirection: 'row',
@@ -892,8 +1012,8 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
   },
   navArrowDisabled: {},
   navArrowText: {
-    fontSize: 26,
-    color: colors.blue[500],
+    fontSize: Typography.fontSize.lg,
+    color: colors.action.selectedText,
     fontWeight: '600',
   },
   navLabelBtn: { flex: 1, alignItems: 'center' },
@@ -925,7 +1045,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     gap: 2,
   },
   datePillLabel: {
-    fontSize: 10,
+    fontSize: Typography.fontSize['2xs'],
     fontWeight: '700',
     color: colors.neutral[400],
   },
@@ -949,7 +1069,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     borderColor: colors.action.selectedBorder,
     backgroundColor: colors.action.selectedBackground,
   },
-  searchIcon: { fontSize: 14 },
+  searchIcon: { fontSize: Typography.fontSize.base, color: colors.neutral[400] },
   searchInput: {
     flex: 1,
     fontSize: Typography.fontSize.sm,
@@ -985,52 +1105,29 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     fontWeight: '600',
   },
   aiChatCta: {
-    marginTop: Spacing.sm,
-    alignSelf: 'flex-start',
-    backgroundColor: colors.action.primaryBackground,
-    borderRadius: BorderRadius.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.action.secondaryBackground,
+    borderWidth: 1,
+    borderColor: colors.action.secondaryBorder,
+    borderRadius: BorderRadius.full,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
   },
   aiChatCtaText: {
-    color: colors.action.primaryText,
+    color: colors.action.secondaryText,
     fontSize: Typography.fontSize.sm,
     fontWeight: '700',
   },
-  expenseText: { color: colors.pink[500] },
+  expenseText: { color: colors.expense },
 
-  filterRow: { flexDirection: 'row', gap: Spacing.sm },
-  filterField: { flex: 1, minWidth: 0, gap: 4 },
   filterLabel: {
-    fontSize: 11,
+    fontSize: Typography.fontSize.xs,
     fontWeight: '700',
-    color: colors.lavender[400],
+    color: colors.neutral[500],
+    marginTop: Spacing.xs,
   },
-  filterPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    minHeight: 36,
-    paddingHorizontal: Spacing.sm + 2,
-    paddingVertical: 6,
-    borderRadius: BorderRadius.full,
-    backgroundColor: colors.background.surface,
-    borderWidth: 1,
-    borderColor: colors.ui.fieldBorder,
-    ...shadows.soft,
-  },
-  filterPillFocused: {
-    borderColor: colors.action.selectedBorder,
-    backgroundColor: colors.action.selectedBackground,
-  },
-  filterPillIcon: { fontSize: 13 },
-  filterPillText: {
-    flex: 1,
-    fontSize: Typography.fontSize.sm,
-    fontWeight: '700',
-    color: colors.neutral[700],
-  },
-  filterPillChevron: { fontSize: 10, color: colors.neutral[400] },
 
   sheetHandle: {
     width: 40, height: 4, borderRadius: 2,
@@ -1046,60 +1143,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     marginBottom: Spacing.sm,
   },
   sheetScroll: { paddingHorizontal: Spacing.base, maxHeight: 360 },
-  sheetOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.neutral[100],
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  sheetOptionActive: {
-    backgroundColor: colors.action.selectedBackground,
-    borderColor: colors.action.selectedBorder,
-  },
-  sheetOptionIcon: {
-    width: 36, height: 36,
-    borderRadius: BorderRadius.md,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.action.secondaryBackground,
-  },
-  sheetOptionText: {
-    flex: 1,
-    fontSize: Typography.fontSize.base,
-    fontWeight: '500',
-    color: colors.neutral[700],
-  },
-  sheetOptionTextActive: { fontWeight: '700', color: colors.action.selectedText },
-  sheetCheck: {
-    fontSize: Typography.fontSize.base,
-    color: colors.action.selectedText,
-    fontWeight: '800',
-  },
 
-  chartCard: {
-    backgroundColor: colors.background.surface,
-    borderRadius: BorderRadius.xl,
-    borderWidth: 1,
-    borderColor: colors.ui.cardBorder,
-    padding: Spacing.md,
-    gap: Spacing.sm,
-    ...shadows.soft,
-  },
-  chartTitle: {
-    fontSize: Typography.fontSize.sm,
-    fontWeight: '700',
-    color: colors.neutral[600],
-  },
-  chartInsight: {
-    fontSize: Typography.fontSize.xs,
-    color: colors.neutral[400],
-    fontWeight: '600',
-  },
 
   breakdownCard: {
     backgroundColor: colors.background.surface,
@@ -1123,7 +1167,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     gap: Spacing.sm,
     paddingVertical: 6,
   },
-  breakdownIcon: { fontSize: 16, width: 22, textAlign: 'center' },
+  breakdownIcon: { fontSize: Typography.fontSize.base, width: 22, textAlign: 'center' },
   breakdownLabel: {
     flex: 1,
     fontSize: Typography.fontSize.sm,
@@ -1132,7 +1176,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
   },
   breakdownAmt: {
     fontSize: Typography.fontSize.sm,
-    fontWeight: '800',
+    fontWeight: '700',
   },
   breakdownPct: {
     minWidth: 40,
@@ -1149,7 +1193,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
 
   listHeading: {
     fontSize: Typography.fontSize.sm,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.neutral[600],
     marginTop: Spacing.xs,
   },
@@ -1218,11 +1262,11 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     borderRadius: BorderRadius.md,
     alignItems: 'center', justifyContent: 'center',
   },
-  catIconText: { fontSize: 20 },
+  catIconText: { fontSize: Typography.fontSize.lg },
   catInfo: { flex: 1, gap: 4, minWidth: 0 },
   catTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
   catName: { fontSize: Typography.fontSize.sm, fontWeight: '700', color: colors.neutral[700], flexShrink: 1 },
-  catAmt: { fontSize: Typography.fontSize.sm, fontWeight: '800' },
+  catAmt: { fontSize: Typography.fontSize.sm, fontWeight: '700' },
   barBg: {
     height: 4,
     backgroundColor: colors.neutral[100],
@@ -1264,7 +1308,7 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     borderRadius: BorderRadius.md,
     alignItems: 'center', justifyContent: 'center',
   },
-  txnIconText: { fontSize: 18 },
+  txnIconText: { fontSize: Typography.fontSize.md },
   txnInfo: { flex: 1, minWidth: 0 },
   txnName: {
     fontSize: Typography.fontSize.sm,
@@ -1277,13 +1321,13 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     marginTop: 1,
   },
   txnMeta: {
-    fontSize: 10,
+    fontSize: Typography.fontSize['2xs'],
     fontWeight: '600',
     color: colors.lavender[400],
     marginTop: 2,
   },
   txnRight: { alignItems: 'flex-end', gap: 2 },
-  txnAmt: { fontSize: Typography.fontSize.sm, fontWeight: '800' },
+  txnAmt: { fontSize: Typography.fontSize.sm, fontWeight: '700' },
   txnDate: { fontSize: Typography.fontSize.xs, color: colors.neutral[400] },
 
   empty: { alignItems: 'center', paddingVertical: Spacing.xl, gap: Spacing.sm },
