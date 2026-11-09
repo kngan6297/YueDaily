@@ -40,3 +40,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# local temp files (may contain secrets)
+.tmp-*
+scripts/tmp-*

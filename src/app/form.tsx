@@ -8,7 +8,6 @@ import {
   Image,
   Keyboard,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -17,7 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { AmountKeyboard, formatAmount } from '../components/form/AmountKeyboard';
 import { BottomSheetModal } from '../components/ui/BottomSheetModal';
 import { BorderRadius, Spacing, ThemeColors, ThemeShadows, Typography } from '../constants/theme';
@@ -25,7 +24,6 @@ import { useAppTheme } from '../context/ThemeContext';
 import { isSourceActive, pickerSources, resolveCreateSourceId } from '../database/sourceLifecycle';
 import { useGemini } from '../hooks/useGemini';
 import { useModalBottomInset } from '../hooks/useModalBottomInset';
-import { RECEIPT_SCAN_ENABLED } from '../platform/receiptScanEnabled';
 import { listExpenseCategoriesByUsage } from '../repositories/categories';
 import { userMessageForDataError } from '../repositories/errors';
 import { listSources } from '../repositories/sources';
@@ -49,7 +47,6 @@ import {
 import {
   consumePendingReceiptImage,
 } from '../services/receiptAi/pendingReceiptImage';
-import { consumePendingReceiptResult } from '../services/receiptAi/pendingReceiptResult';
 import type { ExpenseAudience } from '../types';
 import {
   DEFAULT_EXPENSE_AUDIENCE,
@@ -157,7 +154,6 @@ export default function TransactionForm() {
   const params = useLocalSearchParams<{
     imageUri?: string | string[];
     imageHandoff?: string | string[];
-    fromReceipt?: string | string[];
     transactionId?: string | string[];
     isEdit?: string;
     transactionDate?: string;
@@ -286,21 +282,6 @@ export default function TransactionForm() {
     };
   }, []);
 
-  // ── Web helper kept only for preprocess dependency injection path ──
-  const blobUriToBase64 = useCallback(async (uri: string): Promise<string> => {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    return new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const dataUrl = reader.result as string;
-        resolve(dataUrl.split(',')[1] ?? '');
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }, []);
-
   const findCategoryByName = useCallback((cats: FinanceCategory[], categoryName: string) => {
     return cats.find((c) =>
       c.name.toLowerCase().includes(categoryName.toLowerCase()) ||
@@ -358,14 +339,11 @@ export default function TransactionForm() {
 
   // ── AI scan ──
   const handleAiScan = useCallback(async () => {
-    if (!RECEIPT_SCAN_ENABLED) return;
     if (!imageUri) { Alert.alert('Chưa có ảnh', 'Hãy chụp hoặc chọn ảnh trước!'); return; }
     const scanGeneration = ++scanGenerationRef.current;
     const totalStarted = Date.now();
     try {
-      const prepared = await preprocessReceiptImage(imageUri, {
-        blobToBase64: blobUriToBase64,
-      });
+      const prepared = await preprocessReceiptImage(imageUri);
       const aiStarted = Date.now();
       const result = await analyze(prepared.base64);
       const aiMs = Date.now() - aiStarted;
@@ -391,29 +369,10 @@ export default function TransactionForm() {
         `${msg}\n\nBạn vẫn có thể nhập tay.`,
       );
     }
-  }, [imageUri, analyze, blobUriToBase64, applyScanResult]);
-
-  // Web P2.3: kết quả quét bill đã có từ màn Quét bill (Edge AI) — chỉ điền form,
-  // không preprocess/analyze lại và không tự lưu giao dịch.
-  const hasConsumedReceiptResult = useRef(false);
-  const fromReceiptParam = Array.isArray(params.fromReceipt)
-    ? params.fromReceipt[0]
-    : params.fromReceipt;
-  useEffect(() => {
-    if (formMode !== 'create-complete' || hasConsumedReceiptResult.current) return;
-    hasConsumedReceiptResult.current = true;
-    // fromReceipt === '1' hoặc có kết quả đang chờ → consume một lần (null nếu không có/hết hạn).
-    const pendingResult = consumePendingReceiptResult();
-    if (!pendingResult) return;
-    const scanGeneration = ++scanGenerationRef.current;
-    applyScanResult(pendingResult, scanGeneration).catch((err) => {
-      Alert.alert('Không áp dụng được kết quả quét', userMessageForDataError(err, 'categories'));
-    });
-  }, [fromReceiptParam, formMode, applyScanResult]);
+  }, [imageUri, analyze, applyScanResult]);
 
   // Tự quét khi mở form với ảnh mới (không phải chỉnh sửa)
   useEffect(() => {
-    if (!RECEIPT_SCAN_ENABLED) return;
     if (!imageUri || formMode !== 'create-complete' || hasAutoScanned.current) return;
     hasAutoScanned.current = true;
     handleAiScan();
@@ -483,7 +442,6 @@ export default function TransactionForm() {
   const accentColor = colors.pink[400];
   const maxDate = new Date();
   const isBackdated = formData.transaction_date !== formatLocalDate(new Date());
-  const { bottom: screenBottomInset } = useSafeAreaInsets();
   const footerBottomPad = Math.max(useModalBottomInset(), Spacing.base);
 
   const handleDateChange = useCallback((event: DateTimePickerEvent, date?: Date) => {
@@ -559,7 +517,7 @@ export default function TransactionForm() {
 
             <View style={{ flex: 1 }} />
 
-            {imageUri && RECEIPT_SCAN_ENABLED ? (
+            {imageUri ? (
               <TouchableOpacity
                 style={[styles.aiBtn, isAiLoading && styles.aiBtnLoading]}
                 onPress={handleAiScan}
@@ -577,7 +535,7 @@ export default function TransactionForm() {
             ) : <View style={{ width: 34 }} />}
           </View>
 
-          {RECEIPT_SCAN_ENABLED && isAiLoading ? (
+          {isAiLoading ? (
             <Text style={styles.aiLoadingHint}>Đang đọc bill...</Text>
           ) : null}
 
@@ -756,28 +714,6 @@ export default function TransactionForm() {
           </BottomSheetModal>
         )}
 
-        {showDatePicker && Platform.OS === 'web' && (
-          <Modal visible transparent animationType="fade" onRequestClose={() => setShowDatePicker(false)}>
-            <TouchableOpacity style={styles.backdrop} onPress={() => setShowDatePicker(false)} activeOpacity={1} />
-            <View style={[styles.dateSheetWeb, { marginBottom: screenBottomInset }]}>
-              <Text style={styles.sheetTitle}>Chọn ngày giao dịch</Text>
-              {/* @ts-ignore — input web */}
-              <input
-                type="date"
-                title="Chọn ngày giao dịch"
-                aria-label="Chọn ngày giao dịch"
-                value={formData.transaction_date}
-                max={formatLocalDate(maxDate)}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  if (e.target.value) {
-                    setFormData((p) => ({ ...p, transaction_date: e.target.value }));
-                  }
-                  setShowDatePicker(false);
-                }}
-              />
-            </View>
-          </Modal>
-        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -792,14 +728,6 @@ function createStyles(
   return StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background.primary },
   container: { flex: 1 },
-  webDateInput: {
-    fontSize: Typography.fontSize.base,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.ui.fieldBorder,
-    width: '100%',
-  },
 
   // ── Top image section ──
   topSection: {
@@ -993,15 +921,6 @@ function createStyles(
     color: colors.lavender[400],
     fontWeight: '700',
   },
-  dateSheetWeb: {
-    backgroundColor: colors.background.surface,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.base,
-    marginHorizontal: Spacing['2xl'],
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: 320,
-  },
   pillIcon: { fontSize: Typography.fontSize.base, color: colors.neutral[500] },
   pillText: {
     flex: 1,
@@ -1066,10 +985,6 @@ function createStyles(
   },
 
   // Bottom sheet (nội dung bên trong BottomSheetModal)
-  backdrop: {
-    flex: 1,
-    backgroundColor: colors.background.overlay,
-  },
   sheetHandle: {
     width: 40,
     height: 4,

@@ -47,27 +47,11 @@ export type PrepFileCheckResult = {
 export interface PreprocessReceiptImageDeps {
   manipulateAsync?: ManipulateAsyncFn;
   copyToPrepCache?: typeof copyReceiptUriToPrepCache;
-  blobToBase64?: (uri: string) => Promise<string>;
   sourceExists?: (uri: string) => boolean;
   checkPrepFile?: (uri: string) => PrepFileCheckResult | Promise<PrepFileCheckResult>;
-  platformOS?: typeof import('react-native').Platform.OS;
   deletePrepFile?: (uri: string) => void;
   /** Override resize for controlled A/B (default: RECEIPT_AI_RESIZE_WIDTH). */
   resizeWidth?: number;
-}
-
-async function defaultBlobToBase64(uri: string): Promise<string> {
-  const response = await fetch(uri);
-  const blob = await response.blob();
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const dataUrl = reader.result as string;
-      resolve(dataUrl.split(',')[1] ?? '');
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
 }
 
 async function defaultManipulateAsync(
@@ -118,21 +102,6 @@ export async function preprocessReceiptImage(
 
   if (!imageUri) {
     throw receiptAiErrorFromKind('image_load_failed');
-  }
-
-  const platformOS =
-    deps.platformOS ??
-    (await import('react-native')).Platform.OS;
-
-  if (platformOS === 'web') {
-    const blobToBase64 = deps.blobToBase64 ?? defaultBlobToBase64;
-    const base64 = await blobToBase64(imageUri);
-    if (!base64) throw receiptAiErrorFromKind('image_processing_failed');
-    return {
-      base64,
-      mimeType: 'image/jpeg',
-      timing: { normalizeMs: 0, manipulateMs: 0, totalMs: Date.now() - totalStarted },
-    };
   }
 
   const manipulateAsync = deps.manipulateAsync ?? defaultManipulateAsync;

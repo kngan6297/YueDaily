@@ -1,5 +1,5 @@
 // ============================================================
-// P2.2 — Map native rows / Supabase rows → Finance* DTOs
+// Map native SQLite rows → Finance* DTOs
 // ============================================================
 
 import {
@@ -30,18 +30,6 @@ export function requireNativeId(id: EntityId): number {
     throw new Error('Invalid native entity id');
   }
   return n;
-}
-
-/** YYYY-MM-DD local calendar date — reject UTC-shifted ISO forms. */
-export function isLocalYmd(value: unknown): value is string {
-  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
-
-export function requireLocalYmd(value: string): string {
-  if (!isLocalYmd(value)) {
-    throw new Error('Invalid local transaction_date');
-  }
-  return value;
 }
 
 type NativeTxnRow = {
@@ -121,89 +109,4 @@ export function mapNativeSource(row: {
     return { ...base, reference_count: row.reference_count };
   }
   return base;
-}
-
-/** Supabase / PostgREST transaction row (snake_case) */
-export type CloudTransactionRow = {
-  id: string;
-  amount: number;
-  type: string;
-  category_id: string | null;
-  source_id: string | null;
-  payer: string;
-  expense_audience: string;
-  image_uri: string | null;
-  location: string | null;
-  note: string | null;
-  status: string;
-  transaction_date?: string | null;
-  created_at: string;
-  categories?: { name?: string; icon?: string; color?: string } | null;
-  sources?: { name?: string } | null;
-};
-
-export function mapCloudTransaction(row: CloudTransactionRow): FinanceTransaction {
-  const transactionDate = isLocalYmd(row.transaction_date)
-    ? row.transaction_date
-    : dateFromCreatedAt(row.created_at);
-  return {
-    id: row.id,
-    amount: row.amount,
-    type: (row.type === 'thu' ? 'thu' : 'chi') as TransactionType,
-    category_id: row.category_id,
-    source_id: row.source_id,
-    payer: row.payer,
-    expense_audience: normalizeExpenseAudience(row.expense_audience),
-    image_uri: row.image_uri,
-    location: row.location,
-    note: row.note,
-    status: (row.status === 'pending' ? 'pending' : 'complete') as TransactionStatus,
-    transaction_date: transactionDate,
-    created_at: row.created_at,
-    category_name: row.categories?.name ?? null,
-    category_icon: row.categories?.icon ?? null,
-    category_color: row.categories?.color ?? null,
-    source_name: row.sources?.name ?? null,
-  };
-}
-
-export type CloudCategoryRow = {
-  id: string;
-  name: string;
-  type: string;
-  icon: string;
-  color: string;
-  budget_group: string | null;
-};
-
-export function mapCloudCategory(row: CloudCategoryRow): FinanceCategory {
-  return {
-    id: row.id,
-    name: row.name,
-    type: row.type === 'thu' || row.type === 'both' ? row.type : 'chi',
-    icon: row.icon,
-    color: row.color,
-    budget_group: normalizeBudgetGroup(row.budget_group),
-  };
-}
-
-export type CloudSourceRow = {
-  id: string;
-  name: string;
-  is_active: boolean;
-  spending_group: string | null;
-};
-
-export function mapCloudSource(row: CloudSourceRow): FinanceSource {
-  return {
-    id: row.id,
-    name: row.name,
-    is_active: row.is_active ? 1 : 0,
-    spending_group: normalizeSourceSpendingGroup(row.spending_group),
-  };
-}
-
-export function parseAmountInteger(amount: string): number {
-  const n = parseInt(amount.replace(/\D/g, ''), 10);
-  return Number.isFinite(n) ? n : 0;
 }

@@ -9,7 +9,6 @@ import {
   HOUSEHOLD_FOOD_BUDGET_KEY,
 } from '../constants/budget';
 import {
-  getNextHouseholdFoodPeriodBounds,
   compareDateOnly,
   periodEndFromCycleStart,
   validateBudgetPeriodBounds,
@@ -148,18 +147,6 @@ export async function getLatestConfiguredBudgetPeriod(
     [budgetKey],
   );
   return row ? mapBudgetPeriodRow(row) : null;
-}
-
-export async function getAllBudgetPeriods(
-  db?: SQLite.SQLiteDatabase,
-): Promise<BudgetPeriod[]> {
-  const database = db ?? (await getDatabase());
-  const rows = await database.getAllAsync<BudgetPeriod>(
-    `SELECT ${BUDGET_PERIOD_COLUMNS}
-     FROM budget_periods
-     ORDER BY budget_key, period_start;`,
-  );
-  return rows.map(mapBudgetPeriodRow);
 }
 
 export async function createBudgetPeriod(
@@ -476,10 +463,4 @@ export async function ensureHouseholdFoodPeriodForStart(
   );
   if (!created) throw new Error('Failed to create budget period');
   return mapBudgetPeriodRow(created);
-}
-
-export function nextHouseholdFoodPeriodAfter(
-  current: Pick<BudgetPeriod, 'period_start' | 'period_end'>,
-): { period_start: string; period_end: string } {
-  return getNextHouseholdFoodPeriodBounds(current);
 }

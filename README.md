@@ -23,11 +23,15 @@ npm start
 
 | Yêu cầu      | Ghi chú                                                                     |
 | ------------ | --------------------------------------------------------------------------- |
-| Node.js ≥ 18 |                                                                             |
+| Node.js ≥ 18 | Local Windows+Avast: Node ≥ 22.15 (`npm start` dùng `node --use-system-ca`, không qua NODE_OPTIONS) |
 | API key      | [Groq](https://console.groq.com) hoặc [Gemini](https://aistudio.google.com) |
 | EAS CLI      | Chỉ khi build APK: `npm i -g eas-cli`                                       |
 
 > Camera im lặng (tắt shutter) cần **EAS native build** — Expo Go không đủ.
+
+### SSL / antivirus (Windows)
+
+Nếu `npm start` báo `fetch failed` / `UNABLE_TO_VERIFY_LEAF_SIGNATURE`, antivirus (vd. Avast) đang quét HTTPS. Node **không** cho `--use-system-ca` trong `NODE_OPTIONS` / `.npmrc` — EAS cloud sẽ fail (`expo doctor` / `prebuild` exit 9). `npm start` local dùng CLI flag `node --use-system-ca`. Không commit `.npmrc` máy local.
 
 ---
 
@@ -35,7 +39,7 @@ npm start
 
 ```bash
 npx eas-cli login
-npx eas-cli build --platform android --profile preview    # APK nội bộ
+npx eas-cli build --platform android --profile preview    # APK nội bộ (`buildType: apk`)
 npx eas-cli build --platform android --profile production # Play Store
 ```
 
@@ -67,7 +71,7 @@ YueDaily/
 │   ├── app/                      # Expo Router
 │   │   ├── _layout.tsx           # DB init, BottomSheetPortal, Stack
 │   │   ├── form.tsx              # Form chi tiêu + AI scan (source-first)
-│   │   ├── camera.tsx            # Camera native / file picker web
+│   │   ├── camera.tsx            # Camera + chọn ảnh thư viện
 │   │   └── (tabs)/
 │   │       ├── _layout.tsx       # Tab bar + FAB camera
 │   │       ├── index.tsx         # Lịch tháng
@@ -108,7 +112,7 @@ YueDaily/
 ├── APP_SPECIFICATION.md          # PRD
 ├── app.json
 ├── index.ts                      # expo-router/entry
-├── metro.config.js               # + .wasm cho SQLite web
+├── metro.config.js
 └── tsconfig.json                 # Path aliases → src/*
 ```
 
@@ -358,9 +362,6 @@ File: `src/constants/theme.ts` · Pastel sakura — **không dùng đỏ/xanh th
 ```bash
 npm start          # Expo dev server
 npm run android    # expo run:android
-npm run ios        # expo run:ios
-npm run web        # expo start --web
-npm run build:web  # expo export --platform web
 npm test           # Unit tests (date, report helpers, attribution, source lifecycle, category usage, Home spend groups)
 npx tsc --noEmit   # Typecheck
 ```
@@ -374,7 +375,6 @@ npx tsc --noEmit   # Typecheck
 | `.env`            | API keys (gitignored)                                       |
 | `app.json`        | Expo config; `softwareKeyboardLayoutMode: resize` (Android) |
 | `eas.json`        | Build profiles                                              |
-| `metro.config.js` | WASM support cho SQLite web                                 |
 
 ---
 

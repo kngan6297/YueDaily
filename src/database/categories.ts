@@ -1,11 +1,11 @@
 // ============================================================
-// CÁC HÀM THAO TÁC VỚI CATEGORIES, SOURCES, PAYERS
+// CÁC HÀM THAO TÁC VỚI CATEGORIES, SOURCES
 // ============================================================
 
 import { getDatabase } from './initDb';
 import { CATEGORY_USAGE_JOIN } from './categoryUsage';
 import { canEditSourceSpendingGroup, sourceDeleteGuard } from './sourceLifecycle';
-import type { Category, PayerRecord, Source, SourceSpendingGroup } from '../types';
+import type { Category, Source, SourceSpendingGroup } from '../types';
 import { normalizeBudgetGroup, normalizeSourceSpendingGroup, TRANSACTION_STATUS_COMPLETE } from '../types';
 
 type DeleteResult = { ok: true } | { ok: false; reason: string };
@@ -26,15 +26,6 @@ export async function getAllCategories(): Promise<Category[]> {
   return rows.map(mapCategoryRow);
 }
 
-/** Lấy danh mục chi tiêu (chi + both; loại thu legacy) — alphabetical, Settings */
-export async function getExpenseCategories(): Promise<Category[]> {
-  const db = await getDatabase();
-  const rows = await db.getAllAsync<Category>(
-    `SELECT * FROM categories WHERE type = 'chi' OR type = 'both' ORDER BY name;`,
-  );
-  return rows.map(mapCategoryRow);
-}
-
 /** Form picker: completed expense usage DESC, then name ASC. Zero-use last. */
 export async function getExpenseCategoriesByUsage(): Promise<Category[]> {
   const db = await getDatabase();
@@ -46,16 +37,6 @@ export async function getExpenseCategoriesByUsage(): Promise<Category[]> {
      GROUP BY c.id, c.name, c.type, c.icon, c.color, c.budget_group
      ORDER BY COUNT(t.id) DESC, c.name ASC;`,
   ).then((rows) => rows.map(mapCategoryRow));
-}
-
-/** Lấy danh mục theo loại giao dịch */
-export async function getCategoriesByType(type: 'thu' | 'chi'): Promise<Category[]> {
-  const db = await getDatabase();
-  const rows = await db.getAllAsync<Category>(
-    `SELECT * FROM categories WHERE type = ? OR type = 'both' ORDER BY name;`,
-    [type]
-  );
-  return rows.map(mapCategoryRow);
 }
 
 /** Thêm danh mục mới */
@@ -91,8 +72,10 @@ export async function updateCategory(
 /** Xoá danh mục — gỡ liên kết giao dịch trước */
 export async function deleteCategory(id: number): Promise<DeleteResult> {
   const db = await getDatabase();
-  await db.runAsync('UPDATE transactions SET category_id = NULL WHERE category_id = ?;', [id]);
-  await db.runAsync('DELETE FROM categories WHERE id = ?;', [id]);
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('UPDATE transactions SET category_id = NULL WHERE category_id = ?;', [id]);
+    await db.runAsync('DELETE FROM categories WHERE id = ?;', [id]);
+  });
   return { ok: true };
 }
 
@@ -107,15 +90,6 @@ function mapSourceRow(row: Source): Source {
 export async function getAllSources(): Promise<Source[]> {
   const db = await getDatabase();
   const rows = await db.getAllAsync<Source>('SELECT * FROM sources ORDER BY id;');
-  return rows.map(mapSourceRow);
-}
-
-/** Nguồn đang dùng — form tạo giao dịch mới */
-export async function getActiveSources(): Promise<Source[]> {
-  const db = await getDatabase();
-  const rows = await db.getAllAsync<Source>(
-    'SELECT * FROM sources WHERE is_active = 1 ORDER BY id;',
-  );
   return rows.map(mapSourceRow);
 }
 
@@ -212,69 +186,3 @@ export async function deleteSource(id: number): Promise<DeleteResult> {
   await db.runAsync('DELETE FROM sources WHERE id = ?;', [id]);
   return { ok: true };
 }
-
-/** Lấy tất cả người trả */
-export async function getAllPayers(): Promise<PayerRecord[]> {
-  const db = await getDatabase();
-  return await db.getAllAsync<PayerRecord>('SELECT * FROM payers ORDER BY id;');
-}
-
-/** Thêm người trả */
-export async function insertPayer(name: string, icon: string, color: string): Promise<number> {
-  const db = await getDatabase();
-  const result = await db.runAsync(
-    'INSERT INTO payers (name, icon, color) VALUES (?, ?, ?);',
-    [name.trim(), icon.trim() || '👤', color]
-  );
-  return result.lastInsertRowId;
-}
-
-/** Cập nhật người trả — đồng bộ tên trong giao dịch cũ */
-export async function updatePayer(
-  id: number,
-  name: string,
-  icon: string,
-  color: string
-): Promise<void> {
-  const db = await getDatabase();
-  const existing = await db.getFirstAsync<PayerRecord>('SELECT * FROM payers WHERE id = ?;', [id]);
-  if (!existing) return;
-
-  const trimmed = name.trim();
-  if (existing.name !== trimmed) {
-    await db.runAsync('UPDATE transactions SET payer = ? WHERE payer = ?;', [trimmed, existing.name]);
-  }
-  await db.runAsync(
-    'UPDATE payers SET name = ?, icon = ?, color = ? WHERE id = ?;',
-    [trimmed, icon.trim() || '👤', color, id]
-  );
-}
-
-/** Xoá người trả */
-export async function deletePayer(id: number): Promise<DeleteResult> {
-  const db = await getDatabase();
-  const count = await db.getFirstAsync<{ count: number }>(
-    'SELECT COUNT(*) as count FROM payers;'
-  );
-  if ((count?.count ?? 0) <= 1) {
-    return { ok: false, reason: 'Cần giữ ít nhất một người trả.' };
-  }
-
-  const payer = await db.getFirstAsync<PayerRecord>('SELECT * FROM payers WHERE id = ?;', [id]);
-  if (!payer) return { ok: false, reason: 'Không tìm thấy người trả.' };
-
-  const txCount = await db.getFirstAsync<{ count: number }>(
-    'SELECT COUNT(*) as count FROM transactions WHERE payer = ?;',
-    [payer.name]
-  );
-  if ((txCount?.count ?? 0) > 0) {
-    return {
-      ok: false,
-      reason: `「${payer.name}」đang có ${txCount?.count} giao dịch. Đổi tên thay vì xoá, hoặc xoá giao dịch trước.`,
-    };
-  }
-
-  await db.runAsync('DELETE FROM payers WHERE id = ?;', [id]);
-  return { ok: true };
-}
-

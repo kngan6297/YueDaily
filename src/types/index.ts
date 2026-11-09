@@ -77,13 +77,6 @@ export function resolvePayerForInsert(payer: string | null | undefined): string 
 /** Người chi tiêu — legacy DB; không còn primary UX */
 export type Payer = string;
 
-/** Bản ghi người trả trong cài đặt */
-export interface PayerRecord {
-  id: number;
-  name: string;
-  icon: string;
-  color: string;
-}
 
 /** Cấu trúc bảng giao dịch */
 export interface Transaction {

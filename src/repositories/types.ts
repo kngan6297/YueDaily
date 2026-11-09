@@ -1,6 +1,5 @@
 // ============================================================
-// P2.2 — Shared finance DTOs (opaque string IDs)
-// Native SQLite uses integers internally; Web uses UUIDs.
+// Finance DTOs for screens (opaque string IDs over SQLite integer ids)
 // ============================================================
 
 import type {
@@ -11,7 +10,7 @@ import type {
   TransactionType,
 } from '../types';
 
-/** Opaque entity id — SQLite integer string or Supabase UUID */
+/** Opaque entity id — SQLite integer as string */
 export type EntityId = string;
 
 export interface FinanceTransaction {
@@ -32,7 +31,7 @@ export interface FinanceTransaction {
    * Native: derived from created_at TEXT (Android schema unchanged)
    */
   transaction_date: string;
-  /** Local-datetime TEXT (native calendar carrier / cloud P2.5 mapping parity) */
+  /** Local-datetime TEXT (native calendar carrier) */
   created_at: string;
   category_name?: string | null;
   category_icon?: string | null;

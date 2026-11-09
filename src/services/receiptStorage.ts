@@ -38,9 +38,14 @@ export async function persistReceiptImage(
   const dest = new File(dir, `r-${Date.now()}-${Math.floor(Math.random() * 1e6)}.jpg`);
   try {
     const { ImageManipulator, SaveFormat } = await import('expo-image-manipulator');
-    const image = await ImageManipulator.manipulate(uri)
-      .resize({ width: ARCHIVE_MAX_WIDTH })
-      .renderAsync();
+    const original = await ImageManipulator.manipulate(uri).renderAsync();
+    // Only shrink — never upscale small photos into bigger files
+    const image =
+      original.width > ARCHIVE_MAX_WIDTH
+        ? await ImageManipulator.manipulate(original)
+            .resize({ width: ARCHIVE_MAX_WIDTH })
+            .renderAsync()
+        : original;
     const result = await image.saveAsync({
       compress: ARCHIVE_JPEG_QUALITY,
       format: SaveFormat.JPEG,

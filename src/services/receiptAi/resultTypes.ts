@@ -1,4 +1,4 @@
-/** Kết quả phân tích AI cho bill (dùng chung native + web, không phụ thuộc UI/DB). */
+/** Kết quả phân tích AI cho bill (không phụ thuộc UI/DB). */
 export interface GeminiAnalysisResult {
   is_receipt?: boolean;
   amount?: number;

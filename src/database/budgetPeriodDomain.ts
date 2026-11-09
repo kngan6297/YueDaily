@@ -86,16 +86,6 @@ export function getNextHouseholdFoodPeriodStart(currentPeriodStart: string): str
   );
 }
 
-export function getNextHouseholdFoodPeriodBounds(
-  current: BudgetPeriodBounds,
-): BudgetPeriodBounds {
-  const period_start = getNextHouseholdFoodPeriodStart(current.period_start);
-  return {
-    period_start,
-    period_end: periodEndFromCycleStart(period_start),
-  };
-}
-
 export function validateBudgetPeriodBounds(
   periodStart: string,
   periodEnd: string,

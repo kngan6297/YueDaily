@@ -5,9 +5,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { initializeDatabase } from '../database/initDb';
 import { migrateCachedReceiptImages } from '../database/receiptArchiveMigration';
-import type { UseDatabaseResult } from './useDatabaseTypes';
-
-export type { UseDatabaseResult } from './useDatabaseTypes';
+export interface UseDatabaseResult {
+  isReady: boolean;
+  error: Error | null;
+  isInitializing: boolean;
+  retryDatabase: () => Promise<void>;
+}
 
 /**
  * Hook này phải được gọi ở root layout để đảm bảo

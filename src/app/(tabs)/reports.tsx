@@ -1,11 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
-  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -50,7 +49,6 @@ import {
   EXPENSE_AUDIENCE_LABELS,
   EXPENSE_AUDIENCE_SHORT,
 } from '../../types';
-import { SPENDING_CHAT_ENABLED } from '../../platform/spendingChatEnabled';
 import {
   formatDateVi,
   formatLocalDate,
@@ -318,40 +316,48 @@ export default function ReportsScreen() {
     return { kind: 'custom', fromDate: customRange.fromDate, toDate: customRange.toDate };
   }, [period, navYear, navMonth, customRange]);
 
+  // Debounce search so each keystroke does not trigger a full reload
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   const filters = useMemo(() => ({
     sourceId,
     audience,
-    search: searchQuery,
+    search: debouncedSearch,
     spendingGroup: spendingGroupForHomeSpendView(spendView),
-  }), [sourceId, audience, searchQuery, spendView]);
+  }), [sourceId, audience, debouncedSearch, spendView]);
+
+  // Only the latest load may write state — older responses can arrive later
+  const loadSeqRef = useRef(0);
 
   const loadData = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     setIsLoading(true);
     setLoadError(null);
     try {
-      const [txns, sum, bySource, byAudience, byCategory] = await Promise.all([
+      const [txns, sum, bySource, byAudience, byCategory, daily] = await Promise.all([
         getExpenseTransactions(reportRange, filters),
         getExpenseSummary(reportRange, filters),
         getExpenseSourceTotals(reportRange, filters),
         getExpenseAudienceTotals(reportRange, filters),
         getExpenseCategoryTotals(reportRange, filters),
+        period === 'month' ? getDailyExpenseTotals(reportRange, filters) : Promise.resolve(null),
       ]);
+      if (seq !== loadSeqRef.current) return;
       setTransactions(txns);
       setSummary(sum);
       setSourceStats(bySource);
       setAudienceStats(byAudience);
       setCategoryRows(byCategory);
-
-      if (period === 'month') {
-        const daily = await getDailyExpenseTotals(reportRange, filters);
-        setDailySeries(buildMonthDailySeries(navYear, navMonth, daily));
-      } else {
-        setDailySeries([]);
-      }
+      setDailySeries(daily ? buildMonthDailySeries(navYear, navMonth, daily) : []);
     } catch (err) {
+      if (seq !== loadSeqRef.current) return;
       setLoadError(userMessageForDataError(err, 'reports'));
     } finally {
-      setIsLoading(false);
+      if (seq === loadSeqRef.current) setIsLoading(false);
     }
   }, [reportRange, filters, period, navYear, navMonth]);
 
@@ -364,9 +370,10 @@ export default function ReportsScreen() {
     });
   }, []));
 
-  useEffect(() => {
+  // Reload on focus too — expenses added/edited elsewhere must show up here
+  useFocusEffect(useCallback(() => {
     loadData();
-  }, [loadData]);
+  }, [loadData]));
 
   const prevPeriod = () => {
     if (navMonth === 1) { setNavMonth(12); setNavYear((y) => y - 1); }
@@ -466,16 +473,9 @@ export default function ReportsScreen() {
     if (datePicker === 'to') applyCustomRange(customRange.fromDate, picked);
   };
 
-  const handleWebDatePick = (value: string) => {
-    if (!value || !datePicker) return;
-    const picked = clampDateToToday(value);
-    if (datePicker === 'from') applyCustomRange(picked, customRange.toDate);
-    if (datePicker === 'to') applyCustomRange(customRange.fromDate, picked);
-    setDatePicker(null);
-  };
-
-  const webPickerValue = datePicker === 'from' ? customRange.fromDate : customRange.toDate;
-  const pickerValue = parseLocalDate(webPickerValue);
+  const pickerValue = parseLocalDate(
+    datePicker === 'from' ? customRange.fromDate : customRange.toDate,
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -487,18 +487,16 @@ export default function ReportsScreen() {
         {/* Header */}
         <View style={styles.headerRow}>
           <Text style={styles.headerTitle}>Thống kê</Text>
-          {SPENDING_CHAT_ENABLED ? (
-            <TouchableOpacity
-              style={styles.aiChatCta}
-              onPress={openSpendingChat}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityLabel="Hỏi AI về chi tiêu"
-            >
-              <Ionicons name="sparkles" style={styles.aiChatCtaText} />
-              <Text style={styles.aiChatCtaText}>Hỏi AI</Text>
-            </TouchableOpacity>
-          ) : null}
+          <TouchableOpacity
+            style={styles.aiChatCta}
+            onPress={openSpendingChat}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Hỏi AI về chi tiêu"
+          >
+            <Ionicons name="sparkles" style={styles.aiChatCtaText} />
+            <Text style={styles.aiChatCtaText}>Hỏi AI</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Kỳ */}
@@ -812,29 +810,6 @@ export default function ReportsScreen() {
             <Text style={styles.dateDoneBtnText}>Xong</Text>
           </TouchableOpacity>
         </BottomSheetModal>
-      )}
-      {datePicker && Platform.OS === 'web' && (
-        <Modal visible transparent animationType="fade" onRequestClose={() => setDatePicker(null)}>
-          <TouchableOpacity
-            style={styles.webBackdrop}
-            onPress={() => setDatePicker(null)}
-            activeOpacity={1}
-          />
-          <View style={styles.webDateSheet}>
-            <Text style={styles.sheetTitle}>Chọn ngày</Text>
-            {/* @ts-ignore — input web */}
-            <input
-              type="date"
-              title="Chọn ngày"
-              aria-label="Chọn ngày"
-              value={webPickerValue}
-              max={today}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                if (e.target.value) handleWebDatePick(e.target.value);
-              }}
-            />
-          </View>
-        </Modal>
       )}
     </SafeAreaView>
   );
@@ -1366,19 +1341,5 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     fontWeight: '700',
   },
 
-  webBackdrop: {
-    flex: 1,
-    backgroundColor: colors.background.overlay,
-  },
-  webDateSheet: {
-    backgroundColor: colors.background.surface,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.base,
-    marginHorizontal: Spacing['2xl'],
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: 320,
-    marginTop: '30%',
-  },
 });
 }

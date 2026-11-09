@@ -26,12 +26,3 @@ export async function setLastSelectedSourceId(id: string | number): Promise<void
     // ignore storage failures — form vẫn lưu được
   }
 }
-
-/** Clear on sign-out so Web User B never inherits User A's source id. */
-export async function clearLastSelectedSourceId(): Promise<void> {
-  try {
-    await AsyncStorage.removeItem(LAST_SOURCE_KEY);
-  } catch {
-    // ignore
-  }
-}

@@ -3,19 +3,13 @@
     "name": "YueDaily",
     "slug": "Yozakura",
     "platforms": [
-      "android",
-      "web"
+      "android"
     ],
     "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "yuedaily",
-    "web": {
-      "bundler": "metro",
-      "output": "single",
-      "favicon": "./assets/icon.png"
-    },
     "android": {
       "icon": "./assets/icon.png",
       "versionCode": 3,
@@ -36,15 +30,7 @@
       ]
     },
     "plugins": [
-      [
-        "expo-router",
-        {
-          "headers": {
-            "Cross-Origin-Embedder-Policy": "credentialless",
-            "Cross-Origin-Opener-Policy": "same-origin"
-          }
-        }
-      ],
+      "expo-router",
       "expo-sqlite",
       [
         "expo-camera",
@@ -74,12 +60,6 @@
       "expo-status-bar"
     ],
     "extra": {
-      "router": {
-        "headers": {
-          "Cross-Origin-Embedder-Policy": "credentialless",
-          "Cross-Origin-Opener-Policy": "same-origin"
-        }
-      },
       "eas": {
         "projectId": "ab0bb11f-354f-4cac-a8e2-617d5f98a3b9"
       }

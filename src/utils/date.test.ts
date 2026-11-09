@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildCreatedAtForEdit,
   calendarDaysInMonthPeriod,
   clampDateToToday,
   daysInclusive,
@@ -76,5 +77,21 @@ describe('date helpers', () => {
 
   it('month/year boundary in daysInclusive', () => {
     assert.equal(daysInclusive('2025-12-31', '2026-01-02'), 3);
+  });
+});
+
+describe('buildCreatedAtForEdit', () => {
+  it('keeps the original time when the date is unchanged', () => {
+    assert.equal(
+      buildCreatedAtForEdit('2026-08-10 08:15:00', '2026-08-10'),
+      '2026-08-10 08:15:00',
+    );
+  });
+
+  it('uses noon for a moved past date', () => {
+    assert.equal(
+      buildCreatedAtForEdit('2026-08-10 08:15:00', '2026-08-09'),
+      '2026-08-09 12:00:00',
+    );
   });
 });

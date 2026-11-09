@@ -30,10 +30,7 @@ import {
   sourceHasTransactionRefs,
   validateNewSourceDraft,
 } from '../../database/sourceLifecycle';
-import { BACKUP_UI_ENABLED } from '../../platform/backupUiEnabled';
 import { confirmDestructive } from '../../platform/confirmDestructive';
-import { getSourceGroupLabels } from '../../platform/sourceGroupLabels';
-import { useWebSignOut } from '../../platform/webSignOut';
 import {
   deleteCategory,
   insertCategory,
@@ -56,6 +53,7 @@ import type {
 import type { SourceSpendingGroup } from '../../types';
 import {
   SOURCE_SPENDING_GROUP_CHOICES,
+  SOURCE_SPENDING_GROUP_LABELS,
   UNCLASSIFIED_SPENDING_GROUP_LABEL,
 } from '../../types';
 
@@ -96,11 +94,9 @@ function emptyEdit(kind: EditKind): EditState {
 export default function SettingsScreen() {
   const { colors, shadows, appearanceMode, setAppearanceMode } = useAppTheme();
   const styles = useMemo(() => createStyles(colors, shadows), [colors, shadows]);
-  const sourceGroupLabels = getSourceGroupLabels();
+  const sourceGroupLabels = SOURCE_SPENDING_GROUP_LABELS;
   const sourceGroupLabel = (group: SourceSpendingGroup | null): string =>
     group ? sourceGroupLabels[group] : UNCLASSIFIED_SPENDING_GROUP_LABEL;
-  const webSignOut = useWebSignOut();
-  const [signingOut, setSigningOut] = useState(false);
   const [categories, setCategories] = useState<FinanceCategory[]>([]);
   const [sources, setSources] = useState<FinanceSourceWithRefs[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -168,7 +164,6 @@ export default function SettingsScreen() {
   };
 
   const showEditValidation = (title: string, message: string) => {
-    // RN Web Alert.alert is a no-op — keep inline error as the Web-visible signal.
     setEditError(message);
     Alert.alert(title, message);
   };
@@ -353,16 +348,6 @@ export default function SettingsScreen() {
     );
   };
 
-  const handleWebSignOut = async () => {
-    if (!webSignOut || signingOut) return;
-    setSigningOut(true);
-    try {
-      await webSignOut();
-    } finally {
-      setSigningOut(false);
-    }
-  };
-
   const editTitle =
     edit?.kind === 'source'
       ? edit.id ? 'Sửa nguồn chi' : 'Thêm nguồn chi'
@@ -522,73 +507,54 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* ── Backup (Android SQLite v8; hidden on Web P2.2) ── */}
-        {BACKUP_UI_ENABLED ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Sao lưu & khôi phục</Text>
-            <View style={[styles.card, styles.cardPadded]}>
-              <Text style={styles.backupHint}>
-                Xuất dữ liệu ra file JSON để lưu vào Google Drive, máy tính, hoặc bất kỳ đâu. Khi cần, nhập lại để khôi phục toàn bộ giao dịch, danh mục, nguồn chi và dữ liệu lịch sử.
-              </Text>
+        {/* ── Backup (SQLite v8) ── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Sao lưu & khôi phục</Text>
+          <View style={[styles.card, styles.cardPadded]}>
+            <Text style={styles.backupHint}>
+              Xuất dữ liệu ra file JSON để lưu vào Google Drive, máy tính, hoặc bất kỳ đâu. Khi cần, nhập lại để khôi phục toàn bộ giao dịch, danh mục, nguồn chi và dữ liệu lịch sử. Ảnh hoá đơn không nằm trong file backup — đổi máy sẽ không mang theo ảnh.
+            </Text>
 
-              <View style={styles.infoDivider} />
+            <View style={styles.infoDivider} />
 
-              <TouchableOpacity
-                style={[styles.backupBtn, styles.backupBtnExport]}
-                onPress={handleExport}
-                disabled={exporting || importing}
-                activeOpacity={0.75}
-              >
-                {exporting ? (
-                  <ActivityIndicator size="small" color={colors.action.primaryText} />
-                ) : (
-                  <Ionicons name="cloud-upload-outline" style={styles.backupBtnIcon} />
-                )}
-                <View style={styles.backupBtnText}>
-                  <Text style={styles.backupBtnLabel}>Xuất backup</Text>
-                  <Text style={[styles.backupBtnSub, styles.backupBtnSubOnPrimary]}>Lưu file JSON ra ngoài</Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.backupBtn, styles.backupBtnImport]}
-                onPress={handleImport}
-                disabled={exporting || importing}
-                activeOpacity={0.75}
-              >
-                {importing ? (
-                  <ActivityIndicator size="small" color={colors.neutral[700]} />
-                ) : (
-                  <Ionicons
-                    name="cloud-download-outline"
-                    style={[styles.backupBtnIcon, styles.backupBtnLabelDark]}
-                  />
-                )}
-                <View style={styles.backupBtnText}>
-                  <Text style={[styles.backupBtnLabel, styles.backupBtnLabelDark]}>Nhập backup</Text>
-                  <Text style={styles.backupBtnSub}>Khôi phục từ file JSON</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : null}
-
-        {webSignOut ? (
-          <View style={styles.section}>
             <TouchableOpacity
-              style={[styles.signOutBtn, signingOut && { opacity: 0.6 }]}
-              onPress={handleWebSignOut}
-              disabled={signingOut}
-              activeOpacity={0.85}
+              style={[styles.backupBtn, styles.backupBtnExport]}
+              onPress={handleExport}
+              disabled={exporting || importing}
+              activeOpacity={0.75}
             >
-              {signingOut ? (
-                <ActivityIndicator size="small" color={colors.action.destructiveText} />
+              {exporting ? (
+                <ActivityIndicator size="small" color={colors.action.primaryText} />
               ) : (
-                <Text style={styles.signOutBtnText}>Đăng xuất</Text>
+                <Ionicons name="cloud-upload-outline" style={styles.backupBtnIcon} />
               )}
+              <View style={styles.backupBtnText}>
+                <Text style={styles.backupBtnLabel}>Xuất backup</Text>
+                <Text style={[styles.backupBtnSub, styles.backupBtnSubOnPrimary]}>Lưu file JSON ra ngoài</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.backupBtn, styles.backupBtnImport]}
+              onPress={handleImport}
+              disabled={exporting || importing}
+              activeOpacity={0.75}
+            >
+              {importing ? (
+                <ActivityIndicator size="small" color={colors.neutral[700]} />
+              ) : (
+                <Ionicons
+                  name="cloud-download-outline"
+                  style={[styles.backupBtnIcon, styles.backupBtnLabelDark]}
+                />
+              )}
+              <View style={styles.backupBtnText}>
+                <Text style={[styles.backupBtnLabel, styles.backupBtnLabelDark]}>Nhập backup</Text>
+                <Text style={styles.backupBtnSub}>Khôi phục từ file JSON</Text>
+              </View>
             </TouchableOpacity>
           </View>
-        ) : null}
+        </View>
 
         <View style={{ height: 24 }} />
       </ScrollView>
@@ -1036,19 +1002,6 @@ function createStyles(colors: ThemeColors, shadows: ThemeShadows) {
     marginHorizontal: Spacing.base,
     marginTop: Spacing.md,
     ...shadows.medium,
-  },
-  signOutBtn: {
-    backgroundColor: colors.action.destructiveBackground,
-    borderWidth: 1,
-    borderColor: colors.pink[200],
-    borderRadius: BorderRadius.xl,
-    paddingVertical: Spacing.md,
-    alignItems: 'center',
-  },
-  signOutBtnText: {
-    color: colors.action.destructiveText,
-    fontSize: Typography.fontSize.base,
-    fontWeight: '700',
   },
   saveEditBtnText: {
     color: colors.action.primaryText,

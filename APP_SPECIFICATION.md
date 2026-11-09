@@ -75,11 +75,6 @@ App **không** kết luận “ai bỏ tiền riêng” từ người physically
 - Không muốn tạo tài khoản, không sync cloud bắt buộc.
 - Chấp nhận backup thủ công (export file JSON) để tự lưu trữ.
 
-### 3.5 Người dùng Web (phụ)
-
-- Muốn nhập bằng máy tính, upload ảnh thay vì chụp camera native.
-- Tính năng / UX nền tảng Web giữ nguyên nghiệp vụ, camera thay bằng file picker.
-
 ---
 
 ## 4. Phạm vi sản phẩm
@@ -89,7 +84,7 @@ App **không** kết luận “ai bỏ tiền riêng” từ người physically
 | Module | Hành vi người dùng |
 |--------|---------------------|
 | **Trang chủ** | Lịch tháng, xem tổng chi tháng, card **Quỹ ăn kỳ** (P1.6), xem/sửa/xoá/thêm giao dịch; bottom sheet ngày có summary tổng chi + số giao dịch; giao dịch hiện nhãn *Chi cho: …* và *Nguồn: …*. Không ưu tiên hiển thị người thanh toán. |
-| **Camera** | Chụp ảnh hoá đơn (native) hoặc chọn file (web); có thể bỏ qua để nhập tay. |
+| **Camera** | Chụp ảnh hoá đơn hoặc chọn từ thư viện; có thể bỏ qua để nhập tay. |
 | **Form giao dịch** | Nhập số tiền, danh mục, chi cho ai, nguồn chi, ngày, mô tả; quét AI. **Không** có Người thanh toán / Quỹ tiền / Người duyệt trên form chính. |
 | **Thống kê** | Donut theo danh mục, biểu đồ chi theo ngày (kỳ tháng), danh sách giao dịch; kỳ: ngày / tháng / khoảng tùy chỉnh; lọc danh mục, nguồn chi, chi cho ai; tìm kiếm giao dịch; tổng chi theo đối tượng; báo cáo **Chi theo nguồn**. |
 | **Tài khoản** | Báo cáo chi theo từng *Nguồn chi* (`source_id`); **không** hiển thị số dư; **không** biến thành dashboard budget. |
@@ -311,14 +306,10 @@ Mục tiêu: nhập ≤ 30 giây.
 
 ### 5.4 Camera
 
-- Native (iOS/Android):
-  - Preview toàn màn.
-  - Nút chụp lớn, hỗ trợ flash, lật camera.
-  - Nút mở thư viện ảnh.
-  - Nút “Bỏ qua” để vào form không có ảnh.
-- Web:
-  - Thay camera bằng upload / kéo‑thả file ảnh.
-  - Sau khi chọn file → đi tiếp như native (nén ảnh + gửi AI).
+- Preview toàn màn.
+- Nút chụp lớn, hỗ trợ flash, lật camera.
+- Nút mở thư viện ảnh.
+- Nút “Bỏ qua” để vào form không có ảnh.
 
 ### 5.5 Thống kê
 
@@ -1034,7 +1025,7 @@ AI **không** tự quyết / không infer từ ảnh:
 
 | Hạng mục | Yêu cầu |
 |----------|---------|
-| Nền tảng | iOS, Android, Web (browser modern) |
+| Nền tảng | Android (APK) |
 | Ngôn ngữ | Tiếng Việt |
 | Định dạng | Tiền tệ VNĐ, format `vi-VN` |
 | Offline | Đọc/ghi DB offline; chỉ AI/backup phụ thuộc mạng |
@@ -1136,11 +1127,11 @@ Token màu cụ thể được định nghĩa tại `src/constants/theme.ts`.
 
 Read-only conversational spending analyst (calendar-month anchored: day **01 → last day**).
 
-**Platform:** **Android/APK only** (local SQLite). **Web/PWA intentionally unsupported** — no CTA, no deferred screen, no Edge turn. Direct Web `/spending-chat` redirects to Reports. Cloud tables from P2.1 (`ai_chat_*`) remain RLS-protected but **unused / reserved** (not populated; not a Web feature).
+**Platform:** **Android/APK only** (local SQLite).
 
 | Hạng mục | Quy tắc |
 |----------|---------|
-| Entry | **Android only:** Thống kê / Reports CTA **「Hỏi AI về chi tiêu」** → modal `spending-chat` (không thêm bottom tab). **Web:** no entry. |
+| Entry | **Android only:** Thống kê / Reports CTA **「Hỏi AI về chi tiêu」** → modal `spending-chat` (không thêm bottom tab). |
 | Authority | SQLite / existing report & budget APIs are authoritative — AI **never** mentally sums raw transactions |
 | Tools | Allowlisted read-only: `getPeriodSummary`, `getBreakdown`, `getTransactions`, `getLargestTransactions`, `comparePeriods`, `getWooriBudget`, `getTrackedSourceBalance`, `getUnusualSpendingFacts` |
 | No writes | No insert/update/delete tools; mutation requests get read-only refusal |
@@ -1161,110 +1152,9 @@ Implementation: `src/services/spendingChat/*`, `src/services/ai/*`, `src/app/spe
 
 > **Trạng thái P1.8A:** **IMPLEMENTATION COMPLETE / APK QA PENDING.** Không claim runtime/manual QA DONE cho đến khi fresh APK verify chat UI trên device với dữ liệu thật.
 
-### P2.0 — Web Compatibility Foundation
+### P2 — Web app (đã gỡ bỏ 2026-11-09)
 
-| Hạng mục | Ghi chú |
-|----------|---------|
-| Platforms | Expo `platforms`: **android + web** (Android package/build settings preserved) |
-| Web output | `expo.web.output = "single"` — client SPA, no SSR / Expo `+api` (future backend = Supabase Edge) |
-| Favicon | Reuses `./assets/icon.png` (dedicated favicon polish deferred) |
-| SDK align | Expo SDK 57 patch baseline restored (`expo-doctor` 21/21) |
-| Web bootstrap | Temporary foundation shell — **does not** open browser SQLite as production data |
-| Android data | Remains local-first SQLite; no automatic cloud upload |
-| Core web expense UI | **P2.2** (see below) |
-| Web receipt + Edge AI | **P2.3** |
-| AI Spending Chat on Web | **NOT REQUIRED** — remains native/APK only (P2.4 cancelled) |
-| Offline / service worker / PWA install polish / deploy | **Deferred** (P2.6+) |
-
-> **Trạng thái P2.0:** **IMPLEMENTATION COMPLETE / MANUAL WEB QA PENDING.**
-
-### P2.1 — Supabase Auth + Per-User Private Data Foundation
-
-| Hạng mục | Ghi chú |
-|----------|---------|
-| Auth | Web email/password **sign-in only** (no public signup UI) |
-| Env | `EXPO_PUBLIC_SUPABASE_URL` + `EXPO_PUBLIC_SUPABASE_ANON_KEY` (never service-role in client) |
-| Session | Browser persist + auto refresh; missing config → safe configuration screen |
-| Sign-out | Web `auth.signOut({ scope: 'local' })` — **device/session-local only**; other phones/browsers stay signed in |
-| Multi-device | Same account may hold multiple simultaneous sessions (default Supabase Auth; do not enable single-session-per-user for YueDaily) |
-| Schema | Applied on DEV; RLS + seed + RPC hardening |
-| Cloud `ai_chat_*` tables | `ai_chat_threads` · `ai_chat_messages` · `ai_saved_prompts` — **created in P2.1 with RLS ownership policies; currently unused / reserved on Web** (no Web Spending Chat; do not drop; do not populate) |
-| Android | Remains SQLite; no Auth gate; no cloud upload |
-
-**Verified:** Auth API + RLS isolation + seed (P2.1); interactive browser Auth UI (invalid login VN error, User A/B sign-in, refresh session restore, Settings sign-out). Auth UI shell reused in P2.2. Web logout verified **local** (Session B survives Session A logout + refresh + authenticated Edge call).
-
-**Still pending:** iPhone Safari / PWA Auth UI QA
-
-**Production hardening:** Enable Supabase Auth **leaked-password protection** before public production release
-
-> **Trạng thái P2.1:** **WEB AUTH RUNTIME VERIFIED / IPHONE QA PENDING.**
-
-### P2.2 — Core Web Expense UI on Supabase
-
-| Hạng mục | Ghi chú |
-|----------|---------|
-| Architecture | Thin repository contracts → native SQLite adapters **or** Web Supabase adapters (Metro `.web.ts`) |
-| Web tabs | Home · Reports · Settings (Camera FAB + Accounts hidden) |
-| Transactions | Create / read / update / delete via RLS; integer VND; cloud `transaction_date` YYYY-MM-DD (+ `row_created_at` metadata); native `created_at` TEXT calendar unchanged |
-| Web delete confirm | In-app `confirmDestructive` sheet (RN Web `Alert.alert` callbacks are no-ops); native keeps `Alert.alert` |
-| Categories / sources | Settings CRUD; fresh users start with **0 sources** (must create first); Web destructive confirms use the same sheet |
-| Reports | Calendar month/day/custom; category/source/audience/daily totals via pure calculations |
-| Unsupported on Web | AI Spending Chat (native-only; not a deferred “coming later” Web feature) |
-| Deferred on Web | Woori · VPBank · backup v8 UI · offline |
-| Android | Unchanged SQLite path; no Auth requirement; native Alert confirmation unchanged |
-
-> **Trạng thái P2.2:** **WEB RUNTIME VERIFIED / IPHONE QA PENDING.**
-
-### P2.3 — Web Receipt Scan + Authenticated Supabase Edge AI Proxy
-
-| Hạng mục | Ghi chú |
-|----------|---------|
-| Web input | `camera.web.tsx`: **Chụp bill** (`capture=environment`) + **Chọn ảnh**; single image; cancel = no-op |
-| Image handling | Browser decode → canvas resize (long edge **1024**) → JPEG quality **0.7** → temporary Blob only |
-| Persistence | **None** — no Storage bucket, no `receipt_files`, no base64 in router/AsyncStorage |
-| Edge | `analyze-receipt` — JWT verify **ON** + `auth.getUser()`; multipart field `image`; analyze only (no txn writes) |
-| Provider chain | Server-side **Groq `qwen/qwen3.8-27b` → Gemini `2.5-flash-lite` → Gemini `2.5-flash`** (same meaning as P1.7A) |
-| Secrets | Edge only: `GROQ_API_KEY`, `GEMINI_API_KEY`, `WEB_ALLOWED_ORIGINS` — **not** in Web bundle |
-| Web keys | Web does **not** require `EXPO_PUBLIC_GROQ_API_KEY` / `EXPO_PUBLIC_GEMINI_API_KEY` |
-| CORS | Explicit allowlist (no `*`); DEV default includes `http://localhost:8082` when secret unset |
-| Handoff | In-memory `pendingReceiptResult` → `/form` prefill; user must review + Save (no auto-save) |
-| Auth expiry | Missing/expired session → friendly VN “đăng nhập lại” (`permission_denied`); **not** generic AI failure; no provider fallback retry |
-| HEIC | Best-effort / browser-dependent; friendly VN fallback if decode fails |
-| Android P1.7A | Unchanged native camera/preprocess/`EXPO_PUBLIC_*` provider path |
-| Deferred | P1.7B/C receipt persistence · production Hosting alias |
-| AI Spending Chat | **Native/APK only** — Web does not implement or defer a cloud chat phase |
-
-**Verified (DEV):** Edge secrets present (`GROQ_API_KEY`, `GEMINI_API_KEY`, `WEB_ALLOWED_ORIGINS` — names only); Edge function `analyze-receipt` deployed (`verify_jwt=true`); unauthenticated → 401; anon JWT → `UNAUTHENTICATED`; valid User A/B JWT → authenticated analyze; CORS allowlist includes localhost + EAS preview; live Web JPEG/PNG/large → preprocess → Edge (Groq primary; Gemini fallback when needed) → normalized schema handoff → `/form` prefill → manual Save → Home/Reports; Edge logs telemetry-only (no JWT/keys/image/financial payload); Web export has **no** provider key values (`env.web.ts` / `useGemini.web.ts`); Android P1.7A unchanged (no Edge dependency); unit tests cover preprocess/client/handoff/parity + mocked Groq→Gemini fallback chain.
-
-**EAS Hosting preview (non-prod):** latest `https://yozakura--gn4cjgf5za.expo.app` (deployment `gn4cjgf5za`; prior `g5k9ewj06k` may remain). No production alias. When `WEB_ALLOWED_ORIGINS` is set, include each active preview origin explicitly (no `*`).
-
-**Still pending:** iPhone Safari/PWA QA for P2.1–P2.3. Do not start receipt persistence / production Hosting alias from this phase. Do **not** start Web AI Spending Chat.
-
-> **Trạng thái P2.3:** **WEB RECEIPT RUNTIME VERIFIED / IPHONE QA PENDING.**
-
-### P2.4 — NOT REQUIRED — AI SPENDING CHAT REMAINS NATIVE-ONLY
-
-| Hạng mục | Quyết định |
-|----------|------------|
-| Product | AI Spending Chat is **Android/APK only** (P1.8A local SQLite) |
-| Web/PWA | Intentionally **unsupported** — no CTA, no deferred “coming later” screen, no Edge turn, no provider calls |
-| Direct route | Web `/spending-chat` → redirect to `/reports` |
-| Cloud tables | P2.1 `ai_chat_threads` / `ai_chat_messages` / `ai_saved_prompts` stay RLS-protected, **unused / reserved** — do not drop, do not populate |
-| Status | **CANCELLED / NOT PLANNED** |
-
-### Deferred — P1.7B / P1.7C
-
-| Ưu tiên | Hạng mục | Ghi chú |
-|---------|----------|---------|
-| **P1.7B — DEFERRED** | Persistent Receipt Archive | App document storage, persistent receipt URI, viewer/zoom, delete cleanup. **P1.7A TEMP AI-prep files are NOT this archive.** |
-| **P1.7C — DEFERRED** | Media-aware Backup | JSON + receipt media archive/ZIP; restore media across devices. |
-| P1.8+ | Spending Insights / other | Food vs drinks, `expense_nature`, weekday patterns — after native chat + P1.7A closed. |
-| ~~P2.4~~ | ~~Spending Chat cloud / Edge~~ | **NOT REQUIRED** — see P2.4 section above |
-| P2 | Widget / shortcut chụp nhanh | Phụ thuộc nền tảng |
-
-Các hạng mục **không** nằm trong lộ trình sản phẩm cốt lõi: UI API key Cài đặt, repeat transaction, export CSV, pending inbox, thu nhập / cash-flow / opening balance, shop accounting / profit / owner draw, Family Savings balance, reimbursement / internal transfer, actual contribution ledger, bank sync, streak/gamification.
-
----
+P2.0–P2.3 từng thêm bản Web (Supabase Auth + dữ liệu cloud + Edge AI quét bill). Không ai dùng nên đã gỡ toàn bộ: code `*.web.ts(x)`, thư mục `supabase/`, các thư viện `@supabase/supabase-js`, `react-native-web`, `react-dom`. YueDaily chỉ còn bản Android/APK với SQLite local. Lịch sử thiết kế xem git trước commit gỡ bỏ.
 
 ## 13. Tài liệu liên quan
 

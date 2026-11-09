@@ -32,6 +32,12 @@ export function buildCreatedAt(transactionDate: string): string {
   return `${transactionDate} 12:00:00`;
 }
 
+/** created_at cho UPDATE — giữ giờ cũ nếu ngày không đổi (không xáo thứ tự trong ngày) */
+export function buildCreatedAtForEdit(existingCreatedAt: string, transactionDate: string): string {
+  if (dateFromCreatedAt(existingCreatedAt) === transactionDate) return existingCreatedAt;
+  return buildCreatedAt(transactionDate);
+}
+
 export function formatDateVi(dateStr: string): string {
   return parseLocalDate(dateStr).toLocaleDateString('vi-VN', {
     day: '2-digit',

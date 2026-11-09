@@ -7,7 +7,6 @@ describe('preprocessReceiptImage', () => {
     await assert.rejects(
       () =>
         preprocessReceiptImage('file:///tmp/receipt.jpeg', {
-          platformOS: 'android',
           deletePrepFile: () => {},
           checkPrepFile: async () => ({ exists: true, size: 100 }),
           copyToPrepCache: async () => ({ uri: 'file:///tmp/prep.jpg', size: 100 }),
@@ -29,7 +28,6 @@ describe('preprocessReceiptImage', () => {
 
   it('returns base64 after successful manipulate', async () => {
     const result = await preprocessReceiptImage('file:///tmp/receipt.jpeg', {
-      platformOS: 'android',
       deletePrepFile: () => {},
       checkPrepFile: async () => ({ exists: true, size: 2048 }),
       copyToPrepCache: async () => ({ uri: 'file:///tmp/prep.jpg', size: 2048 }),
@@ -49,7 +47,6 @@ describe('preprocessReceiptImage', () => {
     await assert.rejects(
       () =>
         preprocessReceiptImage('file:///cache/receipt-ai-prep/src-1.jpg', {
-          platformOS: 'android',
           deletePrepFile: () => {},
           checkPrepFile: async () => ({ exists: false, size: null }),
           manipulateAsync: async () => {
@@ -68,7 +65,6 @@ describe('preprocessReceiptImage', () => {
     const result = await preprocessReceiptImage(
       'file:///cache/receipt-ai-prep/src-1.jpg',
       {
-        platformOS: 'android',
         deletePrepFile: () => {},
         checkPrepFile: async () => ({ exists: true, size: 2048 }),
         copyToPrepCache: async () => {

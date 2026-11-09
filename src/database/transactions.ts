@@ -2,16 +2,14 @@
 // CÁC HÀM THAO TÁC VỚI BẢNG TRANSACTIONS
 // ============================================================
 
-import { buildCreatedAt } from '../utils/date';
+import { buildCreatedAt, buildCreatedAtForEdit } from '../utils/date';
 import { getDatabase } from './initDb';
 import { spendingGroupEqualsClause } from './homeSpendView';
 import type { ExpenseAudience, SourceSpendingGroup, Transaction, TransactionFormData } from '../types';
 import {
-  DEFAULT_EXPENSE_AUDIENCE,
   normalizeExpenseAudience,
   resolvePayerForInsert,
   TRANSACTION_STATUS_COMPLETE,
-  TRANSACTION_STATUS_PENDING,
 } from '../types';
 
 export { normalizeExpenseAudience };
@@ -57,20 +55,6 @@ export async function insertTransaction(data: TransactionFormData): Promise<numb
       data.note,
       createdAt,
     ]
-  );
-
-  return result.lastInsertRowId;
-}
-
-/** Lưu ảnh tạm vào hộp thư chờ (status = 'pending') */
-export async function insertPendingTransaction(imageUri: string): Promise<number> {
-  const db = await getDatabase();
-
-  const result = await db.runAsync(
-    `INSERT INTO transactions
-      (amount, type, payer, expense_audience, image_uri, status)
-     VALUES (0, 'chi', 'Vợ', ?, ?, '${TRANSACTION_STATUS_PENDING}');`,
-    [DEFAULT_EXPENSE_AUDIENCE, imageUri]
   );
 
   return result.lastInsertRowId;
@@ -122,7 +106,7 @@ export async function updateTransaction(id: number, data: TransactionFormData): 
   const existing = await getTransactionById(id);
   if (!existing) return;
 
-  const createdAt = buildCreatedAt(data.transaction_date);
+  const createdAt = buildCreatedAtForEdit(existing.created_at, data.transaction_date);
   const expenseAudience = resolveExpenseAudienceForSave(data.expense_audience);
   const typeToSave = existing.type;
 
@@ -157,89 +141,4 @@ export async function updateTransaction(id: number, data: TransactionFormData): 
 export async function deleteTransaction(id: number): Promise<void> {
   const db = await getDatabase();
   await db.runAsync('DELETE FROM transactions WHERE id = ?;', [id]);
-}
-
-/** Tổng chi hôm nay */
-export async function getTodaySummary(): Promise<{ chi: number; count: number }> {
-  const db = await getDatabase();
-  const row = await db.getFirstAsync<{ total: number; cnt: number }>(
-    `SELECT COALESCE(SUM(amount), 0) as total, COUNT(*) as cnt
-     FROM transactions
-     WHERE status = '${TRANSACTION_STATUS_COMPLETE}'
-       AND type = 'chi'
-       AND date(created_at) = date('now', 'localtime');`
-  );
-  return { chi: row?.total ?? 0, count: row?.cnt ?? 0 };
-}
-
-/** Tổng chi theo tháng (month 1-based: 1=Jan … 12=Dec). Mặc định: tháng hiện tại theo local time. */
-export async function getMonthSummary(
-  year?: number,
-  month?: number,
-  spendingGroup?: SourceSpendingGroup | null,
-): Promise<{ chi: number }> {
-  const db = await getDatabase();
-  const now = new Date();
-  const y = year ?? now.getFullYear();
-  const m = month ?? now.getMonth() + 1; // 1-based, khớp getTransactionsByMonth
-  const monthStr = `${y}-${String(m).padStart(2, '0')}`;
-  const groupSql = spendingGroupEqualsClause(spendingGroup, 's.spending_group');
-  const row = await db.getFirstAsync<{ total: number }>(
-    `SELECT COALESCE(SUM(t.amount), 0) as total
-     FROM transactions t
-     LEFT JOIN sources s ON s.id = t.source_id
-     WHERE t.status = '${TRANSACTION_STATUS_COMPLETE}'
-       AND t.type = 'chi'
-       AND strftime('%Y-%m', t.created_at) = ?
-       ${groupSql.clause};`,
-    [monthStr, ...groupSql.params]
-  );
-  return { chi: row?.total ?? 0 };
-}
-
-/** Lấy giao dịch theo năm */
-export async function getTransactionsByYear(year: number): Promise<Transaction[]> {
-  const db = await getDatabase();
-  const rows = await db.getAllAsync<Transaction>(
-    `SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color,
-            s.name as source_name
-     FROM transactions t
-     LEFT JOIN categories c ON t.category_id = c.id
-     LEFT JOIN sources s    ON t.source_id   = s.id
-     WHERE t.status = '${TRANSACTION_STATUS_COMPLETE}'
-       AND strftime('%Y', t.created_at) = ?
-     ORDER BY t.created_at DESC;`,
-    [String(year)]
-  );
-  return rows.map(mapTransactionRow);
-}
-
-/** Lấy tất cả giao dịch đã hoàn thành */
-export async function getAllTransactionsComplete(): Promise<Transaction[]> {
-  const db = await getDatabase();
-  const rows = await db.getAllAsync<Transaction>(
-    `SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color,
-            s.name as source_name
-     FROM transactions t
-     LEFT JOIN categories c ON t.category_id = c.id
-     LEFT JOIN sources s    ON t.source_id   = s.id
-     WHERE t.status = '${TRANSACTION_STATUS_COMPLETE}'
-     ORDER BY t.created_at DESC;`
-  );
-  return rows.map(mapTransactionRow);
-}
-
-/** Giao dịch gần đây nhất */
-export async function getRecentTransactions(limit = 20): Promise<Transaction[]> {
-  const db = await getDatabase();
-  const rows = await db.getAllAsync<Transaction>(
-    `SELECT t.*, c.name as category_name, c.icon as category_icon, c.color as category_color
-     FROM transactions t
-     LEFT JOIN categories c ON t.category_id = c.id
-     WHERE t.status = '${TRANSACTION_STATUS_COMPLETE}'
-     ORDER BY t.created_at DESC
-     LIMIT ?;`,
-    [limit]
-  );
-  return rows.map(mapTransactionRow);
 }

@@ -3,27 +3,27 @@ import assert from 'node:assert/strict';
 import { DataError, normalizeDataError, userMessageForDataError } from './errors.ts';
 
 describe('normalizeDataError', () => {
-  it('maps unique violation to duplicate', () => {
-    const err = normalizeDataError({ code: '23505', message: 'duplicate key' }, 'sources');
+  it('maps SQLite unique violation to duplicate', () => {
+    const err = normalizeDataError(
+      new Error('Call to function NativeStatement.finalizeAsync has been rejected. Caused by: UNIQUE constraint failed: sources.name'),
+      'sources',
+    );
     assert.equal(err.code, 'duplicate');
     assert.match(err.message, /tên/i);
-    assert.doesNotMatch(err.message, /duplicate key/i);
   });
 
-  it('maps FK violation to referenced', () => {
-    const err = normalizeDataError({ code: '23503' }, 'sources');
+  it('maps SQLite FK violation to referenced', () => {
+    const err = normalizeDataError(new Error('FOREIGN KEY constraint failed'), 'sources');
     assert.equal(err.code, 'referenced');
   });
 
-  it('maps auth/session failures', () => {
-    const err = normalizeDataError({ status: 401, message: 'JWT expired' }, 'transactions');
-    assert.equal(err.code, 'unauthorized');
-    assert.doesNotMatch(err.message, /JWT/i);
+  it('maps NOT NULL violation to validation', () => {
+    const err = normalizeDataError(new Error('NOT NULL constraint failed: categories.name'), 'categories');
+    assert.equal(err.code, 'validation');
   });
 
-  it('maps network TypeError', () => {
-    const err = normalizeDataError(Object.assign(new TypeError('Failed to fetch'), { name: 'TypeError' }), 'reports');
-    assert.equal(err.code, 'network');
+  it('falls back to unknown for other errors', () => {
+    assert.equal(normalizeDataError('boom', 'reports').code, 'unknown');
   });
 
   it('preserves DataError instances', () => {
@@ -31,9 +31,9 @@ describe('normalizeDataError', () => {
     assert.equal(normalizeDataError(original, 'other'), original);
   });
 
-  it('userMessageForDataError never returns raw postgres text', () => {
-    const msg = userMessageForDataError({ code: '23505', message: 'unique_violation sources_user_id_name_key' }, 'sources');
-    assert.doesNotMatch(msg, /unique_violation/);
-    assert.doesNotMatch(msg, /sources_user_id/);
+  it('userMessageForDataError never returns raw SQLite text', () => {
+    const msg = userMessageForDataError(new Error('UNIQUE constraint failed: sources.name'), 'sources');
+    assert.doesNotMatch(msg, /constraint/i);
+    assert.doesNotMatch(msg, /sources\.name/);
   });
 });

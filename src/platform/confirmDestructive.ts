@@ -1,6 +1,5 @@
 /**
- * Native destructive confirmation — Alert.alert with Promise API.
- * Web uses confirmDestructive.web.ts (in-app sheet via ConfirmDestructiveHost).
+ * Destructive confirmation — Alert.alert with Promise API.
  */
 
 import { Alert } from 'react-native';
